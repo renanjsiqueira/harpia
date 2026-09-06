@@ -1,0 +1,7 @@
+# Estado efemero do Harpia Harness
+runtime/
+cache/
+.trash/
+*.db
+*.db-*
+*.tmp

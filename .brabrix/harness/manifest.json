@@ -1,0 +1,11 @@
+{
+  "kind": "BRABRIX_PROJECT_HARNESS",
+  "version": 1,
+  "projectId": "94336863-a522-4439-8827-03bc61bfe54d",
+  "createdAt": "2026-09-06T15:15:21.482Z",
+  "updatedAt": "2026-09-06T15:15:21.482Z",
+  "storage": {
+    "portableRoot": ".brabrix/harness",
+    "operationalState": "userData"
+  }
+}
