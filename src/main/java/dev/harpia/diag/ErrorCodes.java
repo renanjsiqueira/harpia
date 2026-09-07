@@ -1,8 +1,9 @@
 package dev.harpia.diag;
 
 /**
- * The full diagnostic catalogue. Families: {@code HRP1xxx} syntax, {@code HRP2xxx} semantics,
- * {@code HRP3xxx} configuration, {@code HRP4xxx} out of MVP scope, {@code HRP5xxx} I/O.
+ * The diagnostic catalogue. Families: {@code HRP1xxx} syntax, {@code HRP2xxx} semantics,
+ * {@code HRP3xxx} configuration, {@code HRP4xxx} out of current scope, {@code HRP5xxx} I/O,
+ * and {@code HRP6xxx} capability/provider resolution.
  *
  * <p>The {@code HRP} prefix supersedes the {@code HARP} prefix used in the original product brief.
  *
@@ -27,6 +28,20 @@ public final class ErrorCodes {
     public static final String SYNTAX_USE_CASE_TITLE = "HRP1009";
     public static final String SYNTAX_ENDPOINT = "HRP1010";
 
+    // --- HRP11xx: Harpia Logic syntax ---------------------------------------------------------
+    /** Malformed {@code ## Logic Name} declaration or its subsections. */
+    public static final String SYNTAX_LOGIC_SECTION = "HRP1101";
+    /** Malformed {@code ## Scenario Title} declaration or its subsections. */
+    public static final String SYNTAX_SCENARIO_SECTION = "HRP1106";
+    /** Indentation inside a {@code logic} block is not a multiple of four spaces. */
+    public static final String SYNTAX_LOGIC_INDENT = "HRP1102";
+    /** A character or word that does not belong to the Harpia Logic lexicon. */
+    public static final String SYNTAX_LOGIC_TOKEN = "HRP1103";
+    /** A line that is not an assignment, a conditional or a return. */
+    public static final String SYNTAX_LOGIC_STATEMENT = "HRP1104";
+    /** A malformed expression. */
+    public static final String SYNTAX_LOGIC_EXPRESSION = "HRP1105";
+
     // --- HRP2xxx: semantics (reserved, raised from iteration 3) ------------------------------
     public static final String SEMANTIC_DUPLICATE_ENTITY = "HRP2001";
     public static final String SEMANTIC_DUPLICATE_FIELD = "HRP2002";
@@ -46,6 +61,46 @@ public final class ErrorCodes {
     public static final String SEMANTIC_POSTGRES_RESERVED = "HRP2016";
     public static final String SEMANTIC_ORPHAN_ENTITY = "HRP2017";
 
+    // --- HRP21xx: Harpia Logic semantics -------------------------------------------------------
+    /** Two Logic declarations share a name. Logic names are unique across the project. */
+    public static final String SEMANTIC_LOGIC_DUPLICATE = "HRP2101";
+    /** A name is used before it is bound, or is not a parameter of the enclosing Logic. */
+    public static final String SEMANTIC_LOGIC_UNKNOWN_NAME = "HRP2102";
+    /** An operator was applied to operand types it does not accept. */
+    public static final String SEMANTIC_LOGIC_TYPE = "HRP2103";
+    /** The returned expression does not match the declared output type. */
+    public static final String SEMANTIC_LOGIC_RETURN_TYPE = "HRP2104";
+    /** A path through the Logic body finishes without returning a value. */
+    public static final String SEMANTIC_LOGIC_MISSING_RETURN = "HRP2105";
+    /** A side-effecting operation was used inside a pure computation. */
+    public static final String SEMANTIC_LOGIC_SIDE_EFFECT = "HRP2106";
+    /** The called function is neither a declared Logic nor a built-in. */
+    public static final String SEMANTIC_LOGIC_UNKNOWN_FUNCTION = "HRP2107";
+    /** Call arguments do not match the callee signature. */
+    public static final String SEMANTIC_LOGIC_ARGUMENT = "HRP2108";
+    /** Direct or indirect recursion between Logic declarations. */
+    public static final String SEMANTIC_LOGIC_RECURSION = "HRP2109";
+    /** A declared value is never read. Warning. */
+    public static final String SEMANTIC_LOGIC_UNUSED = "HRP2110";
+    /** A parameter name is declared twice. */
+    public static final String SEMANTIC_LOGIC_DUPLICATE_PARAMETER = "HRP2111";
+    /** A name is assigned more than once, or shadows an outer binding. */
+    public static final String SEMANTIC_LOGIC_REASSIGNMENT = "HRP2112";
+    /** A statement can never be reached because every path before it returns. */
+    public static final String SEMANTIC_LOGIC_UNREACHABLE = "HRP2113";
+    /** A construct is valid Harpia Logic grammar but its types do not exist yet. */
+    public static final String SEMANTIC_LOGIC_UNSUPPORTED = "HRP2114";
+    /** Two scenarios share a name. */
+    public static final String SEMANTIC_SCENARIO_DUPLICATE = "HRP2115";
+    /** A scenario names a computation that is not declared. */
+    public static final String SEMANTIC_SCENARIO_UNKNOWN_TARGET = "HRP2116";
+    /** A scenario does not bind every input exactly once, or binds an unknown one. */
+    public static final String SEMANTIC_SCENARIO_BINDING = "HRP2117";
+    /** A scenario value does not belong to the declared type. */
+    public static final String SEMANTIC_SCENARIO_VALUE = "HRP2118";
+    /** Tests were requested but a computation declares no scenario. Warning. */
+    public static final String SEMANTIC_SCENARIO_MISSING = "HRP2119";
+
     // --- HRP3xxx: configuration ---------------------------------------------------------------
     /** {@code harpia.yaml} is missing. Exit 2. */
     public static final String CONFIG_MISSING = "HRP3001";
@@ -63,6 +118,8 @@ public final class ErrorCodes {
     public static final String CONFIG_UNSUPPORTED_VALUE = "HRP3007";
     /** Required key missing, or scalar of the wrong type. */
     public static final String CONFIG_MISSING_KEY = "HRP3008";
+    /** A legacy configuration shape that still works but will be removed. Warning. */
+    public static final String CONFIG_DEPRECATED = "HRP3009";
 
     // --- HRP4xxx: out of MVP scope ------------------------------------------------------------
     /** Authentication requested (capability or {@code ### Access: authenticated}). */
@@ -85,4 +142,30 @@ public final class ErrorCodes {
     public static final String IO_SYMLINK_IGNORED = "HRP5005";
     /** {@code harpia init} refuses to overwrite an existing target file. Exit 2. */
     public static final String IO_INIT_TARGET_EXISTS = "HRP5006";
+    /** {@code --clean} was requested while unknown files sit in the output directory. Exit 2. */
+    public static final String IO_CLEAN_BLOCKED = "HRP5007";
+
+    // --- HRP6xxx: capability/provider resolution ---------------------------------------------
+    /** A Business IR requirement has no configured provider. */
+    public static final String CAPABILITY_PROVIDER_MISSING = "HRP6001";
+    /** A provider/configuration cannot satisfy a Business IR requirement. */
+    public static final String CAPABILITY_PROVIDER_UNSUPPORTED = "HRP6002";
+
+    // --- HRP7xxx: target resolution ------------------------------------------------------------
+    /** The configured target is catalogued but this compiler has no generator for it. */
+    public static final String TARGET_NOT_SUPPORTED = "HRP7001";
+    /** The configured target identifier is not in the catalogue at all. */
+    public static final String TARGET_UNKNOWN = "HRP7002";
+    /** The specification requires a capability the resolved target does not implement. */
+    public static final String TARGET_CAPABILITY_UNSUPPORTED = "HRP7003";
+    /** The configured language version is below what the target requires. */
+    public static final String TARGET_LANGUAGE_VERSION = "HRP7004";
+    /** A target-specific option is missing or invalid. */
+    public static final String TARGET_OPTION = "HRP7005";
+    /** A target-owned declarative template could not be rendered. */
+    public static final String TARGET_TEMPLATE_FAILURE = "HRP7006";
+    /** Application IR could not be transformed into the selected target model. */
+    public static final String TARGET_TRANSFORMATION_FAILURE = "HRP7007";
+    /** A valid Application IR construct has no implementation in the selected target. */
+    public static final String TARGET_CONSTRUCT_UNSUPPORTED = "HRP7008";
 }

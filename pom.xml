@@ -30,12 +30,20 @@
     <commonmark.version>0.22.0</commonmark.version>
     <snakeyaml.version>2.2</snakeyaml.version>
     <mustache.version>0.9.14</mustache.version>
-    <junit.version>5.10.2</junit.version>
+    <junit.version>5.10.5</junit.version>
     <assertj.version>3.25.3</assertj.version>
+    <!-- Test scope only: the generator's output is compiled against the real APIs it targets. -->
+    <jakarta-persistence.version>3.1.0</jakarta-persistence.version>
+    <jakarta-validation.version>3.0.2</jakarta-validation.version>
+    <spring-data-jpa.version>3.3.6</spring-data-jpa.version>
+    <spring-boot.version>3.3.6</spring-boot.version>
+    <spring-framework.version>6.1.15</spring-framework.version>
 
     <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
+    <maven-resources-plugin.version>3.4.0</maven-resources-plugin.version>
+    <maven-jar-plugin.version>3.4.2</maven-jar-plugin.version>
     <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
-    <maven-shade-plugin.version>3.5.3</maven-shade-plugin.version>
+    <maven-shade-plugin.version>3.5.0</maven-shade-plugin.version>
   </properties>
 
   <dependencies>
@@ -74,6 +82,56 @@
       <version>${assertj.version}</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>jakarta.persistence</groupId>
+      <artifactId>jakarta.persistence-api</artifactId>
+      <version>${jakarta-persistence.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>jakarta.validation</groupId>
+      <artifactId>jakarta.validation-api</artifactId>
+      <version>${jakarta-validation.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.data</groupId>
+      <artifactId>spring-data-jpa</artifactId>
+      <version>${spring-data-jpa.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-autoconfigure</artifactId>
+      <version>${spring-boot.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-web</artifactId>
+      <version>${spring-framework.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-webmvc</artifactId>
+      <version>${spring-framework.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-tx</artifactId>
+      <version>${spring-framework.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <!-- The same starter the generated project uses, so generated tests compile against
+         exactly the versions they will run with. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <version>${spring-boot.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -101,8 +159,23 @@
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>${maven-resources-plugin.version}</version>
+        <configuration>
+          <propertiesEncoding>UTF-8</propertiesEncoding>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
         <version>${maven-compiler-plugin.version}</version>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>${maven-jar-plugin.version}</version>
       </plugin>
 
       <plugin>
@@ -119,6 +192,15 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <version>${maven-shade-plugin.version}</version>
+        <dependencies>
+          <!-- 1.7.36 is already used by the local Maven toolchain and is binary-compatible with
+               the plugin's 1.7.32 declaration, allowing the required offline package build. -->
+          <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>1.7.36</version>
+          </dependency>
+        </dependencies>
         <executions>
           <execution>
             <phase>package</phase>

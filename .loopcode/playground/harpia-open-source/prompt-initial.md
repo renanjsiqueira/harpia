@@ -1,5 +1,11 @@
 # Harpia — MVP Open Source
 
+> **Atualização de direção (2026-09-06):** este arquivo preserva a visão original. A evolução para
+> uma Semantic Software Specification Language está consolidada em `docs/vision.md`, e a cobertura
+> real vive em `LANGUAGE_COVERAGE.md`. O recorte executável atual é definido por
+> `docs/spec/harpia-language.md`, `docs/requirements.md` e `docs/design.md`. Quando uma ideia futura
+> deste prompt conflitar com esses documentos, o compilador deve seguir o recorte V0 documentado.
+
 Quero que você projete e implemente o MVP de um novo projeto open source chamado **Harpia**.
 
 Antes de escrever código, leia toda esta especificação, analise criticamente a proposta, identifique ambiguidades e riscos técnicos, proponha a arquitetura mínima e só depois comece a implementação.
@@ -14,11 +20,30 @@ O objetivo do MVP é provar uma tese técnica de forma simples, determinística 
 
 Harpia é uma **Executable Software Specification Language** baseada em Markdown.
 
+Mais precisamente, Harpia é uma linguagem formal de alto nível que usa Markdown como sintaxe de
+autoria e compila para Java convencional. Ela funciona como uma abstração orientada a
+especificações sobre Java e seu ecossistema: o autor declara dados, contratos, fluxos e regras; o
+compilador materializa classes, tipos, integração com framework e boilerplate.
+
+O arquivo `*.harpia.md` não é documentação que ocasionalmente gera código. Ele é código-fonte
+Harpia: legível como Markdown, validado por gramática e com semântica determinística.
+
 Harpia NÃO é uma nova linguagem de programação general-purpose.
 
 Harpia NÃO quer substituir Java, Kotlin, Spring ou outras linguagens/frameworks.
 
 A ideia é permitir que humanos e LLMs descrevam **a intenção do software** através de uma especificação pequena, estruturada e fácil de compreender.
+
+Harpia atende deliberadamente dois perfis de autoria:
+
+* pessoas não técnicas ou pouco técnicas, que conseguem revisar e expressar requisitos dentro de
+  construções guiadas, sem precisar dominar o boilerplate de Java e Spring;
+* agentes e LLMs, que produzem a representação Harpia compacta em vez de repetir uma grande árvore
+  de código de framework.
+
+Isso não significa aceitar linguagem natural irrestrita nem prometer que qualquer sistema possa ser
+construído sem conhecimento técnico. A acessibilidade vem de vocabulário pequeno, exemplos,
+diagnósticos e progressive disclosure; a precisão vem da gramática formal.
 
 Depois, um compilador determinístico transforma essa especificação em código convencional.
 
@@ -68,6 +93,12 @@ Create Customer registration with:
 e produzir milhares de tokens de Java.
 
 Grande parte desses tokens representa boilerplate de framework e não lógica de negócio.
+
+A economia de tokens ocorre na etapa de autoria: humano ou LLM cria e altera a especificação curta,
+enquanto o compilador expande localmente a implementação. O build em si consome zero tokens de LLM.
+Essa tese deve ser medida comparando a especificação com o Java equivalente em linhas, caracteres e,
+quando um tokenizer for explicitamente escolhido, tokens. Linhas e caracteres são proxies e nunca
+devem ser apresentados como contagem exata de tokens.
 
 Com Harpia queremos transformar isso em algo parecido com:
 
@@ -2319,6 +2350,11 @@ Capabilities
 ```
 
 Mas não criar esses targets/providers antes de provar Java/Spring.
+
+Java/Spring é o único backend normativo e o compromisso de produto atual. Outros targets são apenas
+uma possibilidade de pesquisa: não devem introduzir abstrações, complexidade ou promessas públicas
+antes de a tese ser comprovada com Java. Mesmo mantendo a Business IR livre de classes Java, toda
+decisão do V0 deve priorizar a qualidade e a previsibilidade do código Java gerado.
 
 ---
 

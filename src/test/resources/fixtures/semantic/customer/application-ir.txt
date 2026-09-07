@@ -1,0 +1,50 @@
+Application customer-service
+  Namespace com.example.customer
+  Generation migrations=true tests=true
+  Capability http provider=<target>
+  Capability persistence provider=postgresql
+  PersistentEntity Customer table=customer response=CustomerResponse
+    Column id: UUID generated
+    Column name: STRING required
+    Column email: EMAIL required unique
+    Column active: BOOLEAN required
+    Operation createCustomer kind=CREATE transactional=true
+      HttpOperation POST /customers access=PUBLIC
+      RequestModel CreateCustomerRequest
+      Result 201 ENTITY CustomerResponse
+      Instruction VALIDATE_INPUT
+      Instruction CREATE_FROM
+      Instruction SAVE
+      Instruction RETURN
+      Failure INVALID_INPUT -> 400
+      Failure DUPLICATE -> 409
+    Operation getCustomer kind=READ transactional=false
+      HttpOperation GET /customers/{id} access=PUBLIC
+      Result 200 ENTITY CustomerResponse
+      Instruction LOAD_BY_ID
+      Instruction RETURN
+      Failure NOT_FOUND -> 404
+    Operation listCustomers kind=LIST transactional=false
+      HttpOperation GET /customers access=PUBLIC
+      Result 200 LIST CustomerResponse
+      Instruction LIST_ALL
+      Instruction RETURN
+    Operation updateCustomer kind=UPDATE transactional=true
+      HttpOperation PUT /customers/{id} access=PUBLIC
+      RequestModel UpdateCustomerRequest
+      Result 200 ENTITY CustomerResponse
+      Instruction VALIDATE_INPUT
+      Instruction LOAD_BY_ID
+      Instruction UPDATE_FROM
+      Instruction SAVE
+      Instruction RETURN
+      Failure INVALID_INPUT -> 400
+      Failure NOT_FOUND -> 404
+      Failure DUPLICATE -> 409
+    Operation deleteCustomer kind=DELETE transactional=true
+      HttpOperation DELETE /customers/{id} access=PUBLIC
+      Result 204 NOTHING
+      Instruction LOAD_BY_ID
+      Instruction DELETE
+      Instruction RETURN
+      Failure NOT_FOUND -> 404
