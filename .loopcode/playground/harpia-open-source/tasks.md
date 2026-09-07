@@ -12,13 +12,18 @@ Li os dois documentos aprovados em `.loopcode/playground/harpia-open-source/`. D
 
 Pacote base do compilador: `dev.harpia`. Caminhos relativos a `/Users/renanjangermesiqueira/development/harpia`.
 
+Estado em 2026-09-06: Iterações 2 e 3 concluídas e E0.2 entregue, com Application IR
+generator-ready, contribuições HTTP/persistence e os três emissores básicos cobertos por 95 testes.
+O próximo slice é E0.3 (entity, repository e Flyway). O plano vigente está em `docs/roadmap.md`;
+esta lista permanece como rastreabilidade do plano V0 original.
+
 ## Tarefas
 
 ### Iteração 2 — esqueleto, diagnósticos, config, CLI
 
 1. Esqueleto Maven do compilador: `release 21`, picocli 4.7.x, commonmark 0.22.x, snakeyaml 2.x, mustache.java, junit-jupiter, assertj, shade com `Main-Class` → `harpia.jar`. — `pom.xml`, `.gitignore`, `.editorconfig` — AC: §7 (dependências), §11 it.2
 2. Persistir os documentos aprovados no repositório como fonte durável. — `docs/requirements.md`, `docs/design.md` — AC: rastreabilidade dos critérios
-3. Congelar o vocabulário da linguagem por escrito antes de parsear: 9 tipos, 8 comandos de `flow`, condições de erro, gramática de cada linha. — `docs/spec/harpia-language.md` — AC: parsing e validação (HRP1005/HRP1007/HRP1008)
+3. Congelar o vocabulário da linguagem por escrito antes de parsear: 10 tipos, 8 comandos de `flow`, condições de erro, gramática de cada linha. — `docs/spec/harpia-language.md` — AC: parsing e validação (HRP1005/HRP1007/HRP1008)
 4. Pacote `diag`: `Severity`, `SourceRef` (1-indexed), `Diagnostic`, `ErrorCodes` (constantes HRP1–HRP5), `DiagnosticCollector` com ordenação total arquivo→linha→coluna→código. — `src/main/java/dev/harpia/diag/*.java` — AC: §5 contratos, §5.1 ordenação estável
 5. **[TESTE]** Ordenação de diagnósticos é total e estável para entradas embaralhadas. — `src/test/java/dev/harpia/diag/DiagnosticOrderingTest.java` — AC: §5.1
 6. Pacote `source`: `SourceFile` (UTF-8 estrito → HRP5003, CRLF→LF, strip de BOM) e `SpecDiscovery` (`Files.walk`, path relativo com `/`, `String.compareTo`, symlink ignorado com aviso). — `src/main/java/dev/harpia/source/*.java` — AC: determinismo/offline §8.1, HRP5003

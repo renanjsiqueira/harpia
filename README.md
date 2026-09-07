@@ -1,0 +1,491 @@
+# Harpia
+
+> **Describe backend intent. Generate the starting codebase. Own the result.**
+
+Harpia is an open-source semantic specification language and backend project bootstrapper for
+humans and AI agents. You describe application intent in structured Markdown; a deterministic
+compiler turns the supported semantics into conventional source code.
+
+The first and currently supported target is **Java 21+ with Spring Boot**.
+
+[English](#english) · [Português](#português) · [Current status](BACKLOG.md) ·
+[Architecture](ARCHITECTURE.md) · [Language draft](docs/spec/harpia-language-v1-draft.md)
+
+```text
+Human or AI → *.harpia.md → semantic compiler → Java/Spring project → developer-owned code
+```
+
+## English
+
+### Why Harpia?
+
+LLMs are useful for reasoning about requirements, but repeatedly generating framework boilerplate
+is expensive and probabilistic. The same prompt can produce different architectures, libraries,
+validation strategies, error handling, and tests.
+
+Harpia separates reasoning from mechanical implementation:
+
+- humans and AI describe **what the backend means**;
+- Harpia validates that intent and transforms it into a target-independent application model;
+- a target deterministically materializes the supported implementation;
+- developers receive normal source code with no Harpia runtime dependency.
+
+> **AI may be probabilistic. Compilation should not be.**
+
+Harpia is not a smaller Java syntax, a natural-language interpreter, a low-code runtime, or an AI
+agent. It is a compact semantic layer for recurring backend concepts.
+
+For example:
+
+```text
+email: Email required unique
+```
+
+is one declaration that the current Java/Spring target can use to derive Java types, bean
+validation, JPA metadata, a database uniqueness constraint, request/response models, duplicate
+handling, and tests. This is **semantic compression**: more software meaning, not merely fewer
+characters.
+
+### Current status
+
+Harpia is under active development. The executable V0 currently provides:
+
+| Area | Available today |
+|---|---|
+| Input | `harpia.yaml` plus one or more `specs/*.harpia.md` files |
+| Language | Scalar entities, CRUD-oriented use cases, a closed Flow DSL, pure typed Logic, Logic scenarios |
+| CLI | `validate`, `build`, `targets`, and `version` |
+| Target | `java-spring` |
+| Generated project | Maven, Spring Boot, REST controller, DTOs, service, JPA entity, repository, validation, error handling, Flyway migration, configuration, and tests |
+| Guarantees | Deterministic ordering, stable diagnostics, idempotent writes, manifest-based cleanup, and no Harpia runtime dependency |
+
+Bindings, integrations, events, security, MCP, brownfield reconstruction, explicit
+`Command`/`Query`, and additional targets belong to the roadmap; they are not silently accepted by
+the current compiler. [`BACKLOG.md`](BACKLOG.md) is the canonical source for implementation status
+and priority.
+
+### Quick start
+
+Requirements:
+
+- JDK 21 or newer;
+- Maven 3.9 or newer.
+
+Build the Harpia CLI from the repository root:
+
+```bash
+mvn package
+```
+
+Validate and compile the included customer service:
+
+```bash
+./bin/harpia validate --dir examples/customer
+./bin/harpia build --dir examples/customer
+```
+
+Expected summaries:
+
+```text
+Validation succeeded.
+Build succeeded: 16 files in generated (...).
+```
+
+Then test the generated project as an ordinary Maven application:
+
+```bash
+mvn -f examples/customer/generated/pom.xml test
+```
+
+The complete working example is in [`examples/customer`](examples/customer).
+
+### Project structure
+
+A project accepted by the current compiler has three parts:
+
+```text
+customer-service/
+├── harpia.yaml
+└── specs/
+    └── customer.harpia.md
+```
+
+`harpia.yaml` selects the target, project coordinates, source directory, and output directory:
+
+```yaml
+harpia: 1
+
+project:
+  name: customer-service
+  group: com.example
+  artifact: customer-service
+  package: com.example.customer
+
+target:
+  id: java-spring
+  language:
+    version: 21
+  options:
+    springBootVersion: "3.3.6"
+
+database:
+  vendor: postgres
+
+paths:
+  specs: specs
+  output: generated
+
+generation:
+  migrations: true
+  tests: true
+```
+
+The Markdown specification contains readable documentation and formal sections. This is an excerpt
+from [`customer.harpia.md`](examples/customer/specs/customer.harpia.md):
+
+````markdown
+# Customer
+
+Represents a customer registered in the platform.
+
+## Data
+
+- id: UUID generated
+- name: String required
+- email: Email required unique
+- active: Boolean required default true
+
+## Create Customer
+
+### Endpoint
+
+POST /customers
+
+### Access
+
+public
+
+### Input
+
+- name: String required
+- email: Email required
+
+### Flow
+
+```flow
+validate input
+customer = create Customer from input
+save customer
+return customer
+```
+
+### Output
+
+201 Customer
+
+### Errors
+
+- invalid input -> 400
+- duplicate email -> 409
+````
+
+The full example also declares get, list, update, and delete use cases. Harpia generates this
+application baseline:
+
+```text
+generated/
+├── .harpia-manifest
+├── pom.xml
+└── src/
+    ├── main/
+    │   ├── java/com/example/customer/
+    │   │   ├── CustomerServiceApplication.java
+    │   │   ├── domain/Customer.java
+    │   │   ├── dto/{CreateCustomerRequest,UpdateCustomerRequest,CustomerResponse}.java
+    │   │   ├── error/{ApiError,ApiExceptionHandler,NotFoundException}.java
+    │   │   ├── repository/CustomerRepository.java
+    │   │   ├── service/CustomerService.java
+    │   │   └── web/CustomerController.java
+    │   └── resources/
+    │       ├── application.yaml
+    │       └── db/migration/V1__init.sql
+    └── test/java/com/example/customer/
+        ├── service/CustomerServiceTest.java
+        └── web/CustomerControllerTest.java
+```
+
+To start the generated service, provide a PostgreSQL database and run Spring Boot:
+
+```bash
+export DATABASE_URL=jdbc:postgresql://localhost:5432/customer
+export DATABASE_USERNAME=postgres
+export DATABASE_PASSWORD=postgres
+mvn -f examples/customer/generated/pom.xml spring-boot:run
+```
+
+### Harpia Logic
+
+Business calculations can be expressed as pure, typed functions. They compile to ordinary static
+Java methods without Spring or a Harpia runtime:
+
+````markdown
+## Logic CalculateDiscount
+
+### Input
+
+- total: Decimal
+- vip: Boolean
+
+### Output
+
+Decimal
+
+```logic
+if vip
+    return total * 0.20
+
+if total >= 1000
+    return total * 0.10
+
+return 0
+```
+````
+
+Logic supports typed expressions, single-assignment variables, `if`/`else`, named calls, and
+`min`/`max`. Side effects such as persistence and messaging are rejected inside Logic.
+
+> **Flow describes what happens. Logic describes how business values are computed.**
+
+Scenarios turn declared examples into generated JUnit tests:
+
+````markdown
+## Scenario VIP discount
+
+### Given
+
+- total: 100
+- vip: true
+
+### When
+
+CalculateDiscount
+
+### Then
+
+- result: 20.00
+````
+
+Try the complete example:
+
+```bash
+./bin/harpia validate --dir examples/business-logic/pricing
+./bin/harpia build --dir examples/business-logic/pricing
+mvn -f examples/business-logic/pricing/generated/pom.xml test
+```
+
+See the [Harpia Logic specification](docs/spec/harpia-logic-v1-draft.md) for its exact grammar and
+implemented boundary.
+
+### Language surface available today
+
+The current language deliberately has a narrow, validated surface:
+
+- scalar field types: `String`, `Text`, `Int`, `Long`, `Decimal`, `Boolean`, `UUID`, `Email`,
+  `Date`, and `DateTime`;
+- field modifiers: `required`, `unique`, `generated`, and `default`;
+- HTTP methods: `GET`, `POST`, `PUT`, and `DELETE`;
+- access mode: `public`;
+- output forms: `Entity`, `List<Entity>`, and `nothing` with a 2xx status;
+- declared errors: invalid input (400), duplicate field (409), and not found (404).
+
+Flow V0 accepts these operation shapes:
+
+```text
+validate input
+x = create Entity from input
+x = load Entity by id
+update x from input
+xs = list Entity
+save x
+delete x
+return x|nothing
+```
+
+Normal Markdown prose remains documentation. It never silently becomes executable behavior.
+Relationships, arbitrary Java, authentication, events, integrations, and unrecognized Flow
+sentences are rejected instead of guessed.
+
+### CLI
+
+```bash
+./bin/harpia --help
+./bin/harpia validate --dir <project>
+./bin/harpia build --dir <project>
+./bin/harpia build --dir <project> --clean
+./bin/harpia build --dir <project> --clean --force
+./bin/harpia targets
+./bin/harpia targets java-spring
+./bin/harpia version
+```
+
+`validate` never writes output. `build` synchronizes the generated directory idempotently.
+`--clean` removes stale files listed as Harpia-owned in `.harpia-manifest`; files outside the
+manifest are reported and not deleted. Keep hand-written code outside Harpia-managed paths while
+you intend to regenerate the project.
+
+Run `./bin/harpia targets` rather than assuming target support. Unsupported targets fail before
+generation and never fall back to Java/Spring.
+
+### Compiler architecture
+
+The core language does not contain Java or Spring types:
+
+```text
+*.harpia.md
+      ↓
+CommonMark structure + Harpia parser
+      ↓
+Syntax AST
+      ↓
+Semantic analysis
+      ↓
+Business IR
+      ↓
+Capability resolution + Application IR
+      ↓
+Target resolution
+      ↓
+Java/Spring transformer
+      ↓
+Structured Java Target Model
+      ↓
+Renderer + logic-free templates
+      ↓
+Generated Maven project
+```
+
+The design rule is:
+
+> **Transformers translate semantics. Templates render syntax.**
+
+Java source is rendered from a structured target model. Templates are currently limited to
+mechanical Maven, YAML, and SQL output; business decisions do not live in templates.
+
+### Determinism and ownership
+
+For the same specification, configuration, compiler version, and target, Harpia is designed to
+produce the same files. Generation avoids timestamps, random identifiers, unstable iteration, and
+LLM calls. The compiler suite checks golden output byte for byte, recompiles generated Java, and
+runs the generated Maven project.
+
+Generated code is intentionally conventional. While you keep rebuilding into the same directory,
+files listed in `.harpia-manifest` are managed output and may be updated by Harpia. When the
+bootstrap is complete, you can stop regenerating and evolve the Java/Spring project directly.
+
+> **Generate it. Own it. Keep coding.**
+
+### Direction, not current syntax
+
+Harpia's long-term model separates concerns like this:
+
+```text
+*.harpia.md  = what the software does
+bindings/    = how the software connects
+harpia.yaml  = target, providers, and project configuration
+```
+
+The roadmap explores explicit entities, value objects, enums, commands, queries, rules, formulas,
+decisions, events, integrations, providers, additional targets, semantic inspection, an MCP agent
+API, and LLM-assisted brownfield reconstruction. These ideas are architectural direction until
+their backlog entries are implemented and tested.
+
+Compilation from Harpia remains deterministic. A future reverse-engineering tool may use an LLM to
+infer intent from existing code, but its output would be a candidate specification that Harpia
+validates and a human reviews.
+
+### Documentation
+
+- [Official backlog and current status](BACKLOG.md)
+- [Architecture](ARCHITECTURE.md)
+- [Current implementation architecture](docs/current-architecture.md)
+- [Supported and planned targets](TARGETS.md)
+- [Language specification draft](docs/spec/harpia-language-v1-draft.md)
+- [Harpia Logic specification](docs/spec/harpia-logic-v1-draft.md)
+- [Product vision](docs/vision.md)
+- [Semantic compression benchmarks](docs/benchmarks.md)
+- [Historical language coverage snapshot](LANGUAGE_COVERAGE.md)
+- [Historical Spring coverage snapshot](SPRING_COVERAGE.md)
+- [Historical roadmap](docs/roadmap.md)
+- [MCP design reference](docs/mcp-roadmap.md)
+
+### Development and contributing
+
+Build and run the complete compiler test suite:
+
+```bash
+mvn test
+```
+
+Useful contribution areas include parser and diagnostics quality, language design, Java/Spring
+generation, deterministic tests, examples, target architecture, and documentation. Before adding a
+new language construct, ask whether it represents portable application meaning or only abbreviates
+framework syntax. Specialized algorithms and SDK-specific behavior should remain ordinary target
+code when they do not provide reusable semantic compression.
+
+## Português
+
+Harpia é uma linguagem de especificação semântica e um gerador inicial de projetos backend para
+pessoas e agentes de IA. Você descreve dados, casos de uso, fluxos e cálculos em Markdown
+estruturado; o compilador valida essa intenção e gera código convencional de forma determinística.
+
+O target disponível hoje é **Java 21+ com Spring Boot**.
+
+### Por que usar?
+
+Em vez de pedir que uma LLM regenere centenas de linhas de boilerplate a cada mudança, ela pode
+produzir uma especificação Harpia pequena e revisável. O compilador assume a parte mecânica que já
+conhece; o resultado é um projeto Maven normal, sem runtime Harpia obrigatório.
+
+```text
+Pessoa ou IA → intenção em Markdown → compilador Harpia → backend Java/Spring → código do desenvolvedor
+```
+
+### Início rápido
+
+Com JDK 21+ e Maven 3.9+ instalados, execute na raiz do repositório:
+
+```bash
+mvn package
+./bin/harpia validate --dir examples/customer
+./bin/harpia build --dir examples/customer
+mvn -f examples/customer/generated/pom.xml test
+```
+
+Isso valida a especificação em
+[`examples/customer/specs/customer.harpia.md`](examples/customer/specs/customer.harpia.md), gera o
+projeto em `examples/customer/generated` e executa seus testes Spring. O segundo exemplo mostra
+lógica de negócio pura:
+
+```bash
+./bin/harpia validate --dir examples/business-logic/pricing
+./bin/harpia build --dir examples/business-logic/pricing
+mvn -f examples/business-logic/pricing/generated/pom.xml test
+```
+
+### O que funciona hoje
+
+- entidades escalares com campos tipados, obrigatórios, únicos, gerados e com valor default;
+- casos de uso CRUD com endpoints `GET`, `POST`, `PUT` e `DELETE`;
+- Flow V0 para validar, criar, carregar, listar, atualizar, salvar, excluir e retornar;
+- Logic pura e tipada, incluindo cenários convertidos em testes JUnit;
+- geração de Maven, Spring Boot, DTOs, controller, service, JPA, repository, validação, tratamento
+  de erros, Flyway, configuração e testes;
+- escrita determinística e idempotente, com manifesto para limpeza segura;
+- comandos `validate`, `build`, `targets` e `version`.
+
+MCP, bindings, integrações, eventos, segurança, engenharia reversa e outros targets ainda são
+roadmap. O estado oficial, com evidência por item, está no [`BACKLOG.md`](BACKLOG.md). Para entender
+a separação entre linguagem e Java/Spring, leia [`ARCHITECTURE.md`](ARCHITECTURE.md) e
+[`TARGETS.md`](TARGETS.md).
+
+> **Descreva a intenção. Gere a base. Assuma o código.**

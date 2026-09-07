@@ -1,0 +1,312 @@
+package dev.harpia.target.javaspring.transformer;
+
+import dev.harpia.application.ApplicationEntity;
+import dev.harpia.application.ApplicationField;
+import dev.harpia.application.ApplicationOperation;
+import dev.harpia.diag.SourceRef;
+import dev.harpia.target.javaspring.JavaLayout;
+import dev.harpia.target.javaspring.JavaSpringContext;
+import dev.harpia.target.javaspring.mapping.SqlConstraintNames;
+import dev.harpia.target.javaspring.model.JavaAnnotationModel;
+import dev.harpia.target.javaspring.model.JavaConstructorModel;
+import dev.harpia.target.javaspring.model.JavaFieldModel;
+import dev.harpia.target.javaspring.model.JavaImportModel;
+import dev.harpia.target.javaspring.model.JavaMethodModel;
+import dev.harpia.target.javaspring.model.JavaModifier;
+import dev.harpia.target.javaspring.model.JavaParameterModel;
+import dev.harpia.target.javaspring.model.JavaSourceFile;
+import dev.harpia.target.javaspring.model.JavaTypeModel;
+import dev.harpia.target.javaspring.model.JavaTypeRef;
+import dev.harpia.target.javaspring.model.JavaVisibility;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+
+/**
+ * Resolves the failures the specification declares into HTTP responses.
+ *
+ * <p>Only conditions some use case actually declares are handled, so no project carries a handler
+ * for an error it cannot produce.
+ *
+ * <p>A duplicate is recognised from the unique constraint rather than pre-checked. A pre-check
+ * races with the insert, and with JPA the insert flushes at commit — after the service method has
+ * already returned — so the constraint is the only place that can decide a conflict correctly.
+ */
+public final class JavaSpringErrorTransformer {
+
+    private static final String NOT_FOUND = "NotFoundException";
+    private static final String API_ERROR = "ApiError";
+    private static final String HANDLER = "ApiExceptionHandler";
+    private static final int DEFAULT_NOT_FOUND_STATUS = 404;
+
+    public List<JavaSourceFile> transform(JavaSpringContext context) {
+        Failures failures = Failures.of(context);
+        if (!failures.any()) {
+            return List.of();
+        }
+        List<JavaSourceFile> files = new ArrayList<>();
+        SourceRef where = failures.where();
+        if (failures.notFound()) {
+            files.add(notFoundException(context, where));
+        }
+        files.add(apiError(context, where));
+        files.add(handler(context, failures, where));
+        return List.copyOf(files);
+    }
+
+    private static JavaSourceFile notFoundException(JavaSpringContext context, SourceRef where) {
+        JavaTypeModel type = new JavaTypeModel(
+                JavaTypeModel.Kind.CLASS,
+                errorPackage(context),
+                NOT_FOUND,
+                JavaVisibility.PUBLIC,
+                Set.of(),
+                Optional.of("Raised when a Harpia `load ... by id` finds nothing."),
+                List.of(),
+                List.of(),
+                List.of(JavaTypeRef.of("java.lang.RuntimeException")),
+                List.of(new JavaFieldModel(
+                        "serialVersionUID",
+                        JavaTypeRef.of("long"),
+                        JavaVisibility.PRIVATE,
+                        Set.of(JavaModifier.STATIC, JavaModifier.FINAL),
+                        List.of(),
+                        Optional.of("1L"),
+                        Optional.of(where))),
+                List.of(new JavaConstructorModel(
+                        JavaVisibility.PUBLIC,
+                        List.of(),
+                        List.of(
+                                new JavaParameterModel("type", JavaTypeRef.of("java.lang.String")),
+                                new JavaParameterModel("id", JavaTypeRef.of("java.lang.Object"))),
+                        List.of("super(type + \" \" + id + \" was not found\");"),
+                        Optional.of(where))),
+                List.of(),
+                Optional.of(where));
+        return file(context, NOT_FOUND, type, where);
+    }
+
+    private static JavaSourceFile apiError(JavaSpringContext context, SourceRef where) {
+        List<JavaFieldModel> components = List.of(
+                component("status", "int", where),
+                component("error", "java.lang.String", where),
+                component("message", "java.lang.String", where));
+        JavaTypeModel type = new JavaTypeModel(
+                JavaTypeModel.Kind.RECORD,
+                errorPackage(context),
+                API_ERROR,
+                JavaVisibility.PUBLIC,
+                Set.of(),
+                Optional.of("Error body shared by every failure the specification declares."),
+                List.of(),
+                List.of(),
+                List.of(),
+                components,
+                List.of(),
+                List.of(),
+                Optional.of(where));
+        return file(context, API_ERROR, type, where);
+    }
+
+    private static JavaSourceFile handler(
+            JavaSpringContext context, Failures failures, SourceRef where) {
+        List<JavaMethodModel> methods = new ArrayList<>();
+        List<JavaImportModel> imports = new ArrayList<>();
+        if (failures.notFound()) {
+            methods.add(notFoundHandler(failures, where));
+        }
+        if (failures.invalidInput()) {
+            imports.add(new JavaImportModel("java.util.stream.Collectors"));
+            methods.add(invalidInputHandler(failures, where));
+        }
+        if (!failures.duplicates().isEmpty()) {
+            methods.add(duplicateHandler(failures, where));
+        }
+
+        JavaTypeModel type = new JavaTypeModel(
+                JavaTypeModel.Kind.CLASS,
+                errorPackage(context),
+                HANDLER,
+                JavaVisibility.PUBLIC,
+                Set.of(),
+                Optional.of("Maps the failures declared in the specification to their declared "
+                        + "HTTP status."),
+                List.of(JavaAnnotationModel.marker(
+                        "org.springframework.web.bind.annotation.RestControllerAdvice")),
+                imports,
+                List.of(),
+                List.of(),
+                List.of(),
+                methods,
+                Optional.of(where));
+        return file(context, HANDLER, type, where);
+    }
+
+    private static JavaMethodModel notFoundHandler(Failures failures, SourceRef where) {
+        int status = failures.notFoundStatus();
+        return handlerMethod(
+                "notFound",
+                NOT_FOUND,
+                List.of("return ResponseEntity.status(" + status + ")",
+                        "        .body(new " + API_ERROR + "(" + status
+                                + ", \"not found\", exception.getMessage()));"),
+                where);
+    }
+
+    private static JavaMethodModel invalidInputHandler(Failures failures, SourceRef where) {
+        int status = failures.invalidInputStatus();
+        return handlerMethod(
+                "invalidInput",
+                "org.springframework.web.bind.MethodArgumentNotValidException",
+                List.of(
+                        "String message = exception.getBindingResult().getFieldErrors().stream()",
+                        "        .map(error -> error.getField() + \" \""
+                                + " + error.getDefaultMessage())",
+                        "        .sorted()",
+                        "        .collect(Collectors.joining(\", \"));",
+                        "return ResponseEntity.status(" + status + ")",
+                        "        .body(new " + API_ERROR + "(" + status
+                                + ", \"invalid input\", message));"),
+                where);
+    }
+
+    private static JavaMethodModel duplicateHandler(Failures failures, SourceRef where) {
+        int status = failures.duplicateStatus();
+        List<String> statements = new ArrayList<>();
+        statements.add("String cause = exception.getMostSpecificCause().getMessage();");
+        statements.add("String field = \"resource\";");
+        statements.add("if (cause != null) {");
+        failures.duplicates().forEach((constraint, field) -> {
+            statements.add("    if (cause.contains(\"" + constraint + "\")) {");
+            statements.add("        field = \"" + field + "\";");
+            statements.add("    }");
+        });
+        statements.add("}");
+        statements.add("return ResponseEntity.status(" + status + ")");
+        statements.add("        .body(new " + API_ERROR + "(" + status
+                + ", \"duplicate\", field + \" already exists\"));");
+        return handlerMethod(
+                "duplicate",
+                "org.springframework.dao.DataIntegrityViolationException",
+                statements,
+                where);
+    }
+
+    private static JavaMethodModel handlerMethod(
+            String name, String exceptionType, List<String> statements, SourceRef where) {
+        JavaTypeRef exception = JavaTypeRef.of(exceptionType);
+        return new JavaMethodModel(
+                name,
+                JavaTypeRef.parameterized(
+                        "org.springframework.http.ResponseEntity", JavaTypeRef.of(API_ERROR)),
+                JavaVisibility.PUBLIC,
+                Set.of(),
+                List.of(JavaAnnotationModel.of(
+                        "org.springframework.web.bind.annotation.ExceptionHandler",
+                        new JavaAnnotationModel.Attribute(
+                                "value", exception.simpleName() + ".class"))),
+                List.of(new JavaParameterModel("exception", exception)),
+                statements,
+                Optional.of(where));
+    }
+
+    private static JavaFieldModel component(String name, String type, SourceRef where) {
+        return new JavaFieldModel(
+                name,
+                JavaTypeRef.of(type),
+                JavaVisibility.PACKAGE_PRIVATE,
+                Set.of(),
+                List.of(),
+                Optional.empty(),
+                Optional.of(where));
+    }
+
+    private static JavaSourceFile file(
+            JavaSpringContext context, String className, JavaTypeModel type, SourceRef where) {
+        return new JavaSourceFile(
+                JavaLayout.sourcePath(
+                        context.layout().packagePath(JavaLayout.ERROR), className),
+                type,
+                Optional.of(where));
+    }
+
+    private static String errorPackage(JavaSpringContext context) {
+        return context.layout().packageName(JavaLayout.ERROR);
+    }
+
+    /** Which failures this project can actually produce, and with which declared status. */
+    private record Failures(
+            boolean notFound,
+            int notFoundStatus,
+            boolean invalidInput,
+            int invalidInputStatus,
+            Map<String, String> duplicates,
+            int duplicateStatus,
+            SourceRef where) {
+
+        private static Failures of(JavaSpringContext context) {
+            boolean notFound = false;
+            int notFoundStatus = DEFAULT_NOT_FOUND_STATUS;
+            boolean invalidInput = false;
+            int invalidInputStatus = 400;
+            int duplicateStatus = 409;
+            Map<String, String> duplicates = new LinkedHashMap<>();
+            SourceRef where = SourceRef.file("harpia.yaml");
+
+            for (ApplicationEntity entity : context.application().entities()) {
+                for (ApplicationOperation operation : entity.operations()) {
+                    // A load that can miss must be mapped, whether or not the spec spelled it out.
+                    if (operation.flow().stream().anyMatch(instruction -> instruction.command()
+                            == ApplicationOperation.FlowCommand.LOAD_BY_ID)) {
+                        notFound = true;
+                        where = entity.where();
+                    }
+                    for (ApplicationOperation.Failure failure : operation.failures()) {
+                        where = entity.where();
+                        switch (failure.condition()) {
+                            case NOT_FOUND -> {
+                                notFound = true;
+                                notFoundStatus = failure.status();
+                            }
+                            case INVALID_INPUT -> {
+                                invalidInput = true;
+                                invalidInputStatus = failure.status();
+                            }
+                            case DUPLICATE -> {
+                                duplicateStatus = failure.status();
+                                failure.field()
+                                        .flatMap(name -> column(entity, name))
+                                        .ifPresent(column -> duplicates.putIfAbsent(
+                                                SqlConstraintNames.unique(
+                                                        entity.tableName(), column),
+                                                failure.field().orElseThrow()));
+                            }
+                        }
+                    }
+                }
+            }
+            return new Failures(
+                    notFound,
+                    notFoundStatus,
+                    invalidInput,
+                    invalidInputStatus,
+                    Map.copyOf(duplicates).isEmpty() ? Map.of() : new LinkedHashMap<>(duplicates),
+                    duplicateStatus,
+                    where);
+        }
+
+        private static Optional<String> column(ApplicationEntity entity, String fieldName) {
+            return entity.fields().stream()
+                    .filter(field -> field.name().equals(fieldName))
+                    .map(ApplicationField::columnName)
+                    .findFirst();
+        }
+
+        private boolean any() {
+            return notFound || invalidInput || !duplicates.isEmpty();
+        }
+    }
+}

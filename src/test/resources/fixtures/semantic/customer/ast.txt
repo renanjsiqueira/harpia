@@ -1,0 +1,32 @@
+Module Customer (specs/customer.harpia.md)
+  Data
+    Field id: UUID generated
+    Field name: String required
+    Field email: Email required unique
+    Field active: Boolean required default true
+  UseCase Create Customer
+    Endpoint POST /customers
+    Flow ValidateInput
+    Flow CreateFrom
+    Flow Save
+    Flow Return
+  UseCase Get Customer
+    Endpoint GET /customers/{id}
+    Flow LoadById
+    Flow Return
+  UseCase List Customers
+    Endpoint GET /customers
+    Flow ListAll
+    Flow Return
+  UseCase Update Customer
+    Endpoint PUT /customers/{id}
+    Flow ValidateInput
+    Flow LoadById
+    Flow UpdateFrom
+    Flow Save
+    Flow Return
+  UseCase Delete Customer
+    Endpoint DELETE /customers/{id}
+    Flow LoadById
+    Flow Delete
+    Flow Return

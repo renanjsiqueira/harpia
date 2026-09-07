@@ -1,0 +1,53 @@
+Entity Customer
+  Field id: UUID generated
+  Field name: String required
+  Field email: Email required unique
+  Field active: Boolean required default true
+  UseCase CreateCustomer
+    Http POST /customers
+    Access PUBLIC
+    Input name: String required
+    Input email: Email required
+    Step ValidateInput
+    Step CreateFrom
+    Step Save
+    Step Return
+    Output 201 ENTITY Customer
+    Error INVALID_INPUT -> 400
+    Error DUPLICATE -> 409
+  UseCase GetCustomer
+    Http GET /customers/{id}
+    Access PUBLIC
+    Step LoadById
+    Step Return
+    Output 200 ENTITY Customer
+    Error NOT_FOUND -> 404
+  UseCase ListCustomers
+    Http GET /customers
+    Access PUBLIC
+    Step ListAll
+    Step Return
+    Output 200 LIST Customer
+  UseCase UpdateCustomer
+    Http PUT /customers/{id}
+    Access PUBLIC
+    Input name: String required
+    Input email: Email required
+    Input active: Boolean required
+    Step ValidateInput
+    Step LoadById
+    Step UpdateFrom
+    Step Save
+    Step Return
+    Output 200 ENTITY Customer
+    Error INVALID_INPUT -> 400
+    Error NOT_FOUND -> 404
+    Error DUPLICATE -> 409
+  UseCase DeleteCustomer
+    Http DELETE /customers/{id}
+    Access PUBLIC
+    Step LoadById
+    Step Delete
+    Step Return
+    Output 204 NOTHING
+    Error NOT_FOUND -> 404

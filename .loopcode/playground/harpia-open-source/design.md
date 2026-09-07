@@ -26,7 +26,7 @@ sealed interface FlowStep permits ValidateInput, CreateFrom, LoadById,
 record FlowModel(List<FlowStep> steps, Map<String, VarType> vars) {}  // LinkedHashMap
 ```
 
-Três invariantes que o Resolver garante antes de qualquer emissor rodar, e sobre as quais os templates podem confiar cegamente:
+Três invariantes que a validação semântica e o Resolver garantem antes de qualquer emissor rodar, e sobre as quais os templates podem confiar cegamente:
 
 1. Toda entidade tem exatamente um `idField` com `generated`.
 2. Todo `UseCaseModel.baseName` é um identificador Java válido e único no projeto.
@@ -212,7 +212,7 @@ Todos com exit 1 (diagnóstico) salvo indicação de exit 2. Nenhum caso produz 
 | HRP1002 | Nome de entidade fora de PascalCase |
 | HRP1003 | `## Data` ausente ou duplicado |
 | HRP1004 | Linha de campo não casa a gramática (mostra a linha crua) |
-| HRP1005 | Tipo desconhecido (lista os 9 tipos válidos) |
+| HRP1005 | Tipo desconhecido (lista os 10 tipos válidos) |
 | HRP1006 | Caso de uso sem `### Endpoint`/`### Access`/`### Flow`/`### Output` |
 | HRP1007 | Linha de `flow` fora do vocabulário (lista os 8 comandos) |
 | HRP1008 | Condição de erro desconhecida |

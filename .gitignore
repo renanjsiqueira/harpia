@@ -1,0 +1,19 @@
+/target/
+*.class
+*.jar
+!/.mvn/wrapper/maven-wrapper.jar
+
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+
+.DS_Store
+
+# Harpia output. Owned by the compiler and recreated by `harpia build`.
+examples/*/generated/
+examples/*/*/generated/

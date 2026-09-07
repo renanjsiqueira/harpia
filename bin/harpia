@@ -1,0 +1,28 @@
+#!/usr/bin/env sh
+# Harpia launcher. Resolves the shaded jar relative to this script - no network,
+# no environment lookups beyond JAVA_HOME.
+set -eu
+
+script="$0"
+while [ -h "$script" ]; do
+  link=$(readlink "$script")
+  case "$link" in
+    /*) script="$link" ;;
+    *)  script="$(dirname "$script")/$link" ;;
+  esac
+done
+home="$(cd "$(dirname "$script")/.." && pwd)"
+
+jar="$home/target/harpia.jar"
+if [ ! -f "$jar" ]; then
+  echo "harpia: error[HRP5002]: $jar not found; run 'mvn -o package' first" >&2
+  exit 2
+fi
+
+if [ -n "${JAVA_HOME:-}" ]; then
+  java="$JAVA_HOME/bin/java"
+else
+  java="java"
+fi
+
+exec "$java" -jar "$jar" "$@"

@@ -1,0 +1,12 @@
+{{{header}}}
+{{#tables}}
+
+CREATE TABLE {{tableName}} (
+{{#columns}}
+    {{{definition}}},
+{{/columns}}
+{{#constraints}}
+    {{{definition}}}{{^last}},{{/last}}
+{{/constraints}}
+);
+{{/tables}}

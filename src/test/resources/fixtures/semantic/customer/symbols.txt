@@ -1,0 +1,12 @@
+Namespace types
+  Customer
+Namespace operations
+  CreateCustomer
+  DeleteCustomer
+  GetCustomer
+  ListCustomers
+  UpdateCustomer
+Namespace computations
+  (empty)
+Namespace scenarios
+  (empty)
