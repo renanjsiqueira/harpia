@@ -1,11 +1,12 @@
 package dev.harpia;
 
+import dev.harpia.application.ApplicationProject;
 import dev.harpia.diag.Diagnostic;
 import dev.harpia.diag.DiagnosticOrdering;
-import dev.harpia.application.ApplicationProject;
 import dev.harpia.emit.GeneratedTree;
 import dev.harpia.model.ProjectModel;
-import dev.harpia.parse.SpecAst;
+import dev.harpia.parse.ProjectAst;
+import dev.harpia.symbol.SymbolTable;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -54,26 +55,37 @@ public record CompileResult(
      * second source of truth, and the first thing to drift.
      */
     public record Stages(
-            List<SpecAst> modules,
+            ProjectAst syntax,
+            Optional<SymbolTable> symbols,
             Optional<ProjectModel> business,
             Optional<ApplicationProject> application) {
 
         public Stages {
-            modules = List.copyOf(modules);
+            Objects.requireNonNull(syntax, "syntax");
+            Objects.requireNonNull(symbols, "symbols");
             Objects.requireNonNull(business, "business");
             Objects.requireNonNull(application, "application");
         }
 
         public static Stages none() {
-            return new Stages(List.of(), Optional.empty(), Optional.empty());
+            return new Stages(
+                    ProjectAst.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+        }
+
+        public static Stages parsed(ProjectAst syntax) {
+            return new Stages(syntax, Optional.empty(), Optional.empty(), Optional.empty());
+        }
+
+        public Stages withSymbols(SymbolTable table) {
+            return new Stages(syntax, Optional.of(table), business, application);
         }
 
         public Stages withBusiness(ProjectModel model) {
-            return new Stages(modules, Optional.of(model), application);
+            return new Stages(syntax, symbols, Optional.of(model), application);
         }
 
         public Stages withApplication(ApplicationProject project) {
-            return new Stages(modules, business, Optional.of(project));
+            return new Stages(syntax, symbols, business, Optional.of(project));
         }
     }
 }

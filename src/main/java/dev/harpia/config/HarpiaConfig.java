@@ -1,10 +1,11 @@
 package dev.harpia.config;
 
+import dev.harpia.LanguageVersion;
 import java.util.Objects;
 
 /** Fully validated V0 project configuration. */
 public record HarpiaConfig(
-        int harpia,
+        HarpiaSettings harpia,
         ProjectConfig project,
         TargetConfig target,
         DatabaseConfig database,
@@ -12,11 +13,19 @@ public record HarpiaConfig(
         GenerationConfig generation) {
 
     public HarpiaConfig {
+        Objects.requireNonNull(harpia, "harpia");
         Objects.requireNonNull(project, "project");
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(database, "database");
         Objects.requireNonNull(paths, "paths");
         Objects.requireNonNull(generation, "generation");
+    }
+
+    /** Versions owned by Harpia itself, independent from any generation target. */
+    public record HarpiaSettings(int schemaVersion, LanguageVersion languageVersion) {
+        public HarpiaSettings {
+            Objects.requireNonNull(languageVersion, "languageVersion");
+        }
     }
 
     public record ProjectConfig(String name, String group, String artifact, String packageName) {
@@ -50,9 +59,10 @@ public record HarpiaConfig(
         }
     }
 
-    public record PathsConfig(String specs, String output) {
+    public record PathsConfig(String specs, String bindings, String output) {
         public PathsConfig {
             Objects.requireNonNull(specs, "specs");
+            Objects.requireNonNull(bindings, "bindings");
             Objects.requireNonNull(output, "output");
         }
     }

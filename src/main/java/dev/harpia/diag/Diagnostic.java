@@ -1,5 +1,6 @@
 package dev.harpia.diag;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -11,9 +12,20 @@ public record Diagnostic(Severity severity,
                          String code,
                          String message,
                          Optional<SourceRef> where,
+                         List<RelatedLocation> related,
                          Optional<String> hint) {
 
+    public Diagnostic(
+            Severity severity,
+            String code,
+            String message,
+            Optional<SourceRef> where,
+            Optional<String> hint) {
+        this(severity, code, message, where, List.of(), hint);
+    }
+
     public Diagnostic {
+        related = List.copyOf(related);
         Objects.requireNonNull(severity, "severity");
         Objects.requireNonNull(code, "code");
         Objects.requireNonNull(message, "message");
@@ -56,6 +68,13 @@ public record Diagnostic(Severity severity,
     }
 
     public Diagnostic withHint(String newHint) {
-        return new Diagnostic(severity, code, message, where, Optional.of(newHint));
+        return new Diagnostic(severity, code, message, where, related, Optional.of(newHint));
+    }
+
+    /** The same diagnostic, also pointing at another place that explains it. */
+    public Diagnostic relatedTo(String relatedMessage, SourceRef relatedWhere) {
+        List<RelatedLocation> extended = new java.util.ArrayList<>(related);
+        extended.add(new RelatedLocation(relatedMessage, relatedWhere));
+        return new Diagnostic(severity, code, message, where, extended, hint);
     }
 }

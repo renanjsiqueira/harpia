@@ -43,16 +43,18 @@ class ArchitectureBoundaryTest {
             "\"java.lang.", "\"java.math.", "\"java.time.", "\"java.util.");
 
     /** Packages that must stay target independent, and what they are. */
-    private static final Map<String, String> INDEPENDENT_PACKAGES = Map.of(
-            "source", "source loading",
-            "ast", "markdown structure",
-            "parse", "parser",
-            "logic", "computation algebra",
-            "validate", "semantic analysis",
-            "model", "Business IR",
-            "application", "Application IR",
-            "capability", "capability model",
-            "inspect", "pipeline inspection");
+    private static final Map<String, String> INDEPENDENT_PACKAGES = Map.ofEntries(
+            Map.entry("source", "source loading"),
+            Map.entry("ast", "markdown structure"),
+            Map.entry("parse", "parser"),
+            Map.entry("logic", "computation algebra"),
+            Map.entry("validate", "semantic analysis"),
+            Map.entry("model", "Business IR"),
+            Map.entry("application", "Application IR"),
+            Map.entry("capability", "capability model"),
+            Map.entry("binding", "binding model"),
+            Map.entry("symbol", "symbol table"),
+            Map.entry("inspect", "pipeline inspection"));
 
     @Test
     void noLayerAboveTheTargetBoundaryNamesALanguageOrAFramework() {

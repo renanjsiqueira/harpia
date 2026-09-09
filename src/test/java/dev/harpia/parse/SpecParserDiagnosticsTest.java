@@ -2,6 +2,7 @@ package dev.harpia.parse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.harpia.LanguageVersion;
 import dev.harpia.diag.DiagnosticCollector;
 import dev.harpia.diag.ErrorCodes;
 import dev.harpia.source.SourceFile;
@@ -18,7 +19,7 @@ class SpecParserDiagnosticsTest {
     void reportsStableStructuralDiagnostic(String source, String expectedCode) {
         DiagnosticCollector diagnostics = new DiagnosticCollector();
 
-        assertThat(SpecParser.parse(file(source), diagnostics)).isEmpty();
+        assertThat(SpecParser.parse(file(source), LanguageVersion.V0, diagnostics)).isEmpty();
 
         assertThat(diagnostics.diagnostics())
                 .extracting(diagnostic -> diagnostic.code())
@@ -104,7 +105,7 @@ class SpecParserDiagnosticsTest {
 
                 ## Data
 
-                - amount: Money
+                - amount: money
                 - owner: UUID -> Owner
 
                 ## create customer
@@ -122,7 +123,7 @@ class SpecParserDiagnosticsTest {
                 anything
                 """);
 
-        assertThat(SpecParser.parse(source, diagnostics)).isEmpty();
+        assertThat(SpecParser.parse(source, LanguageVersion.V0, diagnostics)).isEmpty();
 
         assertThat(diagnostics.diagnostics())
                 .extracting(diagnostic -> diagnostic.code())
@@ -170,7 +171,7 @@ class SpecParserDiagnosticsTest {
                 200 List<Customer>
                 """);
 
-        assertThat(SpecParser.parse(source, diagnostics)).isEmpty();
+        assertThat(SpecParser.parse(source, LanguageVersion.V0, diagnostics)).isEmpty();
 
         assertThat(diagnostics.diagnostics())
                 .extracting(diagnostic -> diagnostic.code())

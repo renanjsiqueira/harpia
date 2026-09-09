@@ -1,13 +1,16 @@
 package dev.harpia.target.javaspring.transformer;
 
 import dev.harpia.application.ApplicationEntity;
+import dev.harpia.application.ApplicationField;
 import dev.harpia.application.ApplicationOperation;
 import dev.harpia.target.javaspring.JavaLayout;
 import dev.harpia.target.javaspring.JavaSpringContext;
 import dev.harpia.target.javaspring.mapping.JavaTypeMapper;
+import dev.harpia.target.javaspring.mapping.SpringValidationMapper;
 import dev.harpia.target.javaspring.model.JavaAnnotationModel;
 import dev.harpia.target.javaspring.model.JavaConstructorModel;
 import dev.harpia.target.javaspring.model.JavaFieldModel;
+import dev.harpia.target.javaspring.model.JavaImportModel;
 import dev.harpia.target.javaspring.model.JavaMethodModel;
 import dev.harpia.target.javaspring.model.JavaModifier;
 import dev.harpia.target.javaspring.model.JavaParameterModel;
@@ -19,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Resolves the endpoints declared for one entity into a Spring MVC controller.
@@ -33,6 +37,7 @@ public final class JavaSpringControllerTransformer {
     private static final String SERVICE_FIELD = "service";
     private static final String REQUEST_PARAMETER = "request";
     private static final String ID_PARAMETER = "id";
+    private static final SpringValidationMapper VALIDATION = new SpringValidationMapper();
 
     public JavaSourceFile transform(JavaSpringContext context, ApplicationEntity entity) {
         JavaLayout layout = context.layout();
@@ -42,9 +47,13 @@ public final class JavaSpringControllerTransformer {
         JavaTypeRef responseType = JavaTypeRef.of(
                 layout.packageName(JavaLayout.DTO) + "." + entity.responseTypeName());
 
-        List<JavaMethodModel> methods = entity.operations().stream()
-                .map(operation -> operation(layout, entity, operation, responseType))
-                .toList();
+        TreeSet<String> explicitImports = new TreeSet<>();
+        List<JavaMethodModel> methods = new ArrayList<>();
+        for (ApplicationOperation operation : entity.operations()) {
+            if (operation.endpoint().isPresent()) {
+                methods.add(operation(layout, entity, operation, responseType, explicitImports));
+            }
+        }
 
         JavaTypeModel type = new JavaTypeModel(
                 JavaTypeModel.Kind.CLASS,
@@ -54,8 +63,8 @@ public final class JavaSpringControllerTransformer {
                 Set.of(),
                 Optional.of("HTTP binding generated from the endpoints declared for "
                         + entity.typeName() + "."),
-                List.of(JavaAnnotationModel.marker(ANNOTATIONS + "RestController")),
-                List.of(),
+                controllerAnnotations(methods),
+                explicitImports.stream().map(JavaImportModel::new).toList(),
                 List.of(),
                 List.of(new JavaFieldModel(
                         SERVICE_FIELD,
@@ -79,37 +88,57 @@ public final class JavaSpringControllerTransformer {
                 Optional.of(entity.where()));
     }
 
+    /**
+     * Spring only enforces constraints on individual parameters when the class asks it to, so
+     * {@code @Validated} appears exactly when some parameter carries one.
+     */
+    private static List<JavaAnnotationModel> controllerAnnotations(List<JavaMethodModel> methods) {
+        List<JavaAnnotationModel> annotations = new ArrayList<>();
+        annotations.add(JavaAnnotationModel.marker(ANNOTATIONS + "RestController"));
+        boolean constrained = methods.stream()
+                .flatMap(method -> method.parameters().stream())
+                .flatMap(parameter -> parameter.annotations().stream())
+                .anyMatch(annotation -> annotation.type().canonicalName()
+                        .startsWith("jakarta.validation.constraints."));
+        if (constrained) {
+            annotations.add(JavaAnnotationModel.marker(
+                    "org.springframework.validation.annotation.Validated"));
+        }
+        return List.copyOf(annotations);
+    }
+
     private static JavaMethodModel operation(
             JavaLayout layout,
             ApplicationEntity entity,
             ApplicationOperation operation,
-            JavaTypeRef responseType) {
+            JavaTypeRef responseType,
+            TreeSet<String> explicitImports) {
+        ApplicationOperation.Endpoint endpoint = operation.endpoint().orElseThrow();
         List<JavaParameterModel> parameters = new ArrayList<>();
         List<String> arguments = new ArrayList<>();
-        if (operation.endpoint().hasIdPathVariable()) {
-            parameters.add(new JavaParameterModel(
-                    ID_PARAMETER,
-                    JavaTypeMapper.map(entity.idField().type()),
-                    List.of(JavaAnnotationModel.marker(ANNOTATIONS + "PathVariable"))));
+        for (ApplicationOperation.RequestMapping mapping : endpoint.request()) {
+            parameters.add(parameter(layout, entity, operation, mapping));
+        }
+        if (operation.requiresId()) {
             arguments.add(ID_PARAMETER);
         }
-        operation.requestTypeName().ifPresent(request -> {
-            List<JavaAnnotationModel> annotations = new ArrayList<>();
-            if (validates(operation)) {
-                annotations.add(JavaAnnotationModel.marker("jakarta.validation.Valid"));
-            }
-            annotations.add(JavaAnnotationModel.marker(ANNOTATIONS + "RequestBody"));
-            parameters.add(new JavaParameterModel(
-                    REQUEST_PARAMETER,
-                    JavaTypeRef.of(layout.packageName(JavaLayout.DTO) + "." + request),
-                    annotations));
-            arguments.add(REQUEST_PARAMETER);
-        });
+        operation.requestTypeName().ifPresent(ignored -> arguments.add(REQUEST_PARAMETER));
 
+        List<String> statements = new ArrayList<>();
+        if (operation.requestTypeName().isPresent() && !endpoint.hasBody()) {
+            String request = operation.requestTypeName().orElseThrow();
+            // The request type is named only inside a statement, where the import resolver cannot
+            // see it. A body-bound request is a parameter and is resolved from its type instead.
+            explicitImports.add(layout.packageName(JavaLayout.DTO) + "." + request);
+            String values = operation.input().stream()
+                    .map(ApplicationField::name)
+                    .collect(java.util.stream.Collectors.joining(", "));
+            statements.add(request + " " + REQUEST_PARAMETER + " = new "
+                    + request + "(" + values + ");");
+        }
         String call = SERVICE_FIELD + "." + operation.methodName()
                 + "(" + String.join(", ", arguments) + ")";
         int status = operation.result().status();
-        List<String> statements = new ArrayList<>();
         if (operation.result().kind() == ApplicationOperation.ResultKind.NOTHING) {
             statements.add(call + ";");
             statements.add("return ResponseEntity.status(" + status + ").build();");
@@ -123,10 +152,60 @@ public final class JavaSpringControllerTransformer {
                         "org.springframework.http.ResponseEntity", bodyType(operation, responseType)),
                 JavaVisibility.PUBLIC,
                 Set.of(),
-                List.of(mapping(operation)),
+                List.of(mapping(endpoint)),
                 parameters,
                 statements,
-                Optional.of(operation.where()));
+                Optional.of(endpoint.endpointWhere()));
+    }
+
+    private static JavaParameterModel parameter(
+            JavaLayout layout,
+            ApplicationEntity entity,
+            ApplicationOperation operation,
+            ApplicationOperation.RequestMapping mapping) {
+        if (mapping instanceof ApplicationOperation.Body) {
+            List<JavaAnnotationModel> annotations = new ArrayList<>();
+            if (validates(operation)) {
+                annotations.add(JavaAnnotationModel.marker("jakarta.validation.Valid"));
+            }
+            annotations.add(JavaAnnotationModel.marker(ANNOTATIONS + "RequestBody"));
+            return new JavaParameterModel(
+                    REQUEST_PARAMETER,
+                    JavaTypeRef.of(layout.packageName(JavaLayout.DTO) + "."
+                            + operation.requestTypeName().orElseThrow()),
+                    annotations);
+        }
+
+        ApplicationField field = mapping.input().equals(ID_PARAMETER)
+                ? entity.idField()
+                : operation.input().stream()
+                        .filter(candidate -> candidate.name().equals(mapping.input()))
+                        .findFirst()
+                        .orElseThrow();
+        String annotation;
+        String externalName;
+        if (mapping instanceof ApplicationOperation.Path value) {
+            annotation = "PathVariable";
+            externalName = value.parameter();
+        } else if (mapping instanceof ApplicationOperation.Query value) {
+            annotation = "RequestParam";
+            externalName = value.parameter();
+        } else if (mapping instanceof ApplicationOperation.Header value) {
+            annotation = "RequestHeader";
+            externalName = value.header();
+        } else {
+            throw new IllegalStateException("unknown request mapping " + mapping.getClass());
+        }
+        // A body is validated by @Valid at this same boundary. A value bound from a parameter
+        // deserves the same treatment: validation the specification declared belongs where the
+        // request enters, not only deeper in the service.
+        List<JavaAnnotationModel> annotations = new ArrayList<>(
+                validates(operation) ? VALIDATION.map(field) : List.of());
+        annotations.add(JavaAnnotationModel.of(
+                ANNOTATIONS + annotation,
+                new JavaAnnotationModel.Attribute("value", "\"" + externalName + "\"")));
+        return new JavaParameterModel(
+                mapping.input(), JavaTypeMapper.map(field.scalarType()), List.copyOf(annotations));
     }
 
     private static JavaTypeRef bodyType(
@@ -138,8 +217,8 @@ public final class JavaSpringControllerTransformer {
         };
     }
 
-    private static JavaAnnotationModel mapping(ApplicationOperation operation) {
-        String annotation = switch (operation.endpoint().method()) {
+    private static JavaAnnotationModel mapping(ApplicationOperation.Endpoint endpoint) {
+        String annotation = switch (endpoint.method()) {
             case GET -> "GetMapping";
             case POST -> "PostMapping";
             case PUT -> "PutMapping";
@@ -148,7 +227,7 @@ public final class JavaSpringControllerTransformer {
         return JavaAnnotationModel.of(
                 ANNOTATIONS + annotation,
                 new JavaAnnotationModel.Attribute(
-                        "value", "\"" + operation.endpoint().path() + "\""));
+                        "value", "\"" + endpoint.effectivePath() + "\""));
     }
 
     private static boolean validates(ApplicationOperation operation) {

@@ -377,7 +377,7 @@ Detalhes e fases vivem em [`docs/mcp-roadmap.md`](docs/mcp-roadmap.md).
 
 | Capability | Cobertura | Harpia construct | Provider | Java/Spring target | Status | Milestone | Notes |
 |---|---|---|---|---|---|---|---|
-| Custom implementation | C — Custom | `### Implementation custom X` | custom | generated interface + user bean | `PLANNED` | S6 | Escape hatch obrigatório, ainda indisponível |
+| Custom implementation | C — Custom | `### Implementation custom X` | custom | generated interface + user bean | `PARTIAL` | S6 | Interface gerada e Logic custom oficial; injeção do bean depende de `FLOW-014` |
 | Custom dependencies | B — Capability | `harpia.yaml` | Maven | pinned dependency | `PLANNED` | S6 | Nunca na Business Spec |
 | Java interoperability | C — Custom | generated contracts | Java | normal Java/Spring DI | `PLANNED` | S6 | Sem runtime Harpia |
 | Complex math/image/PDF/ML | C — Custom | custom contract | user-selected | user Java | `CUSTOM` | S6 | Não criar keywords específicas |

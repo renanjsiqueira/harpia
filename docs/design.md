@@ -5,13 +5,16 @@
 O compilador é uma biblioteca pura cercada por adaptadores de entrada e saída:
 
 ```text
-harpia.yaml + specs/*.harpia.md
+harpia.yaml + spec/*.harpia.md + bindings/*.harpia.md
               │
               ▼
- config → source → Markdown estrutural → gramáticas de linha
+ config → source → Markdown estrutural → SpecParser / BindingParser
               │
               ▼
-             AST → validação semântica → Resolver → Business IR
+       Project/Binding AST → símbolos + BindingResolver/Validator
+                                      │
+                                      ▼
+                         validação semântica → Resolver → Business IR
                                       │
                                       ▼
                          requirements de capabilities
@@ -65,7 +68,9 @@ o modelo; o modelo não conhece Spring, Maven, filesystem ou Picocli.
 Formato definitivo da configuração:
 
 ```yaml
-harpia: 1
+harpia:
+  schemaVersion: 1
+  languageVersion: 0
 
 project:
   name: customer-service
@@ -74,15 +79,18 @@ project:
   package: com.example.customer
 
 target:
-  type: spring
-  javaVersion: 21
-  springBootVersion: 3.3.2
+  id: java-spring
+  language:
+    version: 21
+  options:
+    springBootVersion: "3.3.2"
 
 database:
   vendor: postgres
 
 paths:
-  specs: specs
+  specs: spec
+  bindings: bindings
   output: generated
 
 generation:
@@ -90,15 +98,18 @@ generation:
   tests: true
 ```
 
-Todas as chaves são obrigatórias no V0, exceto `paths`, cujos defaults são `specs` e `generated`.
-Chaves desconhecidas ou duplicadas são erros. Os únicos valores aceitos são `harpia: 1`,
-`target.type: spring`, `target.javaVersion: 21`, `database.vendor: postgres`, migrations e tests
+Todas as chaves são obrigatórias no V0, exceto `paths`, cujos defaults são `spec`, `bindings` e
+`generated`.
+Chaves desconhecidas ou duplicadas são erros. `harpia.schemaVersion: 1` versiona somente este
+schema YAML; `harpia.languageVersion: 0` seleciona a gramática e a semântica Harpia executáveis;
+`target.language.version: 21` seleciona Java no target `java-spring`. São dimensões independentes.
+Os demais valores executáveis neste recorte são `database.vendor: postgres`, migrations e tests
 habilitados. A versão de Spring Boot é uma string explícita e pinada; não existe resolução de
 `latest` ou `default`.
 
 Paths são relativos à raiz do projeto, não podem ser absolutos e, depois de normalizados, não podem
-escapar da raiz. A descoberta aceita somente arquivos regulares terminados em `.harpia.md` e não
-segue symlinks.
+escapar da raiz. O diretório de bindings é opcional e deve ser distinto do diretório de spec. A
+descoberta aceita somente arquivos regulares terminados em `.harpia.md` e não segue symlinks.
 
 ## 4. Modelo intermediário
 
@@ -115,7 +126,8 @@ record FieldModel(String name, String columnName, TypeRef type,
                   boolean required, boolean unique, boolean generated,
                   Optional<Literal> defaultValue, SourceRef where) {}
 
-record UseCaseModel(String title, String baseName, HttpBinding http,
+record UseCaseModel(OperationNature nature, String title, String baseName,
+                    Optional<HttpBinding> http,
                     List<FieldModel> input, FlowModel flow,
                     OutputModel output, List<ErrorMapping> errors,
                     SourceRef where) {}
@@ -126,8 +138,8 @@ sealed interface FlowStep permits ValidateInput, CreateFrom, LoadById,
 
 Depois da resolução de capabilities, E0.2 reduz esse modelo para uma Application IR própria:
 `ApplicationEntity`, `ApplicationField` e `ApplicationOperation`. A operação já contém nome de
-método, classificação CRUD, endpoint, request/result, falhas, instruções de flow e fronteira
-transacional. O generator não recebe `ProjectModel` nem tipos do parser.
+método, classificação CRUD, binding opcional, request/result, falhas, instruções de flow e
+fronteira transacional. O generator não recebe `ProjectModel` nem tipos do parser.
 
 Antes da emissão, a validação semântica e o Resolver garantem em conjunto:
 
@@ -135,7 +147,8 @@ Antes da emissão, a validação semântica e o Resolver garantem em conjunto:
 2. todo nome Java, nome SQL e `baseName` é válido, canônico e único no escopo relevante;
 3. cada variável de flow é definida antes do uso e mantém um tipo conhecido;
 4. todo flow termina em `Return`, coerente com o output;
-5. endpoint, input, flow e erros só referenciam a entidade declarada no arquivo.
+5. input, flow e erros referenciam uma entidade resolvida; quando existe binding HTTP, seu path é
+   coerente com o uso de id no flow.
 
 Conversões para PascalCase e snake_case acontecem uma vez no Resolver com `Locale.ROOT`. Templates
 não fazem transformação de nomes nem decisões de negócio.
@@ -163,8 +176,10 @@ public interface Emitter {
 quando a entrada inteira é válida. `validate` e `build` chamam esse mesmo método; apenas `build`
 entrega a árvore ao writer.
 
-`GeneratedTree` usa `TreeMap<String, String>`. Suas chaves são paths relativos com `/`, validados
-contra `..`, paths absolutos e colisões. Seu conteúdo já passou pelo normalizador de saída.
+`GeneratedTree` usa ordem de path estável e preserva cada `GeneratedFile`, inclusive tipo, origem
+principal e os `GeneratedSourceMapping` por símbolo/range. A visão de conteúdo continua sendo um
+`TreeMap<String, String>`. As chaves são paths relativos com `/`, validados contra `..`, paths
+absolutos e colisões; o conteúdo já passou pelo normalizador de saída.
 
 ## 6. Diagnósticos e falhas
 

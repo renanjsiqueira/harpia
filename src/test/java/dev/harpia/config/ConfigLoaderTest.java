@@ -2,6 +2,7 @@ package dev.harpia.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.harpia.LanguageVersion;
 import dev.harpia.diag.Diagnostic;
 import dev.harpia.diag.DiagnosticCollector;
 import dev.harpia.diag.ErrorCodes;
@@ -25,16 +26,23 @@ class ConfigLoaderTest {
 
         HarpiaConfig config = ConfigLoader.load(projectRoot, diagnostics).orElseThrow();
 
-        assertThat(config.harpia()).isEqualTo(1);
+        assertThat(config.harpia().schemaVersion()).isEqualTo(1);
+        assertThat(config.harpia().languageVersion()).isEqualTo(LanguageVersion.V0);
         assertThat(config.project().packageName()).isEqualTo("com.example.customer");
-        assertThat(config.paths().specs()).isEqualTo("specs");
+        assertThat(config.paths().specs()).isEqualTo("spec");
+        assertThat(config.paths().bindings()).isEqualTo("bindings");
         assertThat(config.paths().output()).isEqualTo("generated");
         assertThat(diagnostics.diagnostics()).isEmpty();
     }
 
     @Test
     void reportsMalformedYamlWithItsPosition() throws IOException {
-        writeConfig("harpia: 1\nproject: [unterminated\n");
+        writeConfig("""
+                harpia:
+                  schemaVersion: 1
+                  languageVersion: 0
+                project: [unterminated
+                """);
 
         Diagnostic diagnostic = loadSingleDiagnostic(ErrorCodes.CONFIG_MALFORMED);
 
@@ -49,7 +57,7 @@ class ConfigLoaderTest {
     @Test
     void reportsUnknownAndDuplicateKeysAtTheKey() throws IOException {
         writeConfig(validConfig()
-                .replace("harpia: 1", "harpia: 1\nsecurity: enabled")
+                .replace("project:", "security: enabled\nproject:")
                 .replace("  vendor: postgres", "  vendor: postgres\n  vendor: mysql"));
         DiagnosticCollector diagnostics = new DiagnosticCollector();
 
@@ -77,13 +85,55 @@ class ConfigLoaderTest {
 
     @Test
     void reportsUnsupportedSchemaVersion() throws IOException {
-        writeConfig(validConfig().replace("harpia: 1", "harpia: 2"));
+        writeConfig(validConfig().replace("schemaVersion: 1", "schemaVersion: 2"));
 
         Diagnostic diagnostic = loadSingleDiagnostic(ErrorCodes.CONFIG_SCHEMA_VERSION);
 
         assertThat(diagnostic.message()).contains("must be 1");
         assertThat(diagnostic.where()).hasValueSatisfying(where ->
-                assertThat(where.line()).isEqualTo(1));
+                assertThat(where.line()).isEqualTo(2));
+    }
+
+    @Test
+    void reportsUnsupportedHarpiaLanguageVersion() throws IOException {
+        writeConfig(validConfig().replace("languageVersion: 0", "languageVersion: 2"));
+
+        Diagnostic diagnostic = loadSingleDiagnostic(ErrorCodes.CONFIG_LANGUAGE_VERSION);
+
+        assertThat(diagnostic.message())
+                .contains("harpia.languageVersion 2")
+                .contains("supported versions: 0, 1");
+        assertThat(diagnostic.where()).hasValueSatisfying(where ->
+                assertThat(where.line()).isEqualTo(3));
+    }
+
+    @Test
+    void acceptsEveryImplementedLanguageVersion() throws IOException {
+        for (LanguageVersion version : LanguageVersion.values()) {
+            writeConfig(validConfig()
+                    .replace("languageVersion: 0", "languageVersion: " + version.number()));
+            DiagnosticCollector diagnostics = new DiagnosticCollector();
+
+            HarpiaConfig config = ConfigLoader.load(projectRoot, diagnostics).orElseThrow();
+
+            assertThat(diagnostics.diagnostics()).isEmpty();
+            assertThat(config.harpia().languageVersion()).isEqualTo(version);
+        }
+    }
+
+    @Test
+    void rejectsTheOldScalarHarpiaMarker() throws IOException {
+        writeConfig(validConfig().replace("""
+                harpia:
+                  schemaVersion: 1
+                  languageVersion: 0
+                """, "harpia: 1\n"));
+        DiagnosticCollector diagnostics = new DiagnosticCollector();
+
+        assertThat(ConfigLoader.load(projectRoot, diagnostics)).isEmpty();
+        assertThat(diagnostics.diagnostics())
+                .extracting(Diagnostic::message)
+                .anyMatch(message -> message.contains("harpia must be a YAML mapping"));
     }
 
     @Test
@@ -100,6 +150,16 @@ class ConfigLoaderTest {
                     assertThat(diagnostic.where()).hasValueSatisfying(where ->
                             assertThat(where.line()).isPositive());
                 });
+    }
+
+    @Test
+    void specificationAndBindingSourcesMustUseDifferentDirectories() throws IOException {
+        writeConfig(validConfig().replace(
+                "  specs: specs\n", "  specs: specs\n  bindings: specs\n"));
+
+        Diagnostic diagnostic = loadSingleDiagnostic(ErrorCodes.CONFIG_UNSUPPORTED_VALUE);
+
+        assertThat(diagnostic.message()).contains("paths.specs and paths.bindings");
     }
 
     @Test
@@ -188,7 +248,9 @@ class ConfigLoaderTest {
 
     private String validConfig() {
         return """
-                harpia: 1
+                harpia:
+                  schemaVersion: 1
+                  languageVersion: 0
                 project:
                   name: customer-service
                   group: com.example

@@ -21,6 +21,12 @@ public final class JavaSpringDependencyResolver {
         contributions.add(new ProviderContribution(
                 List.of(MavenDependency.managed("org.springframework.boot", "spring-boot-starter")),
                 List.of()));
+        if (!application.entities().isEmpty()) {
+            contributions.add(new ProviderContribution(
+                    List.of(MavenDependency.managed(
+                            "org.springframework.boot", "spring-boot-starter-validation")),
+                    List.of()));
+        }
         for (ResolvedCapability resolved : application.capabilities().asMap().values()) {
             contributions.add(contributionFor(resolved.capability(), application));
         }

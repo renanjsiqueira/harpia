@@ -2,8 +2,22 @@
 
 Status: normativa para o MVP. Esta versão descreve somente CRUD de entidade única.
 
-A evolução proposta está em [`harpia-language-v1-draft.md`](harpia-language-v1-draft.md). O draft
-não é aceito pelo compiler até ser promovido explicitamente para a especificação normativa.
+A evolução incremental está em [`harpia-language-v1-draft.md`](harpia-language-v1-draft.md).
+Somente os slices marcados como implementados são aceitos em `languageVersion: 1`; bindings HTTP
+externos possuem sua especificação normativa em
+[`harpia-bindings-v1.md`](harpia-bindings-v1.md).
+
+Um projeto declara esta gramática sem inferência a partir do conteúdo Markdown:
+
+```yaml
+harpia:
+  schemaVersion: 1
+  languageVersion: 0
+```
+
+`schemaVersion` pertence ao formato de configuração. `languageVersion` pertence à gramática e à
+semântica descritas aqui. A versão em `target.language.version` pertence ao target e, no
+`java-spring`, seleciona Java; nenhuma dessas versões substitui outra.
 
 ## 1. Convenções
 
@@ -60,8 +74,9 @@ use-case-section = h2, sp, use-case-title, newline,
 - A ordem canônica é a mostrada na produção. O parser identifica as seções por heading, não por
   posição, mas o formatter futuro pode normalizar para essa ordem.
 - Parágrafos fora de construções executáveis são documentação e não têm semântica.
-- `### Rules` é documentação no V0. Regras executáveis devem ser representadas por input, flow e
-  errors; nenhuma frase livre é interpretada.
+- `### Rules` é documentação na V0. Na V1 um **item de lista** sob `### Rules` é uma condição
+  executável (§9.1); parágrafos continuam documentação em qualquer versão, e nenhuma frase livre é
+  interpretada.
 
 Títulos de caso de uso contêm palavras ASCII separadas por um espaço, cada palavra iniciando por
 maiúscula. Eles são concatenados para formar um identificador PascalCase: `Create Customer` vira
@@ -231,18 +246,102 @@ O status deve estar entre 200 e 299. O valor retornado pelo flow deve ter a mesm
 `return nothing` exige `nothing`; uma variável `E` exige `E`; e uma variável `List<E>` exige
 `List<E>`. Status 204 exige `nothing` e `nothing` exige status 204.
 
+## 7.1 Enum
+
+Na V1, `## Enum <Nome>` declara um conjunto fechado de valores que o projeto nomeia:
+
+```markdown
+## Enum TicketStatus
+
+- open
+- in_progress
+- closed
+```
+
+- o nome é PascalCase e vive no mesmo namespace de tipos das entidades;
+- cada valor é uma lista direta em `lower_snake_case`, no vocabulário da especificação, não de uma
+  linguagem-alvo;
+- valores duplicados e um enum sem valores são recusados (`HRP1108`).
+
+Um campo referencia o enum pelo nome: `- status: TicketStatus required`. Um nome PascalCase que
+nenhuma declaração do projeto fornece é `HRP2123` — a decisão é semântica, não sintática, porque o
+parser enxerga um módulo e a declaração pode estar em qualquer um.
+
+O target Java/Spring materializa o enum no pacote de domínio, com as constantes em maiúsculas
+(`IN_PROGRESS`), e armazena o **nome**, não o ordinal: um ordinal codifica posição e muda quando a
+especificação reordena seus valores.
+
+## 7.2 Value
+
+Na V1, `## Value <Nome>` declara um grupo de campos comparado pelo que contém, não por uma
+identidade:
+
+```markdown
+## Value Address
+
+- street: String required
+- city: String required
+- zip: String required
+```
+
+- os campos usam a mesma gramática de `## Data`, mas `generated` e `unique` são recusados
+  (`HRP1109`): identidade pertence a uma entidade, não a um valor;
+- um valor sem campos é recusado;
+- um valor não contém outro valor neste recorte — aninhamento é `DOM-014`.
+
+Um campo referencia o valor pelo nome: `- destination: Address required`.
+
+O target Java/Spring gera uma classe `@Embeddable` no pacote de domínio — classe, e não record,
+porque JPA embute por acesso a campo e exige construtor sem argumentos; o construtor completo
+permanece. O valor **não ganha tabela**: seus campos viram colunas da entidade que o contém,
+prefixadas pelo nome do campo (`destination_street`), com `@AttributeOverride` correspondente. O
+prefixo existe para que dois valores na mesma tabela não colidam.
+
+## 8.1 Rules
+
+Na V1, cada item de lista sob `### Rules` é uma condição booleana sobre o input da operação:
+
+```markdown
+### Rules
+
+O desconto nunca ultrapassa o total.
+
+- total > 0
+- discount <= total
+```
+
+A condição usa a mesma linguagem de expressão dos corpos de Logic e é verificada pelo mesmo
+analisador — uma regra não pode discordar de uma computação sobre o que um operador significa.
+
+- o escopo é o input da operação e nada mais. Uma regra que lesse a entidade armazenada estaria
+  perguntando algo que a operação ainda não carregou; alcance maior é `RULE-004`;
+- a condição precisa ser `Boolean`;
+- a operação precisa declarar `### Input`, senão não há o que restringir;
+- o flow precisa declarar `validate input`, porque é ali que a regra roda. Sem isso a regra seria
+  escrita, compilada e nunca executada — `HRP2122`;
+- violar uma regra é input inválido: responde o status declarado para `invalid input`, e a mensagem
+  cita a regra como ela foi escrita.
+
+Regra é a parte da validação de input que nenhuma anotação de campo consegue expressar, porque
+relaciona dois valores. O que um campo diz sobre si mesmo continua em `### Input`.
+
 ## 9. Errors
 
 Cada item diretamente sob `### Errors` declara uma condição e seu status:
 
 ```ebnf
-error-item      = bullet, sp, error-condition, sp, "->", sp, status ;
-error-condition = "invalid input"
-                | "duplicate", sp, field-name
-                | "not found" ;
+error-item       = bullet, sp, error-condition, sp, "->", sp, status ;
+error-condition  = detected-condition | domain-error ;
+detected-condition = "invalid input"
+                   | "duplicate", sp, field-name
+                   | "not found" ;
+domain-error     = lower-word, { sp, lower-word } ;
 ```
 
-Mapeamentos V0 obrigatórios:
+Há duas espécies de condição, e a diferença é quem sabe quando ela ocorre.
+
+**Condições detectadas** são reconhecidas pelo runtime, então o compilador sabe exatamente quando
+acontecem e fixa o status:
 
 | Condição | Status |
 |---|---|
@@ -250,9 +349,20 @@ Mapeamentos V0 obrigatórios:
 | `duplicate <field>` | `409` |
 | `not found` | `404` |
 
-O campo de `duplicate` deve existir e ser `unique`. Uma condição só é declarada quando pode ocorrer:
-`invalid input` exige `validate input`; `not found` exige `load ... by id`; e `duplicate` exige
-criação/atualização seguida de `save`.
+O campo de `duplicate` deve existir e ser `unique`. Uma condição detectada só é declarada quando
+pode ocorrer: `invalid input` exige `validate input`; `not found` exige `load ... by id`; e
+`duplicate` exige criação/atualização seguida de `save`.
+
+**Erros de domínio** são nomeados pelo negócio — `insufficient balance -> 422`. Só a especificação
+sabe o que significam, então ela declara nome e status. O nome é uma frase em minúsculas, vira o
+símbolo canônico (`InsufficientBalance`) e o target gera o tipo correspondente mais o mapeamento
+para o status declarado. O status precisa ser 4xx ou 5xx: uma falha que responde 2xx não é falha.
+
+Um erro de domínio é um tipo só no projeto inteiro, portanto responde com um status só. Declarar
+`insufficient balance` com 422 em uma operação e 409 em outra é `HRP2121`.
+
+A instrução de Flow que levanta um erro de domínio (`fail`) ainda não existe. O que a declaração
+entrega hoje é o contrato: o tipo, o status e o handler.
 
 ## 10. Exemplo completo
 

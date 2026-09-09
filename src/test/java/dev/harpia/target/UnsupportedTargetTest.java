@@ -166,7 +166,9 @@ class UnsupportedTargetTest {
 
     private static String config(String targetId) {
         return """
-                harpia: 1
+                harpia:
+                  schemaVersion: 1
+                  languageVersion: 0
                 project:
                   name: customer-service
                   group: com.example

@@ -1,11 +1,22 @@
 package dev.harpia.validate;
 
+import dev.harpia.LanguageVersion;
+import dev.harpia.binding.BindingModel;
+import dev.harpia.binding.BindingResolver;
+import dev.harpia.binding.BindingValidator;
 import dev.harpia.diag.DiagnosticCollector;
 import dev.harpia.diag.ErrorCodes;
 import dev.harpia.diag.SourceRef;
+import dev.harpia.logic.LogicType;
+import dev.harpia.model.LogicModel;
 import dev.harpia.model.Literals;
 import dev.harpia.model.Naming;
+import dev.harpia.parse.FieldLineParser;
+import dev.harpia.parse.ModuleAst;
+import dev.harpia.parse.ProjectAst;
 import dev.harpia.parse.SpecAst;
+import dev.harpia.symbol.Symbol;
+import dev.harpia.symbol.SymbolTable;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,111 +32,304 @@ public final class SemanticValidator {
     }
 
     public static void validate(
-            List<SpecAst> specifications, DiagnosticCollector diagnostics) {
-        Objects.requireNonNull(specifications, "specifications");
+            ProjectAst project,
+            SymbolTable symbols,
+            DiagnosticCollector diagnostics) {
+        BindingModel bindings = BindingResolver.resolve(project, symbols, diagnostics);
+        BindingValidator.validate(project, bindings, diagnostics);
+        validate(project, symbols, bindings, diagnostics);
+    }
+
+    /** Semantic validation when the compiler has already resolved the project's bindings. */
+    public static void validate(
+            ProjectAst project,
+            SymbolTable symbols,
+            BindingModel bindings,
+            DiagnosticCollector diagnostics) {
+        Objects.requireNonNull(project, "project");
+        Objects.requireNonNull(symbols, "symbols");
+        Objects.requireNonNull(bindings, "bindings");
         Objects.requireNonNull(diagnostics, "diagnostics");
 
-        List<SpecAst> entities = specifications.stream()
-                .filter(SpecAst::declaresEntity)
-                .toList();
-        validateDuplicateEntities(entities, diagnostics);
-        Map<String, SourceRef> routes = new LinkedHashMap<>();
-        Map<String, SourceRef> useCaseNames = new LinkedHashMap<>();
-        for (SpecAst specification : entities) {
-            validateEntity(specification, routes, useCaseNames, diagnostics);
+        // Duplicate entity and use-case names are the symbol table's business; what remains here is
+        // everything that depends on the contents of a declaration rather than on its name.
+        Map<String, Entity> entities = new LinkedHashMap<>();
+        for (ModuleAst module : project.modules()) {
+            if (module.declaresEntity()) {
+                entities.put(module.entity().name(), validateEntity(module, diagnostics));
+                for (SpecAst.FieldDeclaration field : module.entity().fields()) {
+                    validateDeclaredType(field.type(), field.where(), symbols, diagnostics);
+                }
+            }
+        }
+
+        Set<String> targeted = new java.util.LinkedHashSet<>();
+        for (ModuleAst module : project.modules()) {
+            for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
+                validateOperation(
+                        project.languageVersion(),
+                        module,
+                        useCase,
+                        entities,
+                        symbols,
+                        targeted,
+                        diagnostics);
+            }
+        }
+
+        validateDomainErrorStatuses(project, diagnostics);
+
+        // An entity is orphaned when nothing in the project operates on it, which is no longer the
+        // same question as whether its own module declares an operation.
+        for (ModuleAst module : project.modules()) {
+            if (module.declaresEntity() && !targeted.contains(module.entity().name())) {
+                diagnostics.warning(
+                        ErrorCodes.SEMANTIC_ORPHAN_ENTITY,
+                        "entity '" + module.entity().name() + "' has no use cases",
+                        module.where());
+            }
         }
     }
 
-    private static void validateDuplicateEntities(
-            List<SpecAst> specifications, DiagnosticCollector diagnostics) {
-        Map<String, SpecAst> firstByName = new LinkedHashMap<>();
-        Set<String> firstAlreadyReported = new HashSet<>();
-        for (SpecAst specification : specifications) {
-            SpecAst first = firstByName.putIfAbsent(specification.entityName(), specification);
-            if (first == null) {
-                continue;
+    /**
+     * A domain error is one type across the project, so it answers with one status.
+     *
+     * <p>Two operations declaring {@code insufficient balance} with different statuses would
+     * generate a single exception class whose meaning depends on which handler caught it. That is
+     * not a contract, so it is refused rather than resolved by picking a winner.
+     */
+    private static void validateDomainErrorStatuses(
+            ProjectAst project, DiagnosticCollector diagnostics) {
+        Map<String, SpecAst.ErrorDeclaration> byName = new LinkedHashMap<>();
+        for (ModuleAst module : project.modules()) {
+            for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
+                for (SpecAst.ErrorDeclaration error : useCase.errors()) {
+                    if (error.kind() != SpecAst.ErrorKind.DOMAIN) {
+                        continue;
+                    }
+                    String name = error.name().orElseThrow();
+                    SpecAst.ErrorDeclaration first = byName.putIfAbsent(name, error);
+                    if (first != null && first.status() != error.status()) {
+                        diagnostics.error(
+                                ErrorCodes.SEMANTIC_ERROR_STATUS_CONFLICT,
+                                "domain error '" + name + "' maps to " + error.status()
+                                        + " here and to " + first.status() + " elsewhere",
+                                error.where(),
+                                "first declared here",
+                                first.where());
+                    }
+                }
             }
-            if (firstAlreadyReported.add(specification.entityName())) {
-                diagnostics.error(
-                        ErrorCodes.SEMANTIC_DUPLICATE_ENTITY,
-                        "entity '" + specification.entityName() + "' is also declared at "
-                                + location(specification.where()),
-                        first.where());
-            }
-            diagnostics.error(
-                    ErrorCodes.SEMANTIC_DUPLICATE_ENTITY,
-                    "duplicate entity '" + specification.entityName() + "'; first declared at "
-                            + location(first.where()),
-                    specification.where());
         }
     }
 
-    private static void validateEntity(
-            SpecAst specification,
-            Map<String, SourceRef> routes,
-            Map<String, SourceRef> useCaseNames,
-            DiagnosticCollector diagnostics) {
+    /** The fields of one entity, plus where it was declared, for validating operations on it. */
+    private record Entity(
+            String name, String module, Map<String, SpecAst.FieldDeclaration> fields) {
+    }
+
+    /**
+     * A type name that is not a built-in scalar has to be a type the project declared.
+     *
+     * <p>The parser cannot decide this: it sees one module, and a declaration lives wherever it was
+     * written. So the shape is accepted there and the name is resolved here, against every
+     * declaration in the project.
+     */
+    private static void validateDeclaredType(
+            String type, SourceRef where, SymbolTable symbols, DiagnosticCollector diagnostics) {
+        if (FieldLineParser.isScalar(type)
+                || symbols.enumType(type).isPresent()
+                || symbols.valueType(type).isPresent()) {
+            return;
+        }
+        diagnostics.error(
+                ErrorCodes.SEMANTIC_UNKNOWN_TYPE,
+                "unknown type '" + type + "'; no declaration in this project provides it",
+                where);
+    }
+
+    private static Entity validateEntity(ModuleAst module, DiagnosticCollector diagnostics) {
         Map<String, SpecAst.FieldDeclaration> fields = new LinkedHashMap<>();
-        for (SpecAst.FieldDeclaration field : specification.fields()) {
+        for (SpecAst.FieldDeclaration field : module.entity().fields()) {
             SpecAst.FieldDeclaration first = fields.putIfAbsent(field.name(), field);
             if (first != null) {
                 diagnostics.error(
                         ErrorCodes.SEMANTIC_DUPLICATE_FIELD,
-                        "duplicate field '" + field.name() + "'; first declared at "
-                                + location(first.where()),
-                        field.where());
+                        "duplicate field '" + field.name() + "'",
+                        field.where(),
+                        "first declared here",
+                        first.where());
             }
             validateDefault(field, diagnostics);
         }
 
-        validateId(specification, diagnostics);
-        if (specification.useCases().isEmpty()) {
-            diagnostics.warning(
-                    ErrorCodes.SEMANTIC_ORPHAN_ENTITY,
-                    "entity '" + specification.entityName() + "' has no use cases",
-                    specification.where());
-        }
+        validateId(module, diagnostics);
+        return new Entity(module.entity().name(), module.file(), fields);
+    }
 
-        for (SpecAst.UseCaseDeclaration useCase : specification.useCases()) {
-            String route = useCase.endpoint().method() + " " + useCase.endpoint().path();
-            SourceRef firstRoute = routes.putIfAbsent(route, useCase.endpoint().where());
-            if (firstRoute != null) {
-                diagnostics.error(
-                        ErrorCodes.SEMANTIC_DUPLICATE_ROUTE,
-                        "duplicate endpoint '" + route + "'; first declared at " + location(firstRoute),
-                        useCase.endpoint().where());
-            }
-            String baseName = Naming.useCaseBaseName(useCase.title());
-            SourceRef firstName = useCaseNames.putIfAbsent(baseName, useCase.where());
-            if (firstName != null) {
-                diagnostics.error(
-                        ErrorCodes.SEMANTIC_DUPLICATE_USE_CASE,
-                        "duplicate use-case name '" + baseName + "'; first declared at "
-                                + location(firstName),
-                        useCase.where());
-            }
-            validateInput(useCase, fields, diagnostics);
-            validateFlow(specification, useCase, fields, diagnostics);
+    /**
+     * Validates one operation against the entity its flow names, which from V1 need not be the
+     * entity of its own module.
+     */
+    private static void validateOperation(
+            LanguageVersion languageVersion,
+            ModuleAst module,
+            SpecAst.UseCaseDeclaration useCase,
+            Map<String, Entity> entities,
+            SymbolTable symbols,
+            Set<String> targeted,
+            DiagnosticCollector diagnostics) {
+        validateQueryPurity(useCase, diagnostics);
+
+        Optional<Entity> target = target(
+                languageVersion, module, useCase, entities, symbols, diagnostics);
+        if (target.isEmpty()) {
+            return;
+        }
+        targeted.add(target.orElseThrow().name());
+        for (SpecAst.InputDeclaration field : useCase.input()) {
+            validateDeclaredType(field.type(), field.where(), symbols, diagnostics);
+        }
+        validateInput(useCase, target.orElseThrow().fields(), diagnostics);
+        validateRules(useCase, diagnostics);
+        validateFlow(target.orElseThrow(), useCase, diagnostics);
+    }
+
+    /**
+     * A rule is a boolean condition over the operation's input.
+     *
+     * <p>Its scope is the input and nothing else: a rule that could read the stored entity would be
+     * asking a question the operation has not loaded an answer to yet. Reaching further is
+     * `RULE-004` and needs the flow to say when the check happens.
+     *
+     * <p>The condition itself is typed by {@link LogicAnalyzer}, which owns what an expression
+     * means. What is checked here is only that the declaration has something to constrain.
+     */
+    private static void validateRules(
+            SpecAst.UseCaseDeclaration useCase, DiagnosticCollector diagnostics) {
+        if (useCase.rules().isEmpty()) {
+            return;
+        }
+        if (useCase.input().isEmpty()) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_RULE_WITHOUT_INPUT,
+                    "operation '" + useCase.title()
+                            + "' declares rules but no input for them to constrain",
+                    useCase.rules().getFirst().where());
+            return;
+        }
+        // A rule is checked where the flow validates its input. Without that step the rule would be
+        // written, compiled and never run, which is worse than not declaring it.
+        boolean validates = useCase.flow().stream()
+                .anyMatch(statement -> statement instanceof SpecAst.ValidateInput);
+        if (!validates) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_RULE_WITHOUT_INPUT,
+                    "operation '" + useCase.title()
+                            + "' declares rules but its flow never validates input",
+                    useCase.rules().getFirst().where(),
+                    "add 'validate input' to the flow",
+                    useCase.where());
         }
     }
 
+    /**
+     * The entity an operation works on: the one its flow names, or the entity of its own module
+     * when the flow names none. V0 requires the two to be the same module.
+     */
+    private static Optional<Entity> target(
+            LanguageVersion languageVersion,
+            ModuleAst module,
+            SpecAst.UseCaseDeclaration useCase,
+            Map<String, Entity> entities,
+            SymbolTable symbols,
+            DiagnosticCollector diagnostics) {
+        Map<String, SourceRef> named = new LinkedHashMap<>();
+        for (SpecAst.FlowStatement statement : useCase.flow()) {
+            referenced(statement).ifPresent(reference ->
+                    named.putIfAbsent(reference.name(), reference.where()));
+        }
+        if (named.size() > 1) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_FOREIGN_ENTITY,
+                    "operation '" + useCase.title() + "' works on more than one entity: "
+                            + named.keySet(),
+                    useCase.where());
+            return Optional.empty();
+        }
+        if (named.isEmpty()) {
+            return module.declaresEntity()
+                    ? Optional.of(entities.get(module.entity().name()))
+                    : missing(useCase, diagnostics);
+        }
+
+        String name = named.keySet().iterator().next();
+        SourceRef where = named.get(name);
+        Entity entity = entities.get(name);
+        if (entity == null) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_FOREIGN_ENTITY,
+                    "entity '" + name + "' is not declared",
+                    where);
+            return Optional.empty();
+        }
+        boolean sameModule = entity.module().equals(module.file());
+        if (languageVersion == LanguageVersion.V0 && !sameModule) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_FOREIGN_ENTITY,
+                    "Harpia " + languageVersion + " keeps a flow inside the module that declares "
+                            + "its entity; '" + name + "' is declared elsewhere",
+                    where,
+                    "declared here",
+                    symbols.entity(name).map(Symbol::where).orElse(where));
+            return Optional.empty();
+        }
+        return Optional.of(entity);
+    }
+
+    private static Optional<Entity> missing(
+            SpecAst.UseCaseDeclaration useCase, DiagnosticCollector diagnostics) {
+        diagnostics.error(
+                ErrorCodes.SEMANTIC_FOREIGN_ENTITY,
+                "operation '" + useCase.title()
+                        + "' names no entity and its module declares none",
+                useCase.where());
+        return Optional.empty();
+    }
+
+    private record Reference(String name, SourceRef where) {
+    }
+
+    private static Optional<Reference> referenced(SpecAst.FlowStatement statement) {
+        if (statement instanceof SpecAst.CreateFrom value) {
+            return Optional.of(new Reference(value.entity(), value.where()));
+        }
+        if (statement instanceof SpecAst.LoadById value) {
+            return Optional.of(new Reference(value.entity(), value.where()));
+        }
+        if (statement instanceof SpecAst.ListAll value) {
+            return Optional.of(new Reference(value.entity(), value.where()));
+        }
+        return Optional.empty();
+    }
+
     private static void validateId(
-            SpecAst specification, DiagnosticCollector diagnostics) {
-        List<SpecAst.FieldDeclaration> generated = specification.fields().stream()
+            ModuleAst module, DiagnosticCollector diagnostics) {
+        List<SpecAst.FieldDeclaration> generated = module.entity().fields().stream()
                 .filter(SpecAst.FieldDeclaration::generated)
                 .toList();
         boolean valid = generated.size() == 1
                 && generated.getFirst().name().equals("id")
                 && generated.getFirst().type().equals("UUID")
-                && specification.fields().stream()
+                && module.entity().fields().stream()
                         .filter(field -> field.name().equals("id"))
                         .count() == 1;
         if (!valid) {
             diagnostics.error(
                     ErrorCodes.SEMANTIC_ID_FIELD,
-                    "entity '" + specification.entityName()
+                    "entity '" + module.entity().name()
                             + "' must declare exactly one '- id: UUID generated' field",
-                    specification.where());
+                    module.where());
         }
     }
 
@@ -141,6 +345,43 @@ public final class SemanticValidator {
                     "default literal '" + literal + "' is incompatible with " + field.type(),
                     field.where());
         }
+    }
+
+    /**
+     * A Query declares that it reads. The compiler holds it to that, which is the whole difference
+     * between declaring the nature of an operation and inferring it from the flow afterwards.
+     */
+    private static void validateQueryPurity(
+            SpecAst.UseCaseDeclaration useCase, DiagnosticCollector diagnostics) {
+        if (useCase.declaredKind() != dev.harpia.parse.DeclarationKind.QUERY) {
+            return;
+        }
+        for (SpecAst.FlowStatement statement : useCase.flow()) {
+            String operation = mutating(statement);
+            if (operation != null) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_QUERY_MUTATES,
+                        "Query '" + useCase.title() + "' cannot '" + operation
+                                + "'; a Query reads, and a mutation belongs to a Command",
+                        statement.where());
+            }
+        }
+    }
+
+    private static String mutating(SpecAst.FlowStatement statement) {
+        if (statement instanceof SpecAst.CreateFrom) {
+            return "create";
+        }
+        if (statement instanceof SpecAst.UpdateFrom) {
+            return "update";
+        }
+        if (statement instanceof SpecAst.Save) {
+            return "save";
+        }
+        if (statement instanceof SpecAst.Delete) {
+            return "delete";
+        }
+        return null;
     }
 
     private static void validateInput(
@@ -169,27 +410,22 @@ public final class SemanticValidator {
     }
 
     private static void validateFlow(
-            SpecAst specification,
+            Entity target,
             SpecAst.UseCaseDeclaration useCase,
-            Map<String, SpecAst.FieldDeclaration> fields,
             DiagnosticCollector diagnostics) {
+        Map<String, SpecAst.FieldDeclaration> fields = target.fields();
         Map<String, ValueType> variables = new LinkedHashMap<>();
-        boolean loadsById = false;
         boolean createsOrUpdates = false;
         boolean saves = false;
 
         for (int index = 0; index < useCase.flow().size(); index++) {
             SpecAst.FlowStatement statement = useCase.flow().get(index);
             if (statement instanceof SpecAst.CreateFrom value) {
-                validateEntityReference(specification, value.entity(), value.where(), diagnostics);
                 define(variables, value.variable(), ValueType.entity(value.entity()), value.where(), diagnostics);
                 createsOrUpdates = true;
             } else if (statement instanceof SpecAst.LoadById value) {
-                validateEntityReference(specification, value.entity(), value.where(), diagnostics);
                 define(variables, value.variable(), ValueType.entity(value.entity()), value.where(), diagnostics);
-                loadsById = true;
             } else if (statement instanceof SpecAst.ListAll value) {
-                validateEntityReference(specification, value.entity(), value.where(), diagnostics);
                 define(variables, value.variable(), ValueType.list(value.entity()), value.where(), diagnostics);
             } else if (statement instanceof SpecAst.UpdateFrom value) {
                 requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
@@ -218,16 +454,7 @@ public final class SemanticValidator {
                     "flow must end with exactly one return",
                     useCase.where());
         } else {
-            validateReturn(specification, returned, variables, useCase.output(), diagnostics);
-        }
-
-        boolean pathHasId = useCase.endpoint().path().endsWith("/{id}");
-        if (pathHasId != loadsById) {
-            diagnostics.error(
-                    ErrorCodes.SEMANTIC_PATH_VAR_FLOW,
-                    "endpoint {id} and 'load " + specification.entityName()
-                            + " by id' must either both be present or both be absent",
-                    useCase.endpoint().where());
+            validateReturn(target.name(), returned, variables, useCase.output(), diagnostics);
         }
 
         for (SpecAst.ErrorDeclaration error : useCase.errors()) {
@@ -245,20 +472,6 @@ public final class SemanticValidator {
                             error.where());
                 }
             }
-        }
-    }
-
-    private static void validateEntityReference(
-            SpecAst specification,
-            String referenced,
-            SourceRef where,
-            DiagnosticCollector diagnostics) {
-        if (!referenced.equals(specification.entityName())) {
-            diagnostics.error(
-                    ErrorCodes.SEMANTIC_FOREIGN_ENTITY,
-                    "flow in '" + specification.entityName() + "' cannot reference entity '"
-                            + referenced + "'",
-                    where);
         }
     }
 
@@ -308,7 +521,7 @@ public final class SemanticValidator {
     }
 
     private static void validateReturn(
-            SpecAst specification,
+            String entityName,
             SpecAst.Return returned,
             Map<String, ValueType> variables,
             SpecAst.Output output,
@@ -319,7 +532,7 @@ public final class SemanticValidator {
         } else {
             ValueType type = variables.get(returned.variable().orElseThrow());
             matches = type != null
-                    && type.entity().equals(specification.entityName())
+                    && type.entity().equals(entityName)
                     && ((type.kind() == ValueKind.ENTITY
                                     && output.shape().kind() == SpecAst.OutputKind.ENTITY)
                             || (type.kind() == ValueKind.LIST
@@ -345,11 +558,6 @@ public final class SemanticValidator {
         };
     }
 
-    private static String location(SourceRef where) {
-        return where.hasPosition()
-                ? where.file() + ":" + where.line() + ":" + where.column()
-                : where.file();
-    }
 
     private enum ValueKind {
         ENTITY,

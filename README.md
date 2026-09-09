@@ -48,21 +48,20 @@ characters.
 
 ### Current status
 
-Harpia is under active development. The executable V0 currently provides:
+Harpia is under active development. The executable V0 and the first V1 slice currently provide:
 
 | Area | Available today |
 |---|---|
-| Input | `harpia.yaml` plus one or more `specs/*.harpia.md` files |
-| Language | Scalar entities, CRUD-oriented use cases, a closed Flow DSL, pure typed Logic, Logic scenarios |
-| CLI | `validate`, `build`, `targets`, and `version` |
+| Input | `harpia.yaml`, one or more `spec/*.harpia.md` files, and optional `bindings/*.harpia.md` files |
+| Language | Scalar entities, CRUD-oriented V0 use cases, explicit V1 `Command`/`Query`, a closed Flow DSL, pure typed Logic, Logic scenarios |
+| CLI | `validate`, `build`, `inspect`, `targets`, and `version` |
 | Target | `java-spring` |
-| Generated project | Maven, Spring Boot, REST controller, DTOs, service, JPA entity, repository, validation, error handling, Flyway migration, configuration, and tests |
+| Generated project | Maven, Spring Boot, services, JPA, Flyway and tests; REST adapters only for operations with an HTTP binding |
 | Guarantees | Deterministic ordering, stable diagnostics, idempotent writes, manifest-based cleanup, and no Harpia runtime dependency |
 
-Bindings, integrations, events, security, MCP, brownfield reconstruction, explicit
-`Command`/`Query`, and additional targets belong to the roadmap; they are not silently accepted by
-the current compiler. [`BACKLOG.md`](BACKLOG.md) is the canonical source for implementation status
-and priority.
+External binding files, integrations, events, security, MCP, brownfield reconstruction, and
+additional targets belong to the roadmap; they are not silently accepted by the current compiler.
+[`BACKLOG.md`](BACKLOG.md) is the canonical source for implementation status and priority.
 
 ### Quick start
 
@@ -101,19 +100,23 @@ The complete working example is in [`examples/customer`](examples/customer).
 
 ### Project structure
 
-A project accepted by the current compiler has three parts:
+A V1 project using the default paths has this structure:
 
 ```text
 customer-service/
 ├── harpia.yaml
-└── specs/
-    └── customer.harpia.md
+├── spec/
+│   └── customer.harpia.md
+└── bindings/
+    └── http.harpia.md       # optional
 ```
 
 `harpia.yaml` selects the target, project coordinates, source directory, and output directory:
 
 ```yaml
-harpia: 1
+harpia:
+  schemaVersion: 1
+  languageVersion: 1
 
 project:
   name: customer-service
@@ -132,7 +135,8 @@ database:
   vendor: postgres
 
 paths:
-  specs: specs
+  specs: spec
+  bindings: bindings
   output: generated
 
 generation:
@@ -140,8 +144,12 @@ generation:
   tests: true
 ```
 
-The Markdown specification contains readable documentation and formal sections. This is an excerpt
-from [`customer.harpia.md`](examples/customer/specs/customer.harpia.md):
+`harpia.languageVersion` selects the Harpia grammar and semantics. It is intentionally independent
+from `target.language.version`, which selects Java 21 for the `java-spring` target. Version `0` is
+the stable CRUD grammar; version `1` currently adds explicit `Command` and `Query` declarations.
+
+The Markdown specification contains readable documentation and formal sections. This minimal
+excerpt mirrors the included [`customer.harpia.md`](examples/customer/specs/customer.harpia.md):
 
 ````markdown
 # Customer
@@ -188,6 +196,48 @@ return customer
 - invalid input -> 400
 - duplicate email -> 409
 ````
+
+### Internal Command and Query (V1)
+
+Set `harpia.languageVersion: 1` and prefix the operation with `Command` or `Query`. `Endpoint` and
+`Access` are optional as a pair, so an operation can exist without exposing HTTP:
+
+````markdown
+## Query List Customers
+
+### Flow
+
+```flow
+customers = list Customer
+return customers
+```
+
+### Output
+
+200 List<Customer>
+````
+
+Running the same CLI commands generates the application service and its tests, but no controller
+for this operation. To expose it, add `bindings/http.harpia.md`:
+
+````markdown
+# HTTP Bindings
+
+## Bind ListCustomers
+
+### Endpoint
+
+GET /customers
+
+### Access
+
+public
+````
+
+The operation symbol is its title without spaces. The compiler resolves it, checks duplicate
+bindings and routes, validates `{id}` against the Flow, infers the HTTP capability, and then lets
+the Java/Spring target generate the web adapter. See the exact executable grammar in
+[`harpia-bindings-v1.md`](docs/spec/harpia-bindings-v1.md).
 
 The full example also declares get, list, update, and delete use cases. Harpia generates this
 application baseline:
@@ -323,12 +373,18 @@ sentences are rejected instead of guessed.
 ./bin/harpia build --dir <project>
 ./bin/harpia build --dir <project> --clean
 ./bin/harpia build --dir <project> --clean --force
+./bin/harpia inspect --dir <project> --stage ast
+./bin/harpia inspect --dir <project> --stage symbols
+./bin/harpia inspect --dir <project> --stage business-ir
+./bin/harpia inspect --dir <project> --stage application-ir
 ./bin/harpia targets
 ./bin/harpia targets java-spring
 ./bin/harpia version
 ```
 
-`validate` never writes output. `build` synchronizes the generated directory idempotently.
+`validate` never writes output. `inspect` prints the exact intermediate model reached by the same
+compiler pipeline; it does not recompute a parallel representation. `build` synchronizes the
+generated directory idempotently.
 `--clean` removes stale files listed as Harpia-owned in `.harpia-manifest`; files outside the
 manifest are reported and not deleted. Keep hand-written code outside Harpia-managed paths while
 you intend to regenerate the project.
@@ -345,7 +401,7 @@ The core language does not contain Java or Spring types:
       ↓
 CommonMark structure + Harpia parser
       ↓
-Syntax AST
+Module ASTs + deterministic Project AST
       ↓
 Semantic analysis
       ↓
@@ -384,7 +440,7 @@ bootstrap is complete, you can stop regenerating and evolve the Java/Spring proj
 
 > **Generate it. Own it. Keep coding.**
 
-### Direction, not current syntax
+### Current separation and direction
 
 Harpia's long-term model separates concerns like this:
 
@@ -394,7 +450,8 @@ bindings/    = how the software connects
 harpia.yaml  = target, providers, and project configuration
 ```
 
-The roadmap explores explicit entities, value objects, enums, commands, queries, rules, formulas,
+The external HTTP binding above is executable today. The roadmap expands it and explores explicit
+entities, value objects, enums, rules, formulas,
 decisions, events, integrations, providers, additional targets, semantic inspection, an MCP agent
 API, and LLM-assisted brownfield reconstruction. These ideas are architectural direction until
 their backlog entries are implemented and tested.
@@ -411,6 +468,7 @@ validates and a human reviews.
 - [Supported and planned targets](TARGETS.md)
 - [Language specification draft](docs/spec/harpia-language-v1-draft.md)
 - [Harpia Logic specification](docs/spec/harpia-logic-v1-draft.md)
+- [HTTP binding V1 specification](docs/spec/harpia-bindings-v1.md)
 - [Product vision](docs/vision.md)
 - [Semantic compression benchmarks](docs/benchmarks.md)
 - [Historical language coverage snapshot](LANGUAGE_COVERAGE.md)
@@ -476,16 +534,23 @@ mvn -f examples/business-logic/pricing/generated/pom.xml test
 
 - entidades escalares com campos tipados, obrigatórios, únicos, gerados e com valor default;
 - casos de uso CRUD com endpoints `GET`, `POST`, `PUT` e `DELETE`;
+- `Command` e `Query` explícitos na V1, com exposição HTTP opcional;
+- bindings HTTP externos com resolução de operação, rota e parâmetro `{id}`;
 - Flow V0 para validar, criar, carregar, listar, atualizar, salvar, excluir e retornar;
 - Logic pura e tipada, incluindo cenários convertidos em testes JUnit;
 - geração de Maven, Spring Boot, DTOs, controller, service, JPA, repository, validação, tratamento
   de erros, Flyway, configuração e testes;
 - escrita determinística e idempotente, com manifesto para limpeza segura;
-- comandos `validate`, `build`, `targets` e `version`.
+- comandos `validate`, `build`, `inspect`, `targets` e `version`.
 
-MCP, bindings, integrações, eventos, segurança, engenharia reversa e outros targets ainda são
-roadmap. O estado oficial, com evidência por item, está no [`BACKLOG.md`](BACKLOG.md). Para entender
-a separação entre linguagem e Java/Spring, leia [`ARCHITECTURE.md`](ARCHITECTURE.md) e
-[`TARGETS.md`](TARGETS.md).
+Bindings avançados, MCP, integrações, eventos, segurança, engenharia reversa e outros targets ainda
+são roadmap. O estado oficial, com evidência por item, está no
+[`BACKLOG.md`](BACKLOG.md). Para entender a separação entre linguagem e Java/Spring, leia
+[`ARCHITECTURE.md`](ARCHITECTURE.md) e [`TARGETS.md`](TARGETS.md).
+
+Na configuração atual, `harpia.schemaVersion: 1` versiona o YAML,
+`harpia.languageVersion: 0` seleciona a gramática CRUD estável; a versão `1` acrescenta hoje
+`Command` e `Query` explícitos; e `target.language.version: 21` seleciona Java. Essas três versões
+são independentes.
 
 > **Descreva a intenção. Gere a base. Assuma o código.**

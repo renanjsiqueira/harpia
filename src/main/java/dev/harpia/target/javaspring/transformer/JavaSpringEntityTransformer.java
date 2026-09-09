@@ -37,9 +37,37 @@ public final class JavaSpringEntityTransformer {
         List<JavaImportModel> explicitImports = new ArrayList<>();
         for (ApplicationField field : entity.fields()) {
             List<JavaAnnotationModel> annotations = new ArrayList<>(validation.map(field));
-            annotations.addAll(persistence.fieldAnnotations(entity, field));
+            if (persistence.ownsColumn(field)) {
+                annotations.addAll(persistence.fieldAnnotations(entity, field));
+            }
             explicitImports.addAll(persistence.additionalImports(entity, field));
-            JavaTypeRef type = JavaTypeMapper.map(field.type());
+            String domain = context.layout().packageName(JavaLayout.DOMAIN);
+            JavaTypeRef type = JavaTypeMapper.map(field.type(), domain);
+            field.valueType().ifPresent(value -> {
+                annotations.add(JavaAnnotationModel.marker("jakarta.persistence.Embedded"));
+                // Hibernate would default each component to its own bare column name, which two
+                // embedded values in one table would collide on. The prefix is the field that
+                // holds the value, and it has to match the column the migration created.
+                explicitImports.add(new JavaImportModel("jakarta.persistence.Column"));
+                for (ApplicationField component : value.components()) {
+                    annotations.add(JavaAnnotationModel.of(
+                            "jakarta.persistence.AttributeOverride",
+                            new JavaAnnotationModel.Attribute(
+                                    "name", "\"" + component.name() + "\""),
+                            new JavaAnnotationModel.Attribute(
+                                    "column",
+                                    "@Column(name = \"" + field.columnName() + "_"
+                                            + component.columnName() + "\")")));
+                }
+            });
+            field.enumTypeName().ifPresent(ignored -> {
+                // Ordinals encode a position, which changes when the specification reorders its
+                // values. The name is what the specification actually declared, so it is stored.
+                explicitImports.add(new JavaImportModel("jakarta.persistence.EnumType"));
+                annotations.add(JavaAnnotationModel.of(
+                        "jakarta.persistence.Enumerated",
+                        new JavaAnnotationModel.Attribute("value", "EnumType.STRING")));
+            });
             fields.add(new JavaFieldModel(
                     field.name(),
                     type,

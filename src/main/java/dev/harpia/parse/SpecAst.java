@@ -6,40 +6,85 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Lossless-enough syntax tree produced before names and flow variables are resolved.
+ * V0 declaration nodes produced before names and flow variables are resolved.
  *
- * <p>A module declares zero or one entity. A module without {@code ## Data} declares no entity and
- * carries only project-level declarations such as Logic.
+ * <p>The project and source-module containers are {@link ProjectAst} and {@link ModuleAst}. Keeping
+ * the small V0 nodes here avoids coupling the new project tree to a particular future declaration
+ * layout.
  */
-public record SpecAst(
-        String file,
-        String moduleName,
-        boolean declaresEntity,
-        List<FieldDeclaration> fields,
-        List<UseCaseDeclaration> useCases,
-        List<LogicAst.Declaration> logics,
-        List<LogicAst.Scenario> scenarios,
-        SourceRef where) {
+public final class SpecAst {
 
-    public SpecAst {
-        Objects.requireNonNull(file, "file");
-        Objects.requireNonNull(moduleName, "moduleName");
-        fields = List.copyOf(fields);
-        useCases = List.copyOf(useCases);
-        logics = List.copyOf(logics);
-        scenarios = List.copyOf(scenarios);
-        Objects.requireNonNull(where, "where");
-        if (!declaresEntity && !fields.isEmpty()) {
-            throw new IllegalArgumentException("only a module with '## Data' declares fields");
+    private SpecAst() {
+    }
+
+    /** The implicit V0 entity introduced by one module's {@code ## Data} section. */
+    public record EntityDeclaration(
+            String name, List<FieldDeclaration> fields, SourceRef where)
+            implements DeclarationAst {
+        public EntityDeclaration {
+            Objects.requireNonNull(name, "name");
+            fields = List.copyOf(fields);
+            Objects.requireNonNull(where, "where");
+        }
+
+        @Override
+        public DeclarationKind kind() {
+            return DeclarationKind.ENTITY;
+        }
+
+        @Override
+        public String declaredName() {
+            return name;
         }
     }
 
-    /** The entity name of a module that declares {@code ## Data}. */
-    public String entityName() {
-        if (!declaresEntity) {
-            throw new IllegalStateException("module " + moduleName + " declares no entity");
+    /** One value of a declared enum, in the specification's own vocabulary. */
+    public record EnumValue(String name, SourceRef where) {
+        public EnumValue {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(where, "where");
         }
-        return moduleName;
+    }
+
+    /** A closed set of values the project names itself. */
+    public record EnumDeclaration(String name, List<EnumValue> values, SourceRef where)
+            implements DeclarationAst {
+        public EnumDeclaration {
+            Objects.requireNonNull(name, "name");
+            values = List.copyOf(values);
+            Objects.requireNonNull(where, "where");
+        }
+
+        @Override
+        public DeclarationKind kind() {
+            return DeclarationKind.ENUM;
+        }
+
+        @Override
+        public String declaredName() {
+            return name;
+        }
+    }
+
+    /** A named group of fields compared by what it holds, not by an identity. */
+    public record ValueDeclaration(
+            String name, List<FieldDeclaration> fields, SourceRef where)
+            implements DeclarationAst {
+        public ValueDeclaration {
+            Objects.requireNonNull(name, "name");
+            fields = List.copyOf(fields);
+            Objects.requireNonNull(where, "where");
+        }
+
+        @Override
+        public DeclarationKind kind() {
+            return DeclarationKind.VALUE;
+        }
+
+        @Override
+        public String declaredName() {
+            return name;
+        }
     }
 
     public record FieldDeclaration(
@@ -128,42 +173,93 @@ public record SpecAst(
         }
     }
 
+    /**
+     * {@code DOMAIN} is an error the business names itself, such as {@code insufficient balance}.
+     * The other three are conditions the runtime detects, so the compiler knows when they occur; a
+     * domain error is declared as part of the contract and is raised by the code, not inferred.
+     */
     public enum ErrorKind {
         INVALID_INPUT,
         DUPLICATE,
-        NOT_FOUND
+        NOT_FOUND,
+        DOMAIN
     }
 
     public record ErrorDeclaration(
-            ErrorKind kind, Optional<String> field, int status, SourceRef where) {
+            ErrorKind kind,
+            Optional<String> field,
+            Optional<String> name,
+            int status,
+            SourceRef where) {
         public ErrorDeclaration {
             Objects.requireNonNull(kind, "kind");
             Objects.requireNonNull(field, "field");
+            Objects.requireNonNull(name, "name");
             Objects.requireNonNull(where, "where");
             if ((kind == ErrorKind.DUPLICATE) != field.isPresent()) {
                 throw new IllegalArgumentException("only duplicate errors name a field");
             }
+            if ((kind == ErrorKind.DOMAIN) != name.isPresent()) {
+                throw new IllegalArgumentException("only domain errors carry a name");
+            }
+        }
+    }
+
+    /**
+     * A condition the operation's input must satisfy, written as a Harpia expression.
+     *
+     * <p>{@code text} is kept beside the parsed expression because a violated rule reports itself,
+     * and the sentence the specification wrote is what a reader recognises.
+     */
+    public record RuleDeclaration(
+            String text, LogicAst.Expression condition, SourceRef where) {
+        public RuleDeclaration {
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(condition, "condition");
+            Objects.requireNonNull(where, "where");
         }
     }
 
     public record UseCaseDeclaration(
+            DeclarationKind declaredKind,
             String title,
-            Endpoint endpoint,
-            Access access,
+            Optional<Endpoint> endpoint,
+            Optional<Access> access,
             List<InputDeclaration> input,
+            List<RuleDeclaration> rules,
             List<FlowStatement> flow,
             Output output,
             List<ErrorDeclaration> errors,
-            SourceRef where) {
+            SourceRef where) implements DeclarationAst {
         public UseCaseDeclaration {
+            Objects.requireNonNull(declaredKind, "declaredKind");
+            if (!declaredKind.isOperation()) {
+                throw new IllegalArgumentException(
+                        "an operation cannot be declared as " + declaredKind);
+            }
             Objects.requireNonNull(title, "title");
+            rules = List.copyOf(rules);
             Objects.requireNonNull(endpoint, "endpoint");
             Objects.requireNonNull(access, "access");
+            if (endpoint.isPresent() != access.isPresent()) {
+                throw new IllegalArgumentException(
+                        "endpoint and access must either both be present or both be absent");
+            }
             input = List.copyOf(input);
             flow = List.copyOf(flow);
             Objects.requireNonNull(output, "output");
             errors = List.copyOf(errors);
             Objects.requireNonNull(where, "where");
+        }
+
+        @Override
+        public DeclarationKind kind() {
+            return declaredKind;
+        }
+
+        @Override
+        public String declaredName() {
+            return title;
         }
     }
 }

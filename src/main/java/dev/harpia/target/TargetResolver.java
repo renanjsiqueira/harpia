@@ -7,6 +7,7 @@ import dev.harpia.config.HarpiaConfig;
 import dev.harpia.diag.DiagnosticCollector;
 import dev.harpia.diag.ErrorCodes;
 import dev.harpia.diag.SourceRef;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -46,17 +47,22 @@ public final class TargetResolver {
                     ErrorCodes.TARGET_UNKNOWN,
                     "invalid target identifier '" + config.target().id() + "'",
                     SourceRef.file(CONFIG_FILE),
-                    knownTargets());
+                    knownTargets(registry));
             return Optional.empty();
         }
 
-        Optional<TargetDescriptor> descriptor = TargetCatalog.find(id);
+        // A registered target describes itself. The catalogue answers only for targets that have
+        // no generator, so registering one does not require editing a built-in list.
+        Optional<HarpiaTarget> generator = registry.find(id);
+        Optional<TargetDescriptor> descriptor = generator
+                .map(HarpiaTarget::descriptor)
+                .or(() -> TargetCatalog.find(id));
         if (descriptor.isEmpty()) {
             diagnostics.error(
                     ErrorCodes.TARGET_UNKNOWN,
                     "unknown target `" + id + "`",
                     SourceRef.file(CONFIG_FILE),
-                    knownTargets());
+                    knownTargets(registry));
             return Optional.empty();
         }
 
@@ -67,7 +73,6 @@ public final class TargetResolver {
                 config.project().artifact(),
                 config.target().options());
 
-        Optional<HarpiaTarget> generator = registry.find(id);
         if (generator.isEmpty()) {
             String message = "target `" + id + "` is not supported by this compiler; target status: "
                     + descriptor.orElseThrow().status();
@@ -76,13 +81,13 @@ public final class TargetResolver {
                         ErrorCodes.TARGET_NOT_SUPPORTED,
                         message + "; no code was generated",
                         SourceRef.file(CONFIG_FILE),
-                        knownTargets());
+                        knownTargets(registry));
             } else {
                 diagnostics.warning(
                         ErrorCodes.TARGET_NOT_SUPPORTED,
                         message + "; the specification was still validated",
                         SourceRef.file(CONFIG_FILE),
-                        knownTargets());
+                        knownTargets(registry));
             }
             return Optional.of(new TargetResolution(
                     descriptor.orElseThrow(), Optional.empty(), configuration));
@@ -125,9 +130,16 @@ public final class TargetResolver {
         return supported;
     }
 
-    private static String knownTargets() {
-        return "supported targets: " + TargetCatalog.supported()
-                + "; planned targets: " + TargetCatalog.planned();
+    /**
+     * Names what this compiler can actually do. Supported means registered, because a catalogue
+     * entry without a generator produces nothing; planned entries are listed separately so the
+     * reader can tell an intent apart from a capability.
+     */
+    private static String knownTargets(TargetRegistry registry) {
+        List<TargetId> planned = TargetCatalog.planned().stream()
+                .filter(id -> registry.find(id).isEmpty())
+                .toList();
+        return "supported targets: " + registry.ids() + "; planned targets: " + planned;
     }
 
     /** Whether the caller intends to generate code or only to validate the specification. */

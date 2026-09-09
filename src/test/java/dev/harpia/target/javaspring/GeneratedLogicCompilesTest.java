@@ -66,8 +66,8 @@ class GeneratedLogicCompilesTest {
         URLClassLoader loader = new URLClassLoader(
                 new URL[] {classes.toUri().toURL()},
                 GeneratedLogicCompilesTest.class.getClassLoader());
-        discount = loader.loadClass("com.example.pricing.logic.CalculateDiscount");
-        total = loader.loadClass("com.example.pricing.logic.CalculateTotal");
+        discount = loader.loadClass("com.example.commerce.logic.CalculateDiscount");
+        total = loader.loadClass("com.example.commerce.logic.CalculateTotal");
     }
 
     @Test

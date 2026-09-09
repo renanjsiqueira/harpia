@@ -20,10 +20,10 @@ public final class Inspector {
         Objects.requireNonNull(stage, "stage");
         CompileResult.Stages stages = result.stages();
         return switch (stage) {
-            case AST -> stages.modules().isEmpty()
+            case AST -> stages.syntax().modules().isEmpty()
                     ? Optional.empty()
-                    : Optional.of(AstRenderer.render(stages.modules()));
-            case SYMBOLS -> stages.business().map(SymbolRenderer::render);
+                    : Optional.of(AstRenderer.render(stages.syntax()));
+            case SYMBOLS -> stages.symbols().map(SymbolRenderer::render);
             case BUSINESS_IR -> stages.business().map(BusinessIrRenderer::render);
             case APPLICATION_IR -> stages.application().map(ApplicationIrRenderer::render);
         };

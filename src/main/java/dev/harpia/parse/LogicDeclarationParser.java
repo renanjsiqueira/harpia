@@ -21,15 +21,32 @@ import java.util.regex.Pattern;
  * block belongs to the declaration whose kind matches its fence name. That keeps the canonical
  * source shape identical to the one people and agents already write.
  */
-public final class LogicDeclarationParser {
+public final class LogicDeclarationParser implements DeclarationParser {
 
     public static final String PREFIX = "Logic";
     private static final Pattern DECLARATION = Pattern.compile("^Logic +([A-Z][A-Za-z0-9]*)$");
     private static final Pattern PARAMETER =
             Pattern.compile("^\\s*[-*+] +([a-z][A-Za-z0-9]*): +([A-Za-z][A-Za-z0-9]*)\\s*$");
-    private static final Set<String> SUBSECTIONS = Set.of("Input", "Output");
+    private static final Set<String> SUBSECTIONS = Set.of("Input", "Output", "Implementation");
+    private static final Pattern CUSTOM = Pattern.compile("^custom +([A-Z][A-Za-z0-9]*)$");
 
-    private LogicDeclarationParser() {
+    LogicDeclarationParser() {
+    }
+
+    @Override
+    public DeclarationKind kind() {
+        return DeclarationKind.LOGIC;
+    }
+
+    @Override
+    public boolean recognizes(String heading) {
+        return declares(heading);
+    }
+
+    @Override
+    public Optional<DeclarationAst> parse(
+            String moduleName, Section section, DiagnosticCollector diagnostics) {
+        return parse(section, diagnostics).map(DeclarationAst.class::cast);
     }
 
     /** True when this H2 heading declares a Logic, regardless of whether it is well formed. */
@@ -58,6 +75,7 @@ public final class LogicDeclarationParser {
         List<Section> subsections = Sections.at(section.content(), 3);
         Section input = null;
         Section output = null;
+        Section implementation = null;
         Set<String> seen = new HashSet<>();
         for (Section subsection : subsections) {
             if (!SUBSECTIONS.contains(subsection.name())) {
@@ -72,10 +90,10 @@ public final class LogicDeclarationParser {
                 valid = false;
                 continue;
             }
-            if (subsection.name().equals("Input")) {
-                input = subsection;
-            } else {
-                output = subsection;
+            switch (subsection.name()) {
+                case "Input" -> input = subsection;
+                case "Output" -> output = subsection;
+                default -> implementation = subsection;
             }
         }
         for (String required : List.of("Input", "Output")) {
@@ -86,10 +104,24 @@ public final class LogicDeclarationParser {
             }
         }
 
+        Optional<LogicAst.CustomImplementation> custom = implementation == null
+                ? Optional.empty()
+                : custom(name, implementation, diagnostics);
+        boolean declaresCustom = implementation != null;
+        valid &= !declaresCustom || custom.isPresent();
+
         List<BlockNode> blocks = section.content().stream()
                 .filter(LogicDeclarationParser::isLogicBlock)
                 .toList();
-        if (blocks.size() != 1) {
+        // A Logic says how it computes exactly once: as a body Harpia understands, or as a
+        // contract someone else implements. Both would leave two answers to the same question.
+        if (declaresCustom && !blocks.isEmpty()) {
+            error(diagnostics,
+                    "Logic " + name + " declares '### Implementation' and a 'logic' block; "
+                            + "a custom implementation replaces the body",
+                    blocks.getFirst().raw().where());
+            valid = false;
+        } else if (!declaresCustom && blocks.size() != 1) {
             error(diagnostics,
                     "Logic " + name + " must contain exactly one fenced code block named 'logic'"
                             + " but found " + blocks.size(),
@@ -103,14 +135,15 @@ public final class LogicDeclarationParser {
         Optional<TypeReference> returnType = output == null
                 ? Optional.empty()
                 : returnType(name, output, diagnostics);
-        Optional<List<LogicAst.Statement>> body = blocks.size() != 1
+        Optional<List<LogicAst.Statement>> body = declaresCustom || blocks.size() != 1
                 ? Optional.empty()
                 : LogicBlockParser.parse(
                         blocks.getFirst().fencedBodyLines(),
                         blocks.getFirst().raw().where(),
                         diagnostics);
 
-        valid &= parameters.isPresent() && returnType.isPresent() && body.isPresent();
+        valid &= parameters.isPresent() && returnType.isPresent();
+        valid &= declaresCustom ? custom.isPresent() : body.isPresent();
         if (!valid) {
             return Optional.empty();
         }
@@ -119,8 +152,34 @@ public final class LogicDeclarationParser {
                 parameters.orElseThrow(),
                 returnType.orElseThrow().name(),
                 returnType.orElseThrow().where(),
-                body.orElseThrow(),
+                body.orElse(List.of()),
+                custom,
                 where));
+    }
+
+    private static Optional<LogicAst.CustomImplementation> custom(
+            String logic, Section section, DiagnosticCollector diagnostics) {
+        List<BlockNode> content = semanticContent(section).stream()
+                .filter(block -> block.kind() == BlockNode.Kind.PARAGRAPH)
+                .toList();
+        if (content.size() != 1) {
+            error(diagnostics,
+                    "'### Implementation' of Logic " + logic
+                            + " requires exactly one line such as 'custom RiskCalculator'",
+                    section.heading().raw().where());
+            return Optional.empty();
+        }
+        BlockNode line = content.getFirst();
+        Matcher matcher = CUSTOM.matcher(line.raw().text().strip());
+        if (!matcher.matches()) {
+            error(diagnostics,
+                    "invalid implementation '" + line.raw().text().strip() + "' in Logic " + logic
+                            + "; expected 'custom <PascalCaseName>'",
+                    line.raw().where());
+            return Optional.empty();
+        }
+        return Optional.of(
+                new LogicAst.CustomImplementation(matcher.group(1), line.raw().where()));
     }
 
     private static Optional<List<LogicAst.Parameter>> parameters(

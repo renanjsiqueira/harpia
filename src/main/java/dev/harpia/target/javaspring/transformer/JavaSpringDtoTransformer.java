@@ -29,7 +29,7 @@ public final class JavaSpringDtoTransformer {
 
     public JavaSourceFile response(JavaSpringContext context, ApplicationEntity entity) {
         List<JavaFieldModel> components = entity.fields().stream()
-                .map(field -> component(field, List.of()))
+                .map(field -> component(field, List.of(), domain(context)))
                 .toList();
         return record(
                 context,
@@ -43,7 +43,7 @@ public final class JavaSpringDtoTransformer {
             JavaSpringContext context, ApplicationOperation operation, String className) {
         List<JavaFieldModel> components = new ArrayList<>();
         for (ApplicationField field : operation.input()) {
-            components.add(component(field, validation.map(field)));
+            components.add(component(field, validation.map(field), domain(context)));
         }
         return record(
                 context,
@@ -53,12 +53,17 @@ public final class JavaSpringDtoTransformer {
                 operation.where());
     }
 
+    private static String domain(JavaSpringContext context) {
+        return context.layout().packageName(JavaLayout.DOMAIN);
+    }
+
     private static JavaFieldModel component(
             ApplicationField field,
-            List<dev.harpia.target.javaspring.model.JavaAnnotationModel> annotations) {
+            List<dev.harpia.target.javaspring.model.JavaAnnotationModel> annotations,
+            String domainPackage) {
         return new JavaFieldModel(
                 field.name(),
-                JavaTypeMapper.map(field.type()),
+                JavaTypeMapper.map(field.type(), domainPackage),
                 JavaVisibility.PACKAGE_PRIVATE,
                 Set.of(),
                 annotations,

@@ -3,7 +3,9 @@ package dev.harpia.target.javaspring.transformer;
 import dev.harpia.application.ApplicationEntity;
 import dev.harpia.application.ApplicationField;
 import dev.harpia.application.ApplicationOperation;
+import dev.harpia.application.ApplicationRule;
 import dev.harpia.target.javaspring.JavaLayout;
+import dev.harpia.target.javaspring.JavaLogicWriter;
 import dev.harpia.target.javaspring.JavaSpringContext;
 import dev.harpia.target.javaspring.mapping.JavaTypeMapper;
 import dev.harpia.target.javaspring.model.JavaAnnotationModel;
@@ -30,9 +32,9 @@ import java.util.TreeSet;
  * specification used. The transaction boundary follows the operation rather than the code: a flow
  * that writes is transactional, a flow that only reads is read-only.
  *
- * <p>{@code validate input} produces no statement here. It is realised at the HTTP boundary by
- * Bean Validation, which is why the controller only marks a body {@code @Valid} when the flow asks
- * for it.
+ * <p>{@code validate input} produces a method-validation boundary through {@code @Validated} and
+ * {@code @Valid}. An HTTP adapter also validates at deserialization time, but internal operations
+ * keep the declared validation when invoked through the Spring service bean.
  */
 public final class JavaSpringServiceTransformer {
 
@@ -43,6 +45,8 @@ public final class JavaSpringServiceTransformer {
     public JavaSourceFile transform(JavaSpringContext context, ApplicationEntity entity) {
         Names names = Names.of(context, entity);
         TreeSet<String> explicitImports = new TreeSet<>();
+        boolean validatesInput = entity.operations().stream().anyMatch(
+                JavaSpringServiceTransformer::validates);
 
         List<JavaMethodModel> methods = new ArrayList<>();
         for (ApplicationOperation operation : entity.operations()) {
@@ -58,7 +62,14 @@ public final class JavaSpringServiceTransformer {
                 Set.of(),
                 Optional.of("Application service generated from the Harpia use cases of "
                         + entity.typeName() + "."),
-                List.of(JavaAnnotationModel.marker("org.springframework.stereotype.Service")),
+                validatesInput
+                        ? List.of(
+                                JavaAnnotationModel.marker(
+                                        "org.springframework.stereotype.Service"),
+                                JavaAnnotationModel.marker(
+                                        "org.springframework.validation.annotation.Validated"))
+                        : List.of(JavaAnnotationModel.marker(
+                                "org.springframework.stereotype.Service")),
                 explicitImports.stream().map(JavaImportModel::new).toList(),
                 List.of(),
                 List.of(new JavaFieldModel(
@@ -89,12 +100,16 @@ public final class JavaSpringServiceTransformer {
             ApplicationOperation operation,
             TreeSet<String> explicitImports) {
         List<JavaParameterModel> parameters = new ArrayList<>();
-        if (operation.endpoint().hasIdPathVariable()) {
+        if (operation.requiresId()) {
             parameters.add(new JavaParameterModel(
-                    ID_PARAMETER, JavaTypeMapper.map(entity.idField().type())));
+                    ID_PARAMETER, JavaTypeMapper.map(entity.idField().scalarType())));
         }
         operation.requestTypeName().ifPresent(request -> parameters.add(new JavaParameterModel(
-                REQUEST_PARAMETER, JavaTypeRef.of(names.dtoPackage() + "." + request))));
+                REQUEST_PARAMETER,
+                JavaTypeRef.of(names.dtoPackage() + "." + request),
+                validates(operation)
+                        ? List.of(JavaAnnotationModel.marker("jakarta.validation.Valid"))
+                        : List.of())));
 
         return new JavaMethodModel(
                 operation.methodName(),
@@ -104,7 +119,21 @@ public final class JavaSpringServiceTransformer {
                 List.of(transactional(operation)),
                 parameters,
                 statements(names, entity, operation, explicitImports),
+                List.of(),
+                documentation(operation),
                 Optional.of(operation.where()));
+    }
+
+    /**
+     * What the specification called this operation. A stated intent should survive into the code a
+     * person reads, rather than being erased once it has served the compiler.
+     */
+    private static Optional<String> documentation(ApplicationOperation operation) {
+        return switch (operation.nature()) {
+            case COMMAND -> Optional.of("Command " + operation.title() + ".");
+            case QUERY -> Optional.of("Query " + operation.title() + ".");
+            case INFERRED -> Optional.empty();
+        };
     }
 
     private static JavaAnnotationModel transactional(ApplicationOperation operation) {
@@ -113,6 +142,11 @@ public final class JavaSpringServiceTransformer {
                 ? JavaAnnotationModel.marker(annotation)
                 : JavaAnnotationModel.of(
                         annotation, new JavaAnnotationModel.Attribute("readOnly", "true"));
+    }
+
+    private static boolean validates(ApplicationOperation operation) {
+        return operation.flow().stream().anyMatch(instruction ->
+                instruction.command() == ApplicationOperation.FlowCommand.VALIDATE_INPUT);
     }
 
     private static JavaTypeRef returnType(Names names, ApplicationOperation operation) {
@@ -133,7 +167,22 @@ public final class JavaSpringServiceTransformer {
         for (ApplicationOperation.FlowInstruction instruction : operation.flow()) {
             switch (instruction.command()) {
                 case VALIDATE_INPUT -> {
-                    // Enforced by Bean Validation at the HTTP boundary; no statement belongs here.
+                    // Field constraints are enforced by Bean Validation at the method boundary.
+                    // A rule is the part of validating the input that no annotation can express,
+                    // so it is checked here, where the specification says validation happens.
+                    for (ApplicationRule rule : operation.rules()) {
+                        explicitImports.add(names.ruleViolationException());
+                        JavaLogicWriter.Result condition = JavaLogicWriter.condition(
+                                rule.condition(),
+                                operation.methodName(),
+                                name -> REQUEST_PARAMETER + "." + name + "()");
+                        explicitImports.addAll(condition.imports());
+                        statements.add("if (!(" + condition.body() + ")) {");
+                        statements.add("    throw new RuleViolationException(\""
+                                + rule.text().replace("\\", "\\\\").replace("\"", "\\\"")
+                                + "\");");
+                        statements.add("}");
+                    }
                 }
                 case CREATE_FROM -> {
                     String variable = instruction.variable().orElseThrow();
@@ -237,6 +286,10 @@ public final class JavaSpringServiceTransformer {
 
         private String notFoundException() {
             return errorPackage + ".NotFoundException";
+        }
+
+        private String ruleViolationException() {
+            return errorPackage + ".RuleViolationException";
         }
     }
 }

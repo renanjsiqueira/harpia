@@ -24,7 +24,7 @@ class ApplicationModelBuilderTest {
                     .extracting(ApplicationField::columnName)
                     .containsExactly("id", "name", "email", "active");
             assertThat(entity.fields())
-                    .extracting(ApplicationField::type)
+                    .extracting(ApplicationField::scalarType)
                     .containsExactly(
                             ApplicationScalarType.UUID,
                             ApplicationScalarType.STRING,

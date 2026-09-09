@@ -48,6 +48,16 @@ public final class DiagnosticCollector {
         add(Diagnostic.warning(code, message, where, hint));
     }
 
+    /** An error that also points at the place that explains it. */
+    public void error(
+            String code,
+            String message,
+            SourceRef where,
+            String relatedMessage,
+            SourceRef relatedWhere) {
+        add(Diagnostic.error(code, message, where).relatedTo(relatedMessage, relatedWhere));
+    }
+
     public boolean hasErrors() {
         return items.stream().anyMatch(Diagnostic::isError);
     }

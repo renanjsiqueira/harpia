@@ -21,7 +21,7 @@ import java.util.regex.Pattern;
  * compiler can prove the types of {@code CalculateDiscount}, but not which number is correct. The
  * expected value has to come from a person, and this is where they write it.
  */
-public final class ScenarioDeclarationParser {
+public final class ScenarioDeclarationParser implements DeclarationParser {
 
     public static final String PREFIX = "Scenario";
     private static final Pattern DECLARATION =
@@ -32,7 +32,23 @@ public final class ScenarioDeclarationParser {
     private static final String RESULT = "result";
     private static final Set<String> SUBSECTIONS = Set.of("Given", "When", "Then");
 
-    private ScenarioDeclarationParser() {
+    ScenarioDeclarationParser() {
+    }
+
+    @Override
+    public DeclarationKind kind() {
+        return DeclarationKind.SCENARIO;
+    }
+
+    @Override
+    public boolean recognizes(String heading) {
+        return declares(heading);
+    }
+
+    @Override
+    public Optional<DeclarationAst> parse(
+            String moduleName, Section section, DiagnosticCollector diagnostics) {
+        return parse(section, diagnostics).map(DeclarationAst.class::cast);
     }
 
     public static boolean declares(String heading) {

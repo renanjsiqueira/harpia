@@ -102,6 +102,11 @@ NOT SUPPORTED
 Estar no catálogo é documentação de intenção, **nunca** compromisso. Identificadores de targets
 ainda não suportados podem mudar antes de serem oficialmente suportados.
 
+O catálogo também não é a lista do que o compilador consegue gerar: essa é o `TargetRegistry`. Um
+target registrado carrega o próprio `TargetDescriptor` e resolve mesmo que nenhum identificador
+correspondente exista no catálogo, que responde apenas por identificadores sem generator. É o que
+permite a um futuro plugin loader montar outro conjunto de targets sem editar o core.
+
 `harpia targets <id>` descreve um target:
 
 ```text
@@ -171,7 +176,7 @@ target:
     springBootVersion: "3.3.2"
 ```
 
-- `id` seleciona um target do catálogo;
+- `id` seleciona um target registrado, ou um identificador catalogado sem generator;
 - `language.version` é a versão da linguagem **daquele** target;
 - `options` carrega valores que só aquele target entende. O core nunca os interpreta: ele valida
   apenas que são escalares. `java-spring` exige `springBootVersion` e reporta `HRP7005` se faltar.
@@ -239,7 +244,7 @@ Exit code 0: a especificação é válida; apenas este compilador não sabe ger�
 | Código | Situação |
 |---|---|
 | `HRP7001` | target catalogado sem generator neste compilador |
-| `HRP7002` | identificador fora do catálogo |
+| `HRP7002` | identificador que nenhum target registrado nem catalogado reconhece |
 | `HRP7003` | a spec exige uma capability que o target não implementa |
 | `HRP7004` | versão de linguagem abaixo do exigido pelo target |
 | `HRP7005` | opção obrigatória do target ausente ou inválida |

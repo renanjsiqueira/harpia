@@ -52,4 +52,23 @@ class GeneratedTreeTest {
             assertThat(file.source()).contains(source);
         });
     }
+
+    @Test
+    void rejectsAMappingThatTargetsAnotherGeneratedFile() {
+        dev.harpia.diag.SourceRef source =
+                dev.harpia.diag.SourceRef.of("spec/customer.harpia.md", 7, 1);
+        GeneratedSourceMapping mapping = new GeneratedSourceMapping(
+                "com.example.Customer",
+                source,
+                dev.harpia.diag.SourceRef.span("Other.java", 1, 1, 2, 1));
+
+        assertThatThrownBy(() -> new GeneratedFile(
+                        "Customer.java",
+                        "class Customer {}\n",
+                        GeneratedFileType.JAVA_SOURCE,
+                        java.util.Optional.of(source),
+                        List.of(mapping)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("owning file");
+    }
 }

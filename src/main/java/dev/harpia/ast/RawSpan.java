@@ -22,8 +22,16 @@ public record RawSpan(String file, int line, int column, String text) {
         }
     }
 
+    /**
+     * Where this block begins and ends. The end is exclusive and derived from the recovered text,
+     * so it costs nothing and every diagnostic anchored on a block gains a span.
+     */
     public SourceRef where() {
-        return SourceRef.of(file, line, column);
+        String[] lines = text.split("\n", -1);
+        int endLine = line + lines.length - 1;
+        int endColumn = (lines.length == 1 ? column : 1)
+                + lines[lines.length - 1].codePointCount(0, lines[lines.length - 1].length());
+        return SourceRef.span(file, line, column, endLine, endColumn);
     }
 
     /**

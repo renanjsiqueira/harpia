@@ -1,5 +1,6 @@
 package dev.harpia.target.javaspring.mapping;
 
+import dev.harpia.application.ApplicationFieldType;
 import dev.harpia.application.ApplicationScalarType;
 import dev.harpia.logic.LogicType;
 import dev.harpia.target.javaspring.model.JavaTypeRef;
@@ -23,6 +24,29 @@ public final class JavaTypeMapper {
             case DATE -> JavaTypeRef.of("java.time.LocalDate");
             case DATE_TIME -> JavaTypeRef.of("java.time.OffsetDateTime");
         };
+    }
+
+    /**
+     * The Java type of a field, which for a declared type is the one the enum transformer emits.
+     *
+     * @param domainPackage where declared types are materialised
+     */
+    public static JavaTypeRef map(ApplicationFieldType type, String domainPackage) {
+        Objects.requireNonNull(type, "type");
+        Objects.requireNonNull(domainPackage, "domainPackage");
+        if (type instanceof ApplicationFieldType.EnumType declared) {
+            return JavaTypeRef.of(domainPackage + "." + declared.name());
+        }
+        if (type instanceof ApplicationFieldType.ValueType declared) {
+            return JavaTypeRef.of(domainPackage + "." + declared.name());
+        }
+        return map(type.scalarKind().orElseThrow());
+    }
+
+    /** {@code awaiting_payment} names the constant {@code AWAITING_PAYMENT}. */
+    public static String enumConstant(String value) {
+        Objects.requireNonNull(value, "value");
+        return value.toUpperCase(java.util.Locale.ROOT);
     }
 
     public static JavaTypeRef map(LogicType type) {

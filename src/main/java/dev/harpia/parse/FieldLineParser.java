@@ -101,9 +101,24 @@ public final class FieldLineParser {
         return Optional.of(new InputDeclaration(matcher.group(1), type, required, where));
     }
 
-    public static boolean knownType(String type) {
+    /**
+     * Whether the syntax names a type at all.
+     *
+     * <p>A built-in scalar is known here. A PascalCase name may be a type the project declared, and
+     * the parser cannot tell: it has one module, and a declaration lives wherever it was written.
+     * So the shape is accepted and whether the name resolves is a semantic question.
+     */
+    /** Whether the syntax names one of the built-in scalars. */
+    public static boolean isScalar(String type) {
         return TYPES.contains(type);
     }
+
+    public static boolean knownType(String type) {
+        return TYPES.contains(type) || NOMINAL.matcher(type).matches();
+    }
+
+    /** A declared type is referenced by its PascalCase name. */
+    private static final Pattern NOMINAL = Pattern.compile("[A-Z][A-Za-z0-9]*");
 
     private static void unknownType(
             String raw,
@@ -113,7 +128,8 @@ public final class FieldLineParser {
             DiagnosticCollector diagnostics) {
         diagnostics.error(
                 ErrorCodes.SYNTAX_UNKNOWN_TYPE,
-                "unknown type '" + type + "'; expected one of " + TYPES.stream().sorted().toList(),
+                "unknown type '" + type + "'; expected a declared type or one of "
+                        + TYPES.stream().sorted().toList(),
                 LineSyntax.at(where, raw, matcher.start(2)));
     }
 

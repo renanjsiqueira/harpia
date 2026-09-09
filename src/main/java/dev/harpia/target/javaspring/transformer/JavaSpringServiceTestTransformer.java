@@ -54,7 +54,8 @@ public final class JavaSpringServiceTestTransformer {
         TreeSet<String> imports = new TreeSet<>(FIXED_IMPORTS);
         imports.add(names.responseImport());
         entity.fields().forEach(field ->
-                JavaSampleValues.requiredImport(field.type()).ifPresent(imports::add));
+                imports.addAll(
+                        JavaSampleValues.requiredImports(field, names.domainPackage())));
         for (ApplicationOperation operation : entity.operations()) {
             operation.requestTypeName().ifPresent(
                     request -> imports.add(names.dtoPackage() + "." + request));
@@ -99,7 +100,7 @@ public final class JavaSpringServiceTestTransformer {
     private static JavaFieldModel identifier(Names names, ApplicationEntity entity) {
         return new JavaFieldModel(
                 "ID",
-                JavaTypeMapper.map(entity.idField().type()),
+                JavaTypeMapper.map(entity.idField().scalarType()),
                 JavaVisibility.PRIVATE,
                 Set.of(JavaModifier.STATIC, JavaModifier.FINAL),
                 List.of(),
@@ -287,7 +288,7 @@ public final class JavaSpringServiceTestTransformer {
 
     private static String callArguments(ApplicationOperation operation, String request) {
         List<String> arguments = new ArrayList<>();
-        if (operation.endpoint().hasIdPathVariable()) {
+        if (operation.requiresId()) {
             arguments.add("ID");
         }
         if (request != null) {
@@ -355,6 +356,11 @@ public final class JavaSpringServiceTestTransformer {
                     JavaTypeRef.of(layout.packageName(JavaLayout.SERVICE) + "." + serviceName),
                     JavaTypeRef.of(layout.packageName(JavaLayout.REPOSITORY) + "."
                             + JavaLayout.repositoryTypeName(entity.typeName())));
+        }
+
+        private String domainPackage() {
+            String qualified = entityType.canonicalName();
+            return qualified.substring(0, qualified.lastIndexOf('.'));
         }
 
         private String responseImport() {

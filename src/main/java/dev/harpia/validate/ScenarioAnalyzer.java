@@ -9,7 +9,10 @@ import dev.harpia.model.Literals;
 import dev.harpia.model.LogicModel;
 import dev.harpia.model.ScenarioModel;
 import dev.harpia.parse.LogicAst;
-import dev.harpia.parse.SpecAst;
+import dev.harpia.parse.ModuleAst;
+import dev.harpia.parse.ProjectAst;
+import dev.harpia.symbol.Symbol;
+import dev.harpia.symbol.SymbolTable;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -27,24 +30,35 @@ public final class ScenarioAnalyzer {
     }
 
     public static List<ScenarioModel> analyze(
-            List<SpecAst> specifications,
-            LogicSymbols symbols,
+            ProjectAst project,
+            SymbolTable symbols,
             DiagnosticCollector diagnostics) {
-        Objects.requireNonNull(specifications, "specifications");
+        Objects.requireNonNull(project, "project");
         Objects.requireNonNull(symbols, "symbols");
         Objects.requireNonNull(diagnostics, "diagnostics");
 
-        Map<String, SourceRef> titles = new LinkedHashMap<>();
+        Set<String> custom = new LinkedHashSet<>();
+        for (ModuleAst module : project.modules()) {
+            for (LogicAst.Declaration logic : module.logics()) {
+                if (logic.custom().isPresent()) {
+                    custom.add(logic.name());
+                }
+            }
+        }
+
         List<ScenarioModel> scenarios = new ArrayList<>();
-        for (SpecAst specification : specifications) {
-            for (LogicAst.Scenario scenario : specification.scenarios()) {
-                SourceRef first = titles.putIfAbsent(scenario.title(), scenario.where());
-                if (first != null) {
+        for (ModuleAst module : project.modules()) {
+            for (LogicAst.Scenario scenario : module.scenarios()) {
+                // Harpia would have to run the user's implementation to know the answer, and it
+                // does not run anything. A scenario here would assert against nothing.
+                if (custom.contains(scenario.computation())) {
                     diagnostics.error(
-                            ErrorCodes.SEMANTIC_SCENARIO_DUPLICATE,
-                            "duplicate scenario '" + scenario.title() + "'; first declared at "
-                                    + location(first),
-                            scenario.where());
+                            ErrorCodes.SEMANTIC_SCENARIO_CUSTOM,
+                            "scenario '" + scenario.title() + "' targets Logic '"
+                                    + scenario.computation()
+                                    + "', whose implementation is custom; test it where it is"
+                                    + " implemented",
+                            scenario.computationWhere());
                     continue;
                 }
                 analyze(scenario, symbols, diagnostics).ifPresent(scenarios::add);
@@ -54,8 +68,8 @@ public final class ScenarioAnalyzer {
     }
 
     private static Optional<ScenarioModel> analyze(
-            LogicAst.Scenario scenario, LogicSymbols symbols, DiagnosticCollector diagnostics) {
-        Optional<LogicSymbols.Signature> signature = symbols.lookup(scenario.computation());
+            LogicAst.Scenario scenario, SymbolTable symbols, DiagnosticCollector diagnostics) {
+        Optional<Symbol.Computation> signature = symbols.computation(scenario.computation());
         if (signature.isEmpty()) {
             diagnostics.error(
                     ErrorCodes.SEMANTIC_SCENARIO_UNKNOWN_TARGET,
@@ -64,7 +78,7 @@ public final class ScenarioAnalyzer {
                     scenario.computationWhere());
             return Optional.empty();
         }
-        LogicSymbols.Signature computation = signature.orElseThrow();
+        Symbol.Computation computation = signature.orElseThrow();
 
         Map<String, LogicAst.Binding> given = new LinkedHashMap<>();
         boolean valid = true;

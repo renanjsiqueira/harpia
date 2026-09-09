@@ -2,6 +2,7 @@ package dev.harpia.parse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.harpia.LanguageVersion;
 import dev.harpia.diag.DiagnosticCollector;
 import dev.harpia.source.SourceFile;
 import java.nio.file.Path;
@@ -19,11 +20,11 @@ class SpecParserTest {
                         diagnostics)
                 .orElseThrow();
 
-        SpecAst spec = SpecParser.parse(source, diagnostics).orElseThrow();
+        ModuleAst module = SpecParser.parse(source, LanguageVersion.V0, diagnostics).orElseThrow();
 
         assertThat(diagnostics.diagnostics()).isEmpty();
-        assertThat(spec.entityName()).isEqualTo("Customer");
-        assertThat(spec.useCases())
+        assertThat(module.entity().name()).isEqualTo("Customer");
+        assertThat(module.useCases())
                 .extracting(SpecAst.UseCaseDeclaration::title)
                 .containsExactly(
                         "Create Customer",
@@ -31,7 +32,7 @@ class SpecParserTest {
                         "List Customers",
                         "Update Customer",
                         "Delete Customer");
-        assertThat(spec.useCases())
+        assertThat(module.useCases())
                 .flatExtracting(SpecAst.UseCaseDeclaration::flow)
                 .extracting(statement -> statement.getClass().getSimpleName())
                 .contains(
@@ -99,18 +100,19 @@ class SpecParserTest {
                 """);
         DiagnosticCollector diagnostics = new DiagnosticCollector();
 
-        SpecAst spec = SpecParser.parse(source, diagnostics).orElseThrow();
+        ModuleAst module = SpecParser.parse(source, LanguageVersion.V0, diagnostics).orElseThrow();
 
         assertThat(diagnostics.diagnostics()).isEmpty();
-        assertThat(spec.file()).isEqualTo("specs/customer.harpia.md");
-        assertThat(spec.entityName()).isEqualTo("Customer");
-        assertThat(spec.fields()).hasSize(4);
-        assertThat(spec.fields().get(2).name()).isEqualTo("email");
-        assertThat(spec.fields().get(2).unique()).isTrue();
-        assertThat(spec.fields().get(3).defaultValue()).contains("true");
-        assertThat(spec.useCases()).singleElement().satisfies(useCase -> {
+        assertThat(module.file()).isEqualTo("specs/customer.harpia.md");
+        assertThat(module.entity().name()).isEqualTo("Customer");
+        assertThat(module.entity().fields()).hasSize(4);
+        assertThat(module.entity().fields().get(2).name()).isEqualTo("email");
+        assertThat(module.entity().fields().get(2).unique()).isTrue();
+        assertThat(module.entity().fields().get(3).defaultValue()).contains("true");
+        assertThat(module.useCases()).singleElement().satisfies(useCase -> {
             assertThat(useCase.title()).isEqualTo("Create Customer");
-            assertThat(useCase.endpoint().method()).isEqualTo("POST");
+            assertThat(useCase.endpoint()).get().extracting(SpecAst.Endpoint::method)
+                    .isEqualTo("POST");
             assertThat(useCase.input()).hasSize(2);
             assertThat(useCase.flow())
                     .extracting(statement -> statement.getClass().getSimpleName())
@@ -152,13 +154,51 @@ class SpecParserTest {
                 """);
         DiagnosticCollector diagnostics = new DiagnosticCollector();
 
-        SpecAst spec = SpecParser.parse(source, diagnostics).orElseThrow();
+        ModuleAst module = SpecParser.parse(source, LanguageVersion.V0, diagnostics).orElseThrow();
 
         assertThat(diagnostics.diagnostics()).isEmpty();
-        assertThat(spec.useCases()).singleElement().satisfies(useCase -> {
-            assertThat(useCase.endpoint().path()).isEqualTo("/customers/{id}");
+        assertThat(module.useCases()).singleElement().satisfies(useCase -> {
+            assertThat(useCase.endpoint()).get().extracting(SpecAst.Endpoint::path)
+                    .isEqualTo("/customers/{id}");
             assertThat(useCase.output().status()).isEqualTo(200);
             assertThat(useCase.flow()).hasSize(2);
         });
+    }
+
+    @Test
+    void preservesDeclarationOrderInTheModuleAstWhileProvidingTypedViews() {
+        SourceFile source = new SourceFile("specs/mixed.harpia.md", """
+                # Mixed
+
+                ## Logic Constant
+
+                ### Input
+
+                ### Output
+
+                Int
+
+                ```logic
+                return 1
+                ```
+
+                ## Data
+
+                - id: UUID generated
+                """);
+        DiagnosticCollector diagnostics = new DiagnosticCollector();
+
+        ModuleAst module = SpecParser.parse(source, LanguageVersion.V0, diagnostics).orElseThrow();
+
+        assertThat(diagnostics.diagnostics()).isEmpty();
+        assertThat(module.declarations())
+                .extracting(DeclarationAst::kind)
+                .containsExactly(DeclarationKind.LOGIC, DeclarationKind.ENTITY);
+        assertThat(module.logics()).singleElement()
+                .extracting(LogicAst.Declaration::name)
+                .isEqualTo("Constant");
+        assertThat(module.entities()).singleElement()
+                .extracting(SpecAst.EntityDeclaration::name)
+                .isEqualTo("Mixed");
     }
 }

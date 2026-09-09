@@ -11,10 +11,16 @@ import dev.harpia.logic.TypedExpression;
 import dev.harpia.logic.TypedStatement;
 import dev.harpia.logic.UnaryOperator;
 import dev.harpia.model.LogicModel;
+import dev.harpia.parse.SpecAst;
+import dev.harpia.model.Naming;
+import dev.harpia.model.RuleModel;
 import dev.harpia.model.ScenarioModel;
 import dev.harpia.model.TypeRef;
 import dev.harpia.parse.LogicAst;
-import dev.harpia.parse.SpecAst;
+import dev.harpia.parse.ModuleAst;
+import dev.harpia.parse.ProjectAst;
+import dev.harpia.symbol.Symbol;
+import dev.harpia.symbol.SymbolTable;
 import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -41,18 +47,21 @@ public final class LogicAnalyzer {
 
     /** Returns the typed Logic IR of the whole project, in declaration order. */
     public static Result analyze(
-            List<SpecAst> specifications, DiagnosticCollector diagnostics) {
-        Objects.requireNonNull(specifications, "specifications");
+            ProjectAst project,
+            SymbolTable symbols,
+            DiagnosticCollector diagnostics) {
+        Objects.requireNonNull(project, "project");
+        Objects.requireNonNull(symbols, "symbols");
         Objects.requireNonNull(diagnostics, "diagnostics");
 
-        LogicSymbols symbols = LogicSymbols.declare(specifications, diagnostics);
         List<LogicModel> models = new ArrayList<>();
         Map<String, Set<String>> callGraph = new LinkedHashMap<>();
 
-        for (SpecAst specification : specifications) {
-            for (LogicAst.Declaration declaration : specification.logics()) {
-                Optional<LogicSymbols.Signature> signature = symbols.lookup(declaration.name());
-                if (signature.isEmpty() || !signature.orElseThrow().where().equals(declaration.where())) {
+        for (ModuleAst module : project.modules()) {
+            for (LogicAst.Declaration declaration : module.logics()) {
+                Optional<Symbol.Computation> signature = symbols.computation(declaration.name());
+                if (signature.isEmpty()
+                        || !signature.orElseThrow().where().equals(declaration.where())) {
                     continue;
                 }
                 Body body = new Body(signature.orElseThrow(), symbols, diagnostics);
@@ -65,27 +74,120 @@ public final class LogicAnalyzer {
         reportCycles(callGraph, symbols, diagnostics);
         return new Result(
                 List.copyOf(models),
-                ScenarioAnalyzer.analyze(specifications, symbols, diagnostics));
+                ScenarioAnalyzer.analyze(project, symbols, diagnostics),
+                rules(project, symbols, diagnostics));
     }
 
-    /** Computations and the examples declared for them, resolved against one symbol table. */
-    public record Result(List<LogicModel> logics, List<ScenarioModel> scenarios) {
+    /**
+     * The typed rules of every operation, by canonical operation symbol.
+     *
+     * <p>A rule is a boolean condition over the operation's input, which is exactly a Logic body
+     * that takes those values and answers Boolean. Typing it here rather than beside the CRUD
+     * checks keeps one definition of what an expression means in Harpia.
+     */
+    private static Map<String, List<RuleModel>> rules(
+            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+        Map<String, List<RuleModel>> byOperation = new LinkedHashMap<>();
+        for (ModuleAst module : project.modules()) {
+            for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
+                if (useCase.rules().isEmpty() || useCase.input().isEmpty()) {
+                    continue;
+                }
+                List<LogicModel.Parameter> scope = useCase.input().stream()
+                        .map(field -> new LogicModel.Parameter(
+                                field.name(), LogicType.of(field.type()), field.where()))
+                        .toList();
+                List<RuleModel> typed = new ArrayList<>();
+                for (SpecAst.RuleDeclaration rule : useCase.rules()) {
+                    analyzeExpression(
+                            "rule '" + rule.text() + "'",
+                            scope,
+                            LogicType.BOOLEAN,
+                            rule.condition(),
+                            symbols,
+                            rule.where(),
+                            diagnostics)
+                            .ifPresent(condition -> typed.add(
+                                    new RuleModel(rule.text(), condition, rule.where())));
+                }
+                byOperation.put(Naming.useCaseBaseName(useCase.title()), List.copyOf(typed));
+            }
+        }
+        return Map.copyOf(byOperation);
+    }
+
+    /** Computations, the examples declared for them, and the rules of each operation. */
+    public record Result(
+            List<LogicModel> logics,
+            List<ScenarioModel> scenarios,
+            Map<String, List<RuleModel>> rules) {
         public Result {
+            rules = Map.copyOf(rules);
             logics = List.copyOf(logics);
             scenarios = List.copyOf(scenarios);
         }
     }
 
+    /**
+     * Types one standalone expression against a named scope.
+     *
+     * <p>A business rule is a boolean function of the values in scope, which is exactly what a
+     * Logic body is. Typing it through the same analysis is therefore not reuse of convenience:
+     * there is one definition of what an expression means in Harpia, and a rule cannot drift from
+     * it.
+     *
+     * @param owner what the diagnostics should call the thing being analysed
+     * @param scope the values the expression may name, in declaration order
+     */
+    public static Optional<TypedExpression> analyzeExpression(
+            String owner,
+            List<LogicModel.Parameter> scope,
+            LogicType expected,
+            LogicAst.Expression expression,
+            SymbolTable symbols,
+            SourceRef where,
+            DiagnosticCollector diagnostics) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(scope, "scope");
+        Objects.requireNonNull(expected, "expected");
+        Objects.requireNonNull(expression, "expression");
+        Objects.requireNonNull(symbols, "symbols");
+        Objects.requireNonNull(diagnostics, "diagnostics");
+
+        Body body = new Body(
+                new Symbol.Computation(owner, "", scope, expected, where), symbols, diagnostics);
+        Map<String, Binding> bindings = new LinkedHashMap<>();
+        for (LogicModel.Parameter parameter : scope) {
+            // Values in scope are given, not introduced here, so an unused one is not a warning.
+            bindings.put(parameter.name(), new Binding(parameter.type(), parameter.where(), true));
+        }
+        body.scopes.push(bindings);
+        Optional<TypedExpression> typed = body.expression(expression);
+        body.scopes.pop();
+        if (typed.isEmpty()) {
+            return Optional.empty();
+        }
+        if (!typed.orElseThrow().type().assignableTo(expected)) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_LOGIC_TYPE,
+                    owner + " must be " + expected.display() + " but is "
+                            + typed.orElseThrow().type().display(),
+                    expression.where());
+            return Optional.empty();
+        }
+        return typed;
+    }
+
     private static void reportCycles(
             Map<String, Set<String>> callGraph,
-            LogicSymbols symbols,
+            SymbolTable symbols,
             DiagnosticCollector diagnostics) {
         Set<String> reported = new LinkedHashSet<>();
         for (String start : callGraph.keySet()) {
             List<String> path = new ArrayList<>();
             if (reachesItself(start, start, callGraph, path, new LinkedHashSet<>())
                     && reported.add(start)) {
-                symbols.lookup(start).ifPresent(signature -> diagnostics.error(
+                symbols.computation(start).ifPresent(signature -> diagnostics.error(
                         ErrorCodes.SEMANTIC_LOGIC_RECURSION,
                         "Logic '" + start + "' is recursive through "
                                 + String.join(" -> ", path)
@@ -117,16 +219,16 @@ public final class LogicAnalyzer {
     /** Analysis state of a single Logic body. */
     private static final class Body {
 
-        private final LogicSymbols.Signature signature;
-        private final LogicSymbols symbols;
+        private final Symbol.Computation signature;
+        private final SymbolTable symbols;
         private final DiagnosticCollector diagnostics;
         private final Deque<Map<String, Binding>> scopes = new ArrayDeque<>();
         private final Set<String> calls = new LinkedHashSet<>();
         private boolean valid = true;
 
         private Body(
-                LogicSymbols.Signature signature,
-                LogicSymbols symbols,
+                Symbol.Computation signature,
+                SymbolTable symbols,
                 DiagnosticCollector diagnostics) {
             this.signature = signature;
             this.symbols = symbols;
@@ -134,6 +236,17 @@ public final class LogicAnalyzer {
         }
 
         private Optional<LogicModel> analyze(LogicAst.Declaration declaration) {
+            // A custom computation declares a signature and delegates the algorithm. There is no
+            // body to type, and inventing one to check would be checking a fiction.
+            if (declaration.custom().isPresent()) {
+                return Optional.of(new LogicModel(
+                        signature.name(),
+                        signature.parameters(),
+                        signature.returnType(),
+                        List.of(),
+                        Optional.of(declaration.custom().orElseThrow().contract()),
+                        declaration.where()));
+            }
             Map<String, Binding> parameters = new LinkedHashMap<>();
             for (LogicModel.Parameter parameter : signature.parameters()) {
                 parameters.put(
@@ -223,12 +336,13 @@ public final class LogicAnalyzer {
             }
             Optional<Binding> existing = find(assignment.name());
             if (existing.isPresent()) {
-                error(
-                        ErrorCodes.SEMANTIC_LOGIC_REASSIGNMENT,
-                        "'" + assignment.name() + "' is already bound at "
-                                + location(existing.orElseThrow().where)
-                                + "; Harpia Logic uses single assignment, so choose a new name",
-                        assignment.where());
+                valid = false;
+                diagnostics.add(dev.harpia.diag.Diagnostic.error(
+                                ErrorCodes.SEMANTIC_LOGIC_REASSIGNMENT,
+                                "'" + assignment.name() + "' is already bound; Harpia Logic uses "
+                                        + "single assignment, so choose a new name",
+                                assignment.where())
+                        .relatedTo("bound here", existing.orElseThrow().where));
                 return Optional.empty();
             }
             scopes.peek().put(
@@ -405,7 +519,7 @@ public final class LogicAnalyzer {
         }
 
         private Optional<TypedExpression> call(LogicAst.Call call) {
-            Optional<LogicSymbols.Signature> callee = symbols.lookup(call.name());
+            Optional<Symbol.Computation> callee = symbols.computation(call.name());
             if (callee.isEmpty()) {
                 error(
                         ErrorCodes.SEMANTIC_LOGIC_UNKNOWN_FUNCTION,
@@ -549,12 +663,7 @@ public final class LogicAnalyzer {
             diagnostics.error(code, message, where);
         }
 
-        private static String location(SourceRef where) {
-            return where.hasPosition()
-                    ? where.file() + ":" + where.line() + ":" + where.column()
-                    : where.file();
         }
-    }
 
     private static final class Binding {
         private final LogicType type;

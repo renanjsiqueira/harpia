@@ -9,10 +9,14 @@ import java.util.List;
  * carry no capability requirement because they have no effect.
  */
 public record ProjectModel(
+        List<EnumModel> enums,
+        List<ValueModel> values,
         List<EntityModel> entities,
         List<LogicModel> logics,
         List<ScenarioModel> scenarios) {
     public ProjectModel {
+        enums = List.copyOf(enums);
+        values = List.copyOf(values);
         entities = List.copyOf(entities);
         logics = List.copyOf(logics);
         scenarios = List.copyOf(scenarios);
