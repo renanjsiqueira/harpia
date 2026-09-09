@@ -873,8 +873,9 @@ Regra alvo: **Spec = what software does; Binding = how software connects; Config
   - Evidence: [`LogicDeclarationParser`](src/main/java/dev/harpia/parse/LogicDeclarationParser.java), [`JavaSpringLogicTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringLogicTransformer.java), [`ScenarioAnalyzer`](src/main/java/dev/harpia/validate/ScenarioAnalyzer.java), [`CustomImplementationTest`](src/test/java/dev/harpia/logic/CustomImplementationTest.java).
 - [ ] `CUSTOM-002` **Interface/contract gerado e dependency injection** — `PARTIAL`; a interface é gerada com a assinatura tipada; falta injetar o bean no chamador, o que depende de `FLOW-014` (`call` Logic a partir de Flow) · `P1` · `L` · Area: `Extensibility`
   - Depends on: `CUSTOM-001` (pronto), `FLOW-014`.
-- [ ] `CUSTOM-003` **Diretório custom protegido e preservado** — `TODO` · `P1` · `M` · Area: `Ownership`
-  - Depends on: `CUSTOM-001`, `CORE-027`.
+- [ ] `CUSTOM-003` **Diretório custom protegido e preservado** — `PARTIAL`; a garantia de propriedade está provada (EP21): um arquivo que Harpia não escreveu sobrevive byte a byte a `--clean --force`, nunca entra no manifesto, e `--clean` sem `--force` recusa em vez de decidir pelo usuário. Falta **escolher o layout**: onde a implementação custom vive de modo a compilar junto com a interface gerada — ver nota abaixo · `P1` · `M` · Area: `Ownership`
+  - Evidence: [`CustomCodeOwnershipTest`](src/test/java/dev/harpia/emit/CustomCodeOwnershipTest.java), [`OutputWriter`](src/main/java/dev/harpia/emit/OutputWriter.java).
+  - Aberto: `docs/roadmap.md` prevê `custom/` como irmão de `generated/`, o que exigiria um source root extra no pom. `build-helper-maven-plugin` não resolve offline, então essa escolha quebraria o gate `mvn -o test` do projeto gerado. A alternativa é a implementação viver dentro da árvore de fontes gerada (compila e é component-scanned sem plugin nenhum), ao custo de `rm -rf generated` destruir o trabalho do usuário. Decisão do dono do produto.
 - [ ] `CUSTOM-004` **Custom Maven dependencies/proprietary SDKs** — `TODO` · `P2` · `M` · Area: `Extensibility`
   - Depends on: `CUSTOM-001`, `TARGET-016`.
 - [ ] `CUSTOM-005` **JNI/native integration** — `CUSTOM` · `P4` · `L` · Area: `Extensibility`
@@ -1408,7 +1409,7 @@ humanos/agentes e dependências desbloqueadas — não apenas em interesse técn
 Concluídos desta lista: HTTP binding com base URL e os quatro mappings (`BIND-006`, parcial),
 `RULE-001`, `TYPE-020`, `TYPE-024`, `CORE-016`, `CMD-004`, `API-009` e `DET-003`.
 
-1. **Diretório custom protegido** (`CUSTOM-003`) — o contrato já é gerado; falta garantir por teste que `custom/` nunca entra no manifesto nem é limpo.
+1. **Layout do código custom** (`CUSTOM-003`) — a garantia de propriedade está provada; falta decidir onde a implementação vive para compilar com a interface gerada.
 2. **Invariant** (`RULE-002`) — a condição tipada já existe; falta o escopo da entidade e o momento em que ela vale.
 3. **Containers no type system** (`TYPE-021` `List<T>`, `TYPE-022` `Optional<T>`, `TYPE-025` `Page<T>`) — a álgebra de tipo de campo já é selada; containers são a extensão natural.
 4. **`Reference<T>` e relacionamentos** (`TYPE-023`, `DOM-012`) — primeiro caso em que um campo aponta para outra entidade.
