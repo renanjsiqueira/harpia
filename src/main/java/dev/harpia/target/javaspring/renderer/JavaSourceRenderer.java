@@ -3,6 +3,7 @@ package dev.harpia.target.javaspring.renderer;
 import dev.harpia.emit.GeneratedFile;
 import dev.harpia.emit.GeneratedFileType;
 import dev.harpia.emit.GeneratedHeader;
+import dev.harpia.emit.GeneratedSourceMapping;
 import dev.harpia.emit.OutputNormalizer;
 import dev.harpia.target.javaspring.model.JavaAnnotationModel;
 import dev.harpia.target.javaspring.model.JavaConstructorModel;
@@ -14,8 +15,11 @@ import dev.harpia.target.javaspring.model.JavaSourceFile;
 import dev.harpia.target.javaspring.model.JavaTypeModel;
 import dev.harpia.target.javaspring.model.JavaTypeRef;
 import dev.harpia.target.javaspring.model.JavaVisibility;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /** Deterministically renders the small Java Target Model into one compilation unit. */
@@ -26,6 +30,7 @@ public final class JavaSourceRenderer {
     public GeneratedFile render(JavaSourceFile file) {
         JavaTypeModel type = file.type();
         StringBuilder source = new StringBuilder();
+        List<GeneratedSourceMapping> mappings = new ArrayList<>();
         source.append(GeneratedHeader.javaComment()).append('\n');
         source.append("package ").append(type.packageName()).append(";\n");
 
@@ -36,28 +41,44 @@ public final class JavaSourceRenderer {
         }
 
         source.append('\n');
+        int typeStart = nextLine(source);
         type.documentation().ifPresent(documentation -> documentation(source, documentation));
         annotations(source, type.annotations(), "");
         source.append(declaration(type)).append(" {\n");
 
         boolean wroteMember = false;
+        if (!type.constants().isEmpty()) {
+            source.append(INDENT).append(String.join(",\n" + INDENT, type.constants()))
+                    .append(";\n");
+            wroteMember = true;
+        }
         // A record declares its state as components, so the same fields render in the header.
         List<JavaFieldModel> bodyFields = type.kind() == JavaTypeModel.Kind.RECORD
                 ? List.of()
                 : type.fields();
         for (JavaFieldModel field : bodyFields) {
             source.append('\n');
-            field(source, field);
+            int start = nextLine(source);
+            source.append(renderMember(member -> field(member, field)));
+            addMapping(mappings, file.relativePath(), qualified(type) + "#" + field.name(),
+                    field.source(), start, nextLine(source));
             wroteMember = true;
         }
         for (JavaConstructorModel constructor : type.constructors()) {
             source.append('\n');
-            constructor(source, type.name(), constructor);
+            int start = nextLine(source);
+            source.append(renderMember(
+                    member -> constructor(member, type.name(), constructor)));
+            addMapping(mappings, file.relativePath(), qualified(type) + "#<init>",
+                    constructor.source(), start, nextLine(source));
             wroteMember = true;
         }
         for (JavaMethodModel method : type.methods()) {
             source.append('\n');
-            method(source, method);
+            int start = nextLine(source);
+            source.append(renderMember(member -> method(member, method, type.kind())));
+            addMapping(mappings, file.relativePath(), qualified(type) + "#" + method.name(),
+                    method.source(), start, nextLine(source));
             wroteMember = true;
         }
         if (wroteMember) {
@@ -65,11 +86,49 @@ public final class JavaSourceRenderer {
         } else {
             source.append('}').append('\n');
         }
+        addMapping(mappings, file.relativePath(), qualified(type), type.source(),
+                typeStart, nextLine(source));
         return new GeneratedFile(
                 file.relativePath(),
                 OutputNormalizer.normalize(source.toString()),
                 GeneratedFileType.JAVA_SOURCE,
-                file.source());
+                file.source(),
+                mappings);
+    }
+
+    private static void addMapping(
+            List<GeneratedSourceMapping> mappings,
+            String relativePath,
+            String symbol,
+            Optional<dev.harpia.diag.SourceRef> origin,
+            int startLine,
+            int endLine) {
+        origin.ifPresent(source -> mappings.add(new GeneratedSourceMapping(
+                symbol,
+                source,
+                dev.harpia.diag.SourceRef.span(
+                        relativePath, startLine, 1, endLine, 1))));
+    }
+
+    /** Normalizing each member first keeps its recorded line range stable after file normalization. */
+    private static String renderMember(Consumer<StringBuilder> render) {
+        StringBuilder member = new StringBuilder();
+        render.accept(member);
+        return OutputNormalizer.normalize(member.toString());
+    }
+
+    private static int nextLine(StringBuilder source) {
+        int line = 1;
+        for (int index = 0; index < source.length(); index++) {
+            if (source.charAt(index) == '\n') {
+                line++;
+            }
+        }
+        return line;
+    }
+
+    private static String qualified(JavaTypeModel type) {
+        return type.packageName() + "." + type.name();
     }
 
     private static String declaration(JavaTypeModel type) {
@@ -121,12 +180,31 @@ public final class JavaSourceRenderer {
         source.append(INDENT).append("}\n");
     }
 
-    private static void method(StringBuilder source, JavaMethodModel method) {
+    private static void method(
+            StringBuilder source, JavaMethodModel method, JavaTypeModel.Kind kind) {
+        method.documentation().ifPresent(documentation -> {
+            source.append(INDENT).append("/** ").append(documentation).append(" */\n");
+        });
         annotations(source, method.annotations(), INDENT);
-        source.append(INDENT).append(keywords(method.visibility(), method.modifiers()))
+        // Every method of an interface is public and abstract, so writing either would only
+        // repeat the language back to the reader.
+        Set<JavaModifier> modifiers = kind == JavaTypeModel.Kind.INTERFACE
+                ? method.modifiers().stream()
+                        .filter(modifier -> modifier != JavaModifier.ABSTRACT)
+                        .collect(java.util.stream.Collectors.toCollection(
+                                () -> java.util.EnumSet.noneOf(JavaModifier.class)))
+                : method.modifiers();
+        source.append(INDENT).append(keywords(method.visibility(), modifiers))
                 .append(method.returnType().sourceName()).append(' ').append(method.name())
                 .append('(').append(parameters(method.parameters())).append(')')
-                .append(thrown(method.thrownTypes())).append(" {\n");
+                .append(thrown(method.thrownTypes()));
+        // An abstract method declares a signature, not a body. Emitting braces would be a body
+        // that happens to be empty, which is a different method and does not compile here.
+        if (method.modifiers().contains(JavaModifier.ABSTRACT)) {
+            source.append(";\n");
+            return;
+        }
+        source.append(" {\n");
         statements(source, method.statements());
         source.append(INDENT).append("}\n");
     }

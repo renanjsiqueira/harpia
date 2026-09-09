@@ -27,6 +27,9 @@ public final class JavaLogicWriter {
     private final StringBuilder body = new StringBuilder();
     private final TreeSet<String> imports = new TreeSet<>();
     private final String methodName;
+    /** How a value in scope is written in Java. A Logic body names its own parameters. */
+    private java.util.function.UnaryOperator<String> names = java.util.function.UnaryOperator
+            .identity();
 
     private JavaLogicWriter(String methodName) {
         this.methodName = methodName;
@@ -40,6 +43,25 @@ public final class JavaLogicWriter {
         writer.importFor(logic.returnType());
         writer.statements(logic.body(), logic.returnType(), 2);
         return new Result(writer.body.toString(), List.copyOf(writer.imports));
+    }
+
+    /**
+     * Renders one standalone condition, for a caller that needs an expression rather than a body.
+     *
+     * <p>It goes through the same renderer a Logic body uses, so a rule and a computation cannot
+     * disagree about what an operator means in Java.
+     */
+    public static Result condition(
+            TypedExpression expression,
+            String methodName,
+            java.util.function.UnaryOperator<String> names) {
+        Objects.requireNonNull(expression, "expression");
+        Objects.requireNonNull(methodName, "methodName");
+        Objects.requireNonNull(names, "names");
+        JavaLogicWriter writer = new JavaLogicWriter(methodName);
+        writer.names = names;
+        String code = writer.render(expression, LogicType.BOOLEAN).code();
+        return new Result(code, List.copyOf(writer.imports));
     }
 
     private void statements(List<TypedStatement> statements, LogicType returnType, int depth) {
@@ -102,7 +124,7 @@ public final class JavaLogicWriter {
             return literal(literal);
         }
         if (expression instanceof TypedExpression.Variable variable) {
-            return new Java(variable.name(), Precedence.PRIMARY);
+            return new Java(names.apply(variable.name()), Precedence.PRIMARY);
         }
         if (expression instanceof TypedExpression.Unary unary) {
             return unary(unary);

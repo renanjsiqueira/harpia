@@ -119,7 +119,10 @@ class LineGrammarTest {
     static Stream<Arguments> invalidLines() {
         return Stream.of(
                 Arguments.of("data", "- Bad_name String", ErrorCodes.SYNTAX_FIELD_LINE),
-                Arguments.of("data", "- amount: Money", ErrorCodes.SYNTAX_UNKNOWN_TYPE),
+                // A PascalCase name may be a declared type, so the parser accepts its shape and
+                // whether it resolves is decided against the whole project. A name that cannot be
+                // any type is still a syntax error here.
+                Arguments.of("data", "- amount: money", ErrorCodes.SYNTAX_UNKNOWN_TYPE),
                 Arguments.of("data", "- name: String required required", ErrorCodes.SYNTAX_FIELD_LINE),
                 Arguments.of("input", "- id: UUID generated", ErrorCodes.SYNTAX_FIELD_LINE),
                 Arguments.of("endpoint", "PATCH /customers/{id}", ErrorCodes.SYNTAX_ENDPOINT),
@@ -127,14 +130,17 @@ class LineGrammarTest {
                 Arguments.of("access", "authenticated", ErrorCodes.UNSUPPORTED_AUTHENTICATION),
                 Arguments.of("flow", "find Customer by email", ErrorCodes.SYNTAX_FLOW_COMMAND),
                 Arguments.of("output", "404 Customer", ErrorCodes.SYNTAX_USE_CASE_SECTION),
-                Arguments.of("error", "- forbidden -> 403", ErrorCodes.SYNTAX_ERROR_CONDITION));
+                // A bare phrase is now a domain error, so what stays invalid is a malformed one.
+                Arguments.of("error", "- Forbidden -> 403", ErrorCodes.SYNTAX_ERROR_CONDITION),
+                Arguments.of("error", "- duplicate -> 409", ErrorCodes.SYNTAX_ERROR_CONDITION),
+                Arguments.of("error", "- forbidden -> 200", ErrorCodes.SYNTAX_ERROR_CONDITION));
     }
 
     @Test
     void unknownTypePointsAtTheTypeToken() {
         DiagnosticCollector diagnostics = new DiagnosticCollector();
 
-        FieldLineParser.parseData("- amount: Money", WHERE, diagnostics);
+        FieldLineParser.parseData("- amount: money", WHERE, diagnostics);
 
         assertThat(diagnostics.diagnostics().getFirst().where())
                 .hasValue(SourceRef.of(WHERE.file(), WHERE.line(), 13));

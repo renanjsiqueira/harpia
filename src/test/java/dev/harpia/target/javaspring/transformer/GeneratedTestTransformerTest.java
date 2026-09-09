@@ -104,8 +104,8 @@ class GeneratedTestTransformerTest {
         assertThat(result.tree().orElseThrow().files().keySet())
                 .as("a scenario is what makes a pure computation testable")
                 .contains(
-                        "src/test/java/com/example/pricing/logic/CalculateDiscountTest.java",
-                        "src/test/java/com/example/pricing/logic/CalculateTotalTest.java");
+                        "src/test/java/com/example/commerce/logic/CalculateDiscountTest.java",
+                        "src/test/java/com/example/commerce/logic/CalculateTotalTest.java");
     }
 
     private static String serviceTest() {

@@ -1,8 +1,9 @@
 package dev.harpia.inspect;
 
 import dev.harpia.parse.LogicAst;
+import dev.harpia.parse.ModuleAst;
+import dev.harpia.parse.ProjectAst;
 import dev.harpia.parse.SpecAst;
-import java.util.List;
 
 /** Renders the Harpia syntax tree. It shows what was written, before any name is resolved. */
 final class AstRenderer {
@@ -10,14 +11,17 @@ final class AstRenderer {
     private AstRenderer() {
     }
 
-    static String render(List<SpecAst> modules) {
+    static String render(ProjectAst project) {
         StringBuilder out = new StringBuilder();
-        for (SpecAst module : modules) {
-            out.append("Module ").append(module.moduleName())
+        out.append("Project languageVersion=")
+                .append(project.languageVersion())
+                .append('\n');
+        for (ModuleAst module : project.modules()) {
+            out.append("Module ").append(module.name())
                     .append(" (").append(module.file()).append(")\n");
             if (module.declaresEntity()) {
                 out.append("  Data\n");
-                module.fields().forEach(field -> out.append("    Field ").append(field.name())
+                module.entity().fields().forEach(field -> out.append("    Field ").append(field.name())
                         .append(": ").append(field.type())
                         .append(field.required() ? " required" : "")
                         .append(field.unique() ? " unique" : "")
@@ -26,9 +30,15 @@ final class AstRenderer {
                         .append('\n'));
             }
             for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
-                out.append("  UseCase ").append(useCase.title()).append('\n');
-                out.append("    Endpoint ").append(useCase.endpoint().method())
-                        .append(' ').append(useCase.endpoint().path()).append('\n');
+                out.append("  ").append(switch (useCase.declaredKind()) {
+                    case COMMAND -> "Command";
+                    case QUERY -> "Query";
+                    default -> "UseCase";
+                }).append(' ').append(useCase.title()).append('\n');
+                useCase.endpoint().ifPresentOrElse(
+                        endpoint -> out.append("    Endpoint ").append(endpoint.method())
+                                .append(' ').append(endpoint.path()).append('\n'),
+                        () -> out.append("    Binding none\n"));
                 useCase.flow().forEach(statement -> out.append("    Flow ")
                         .append(statement.getClass().getSimpleName()).append('\n'));
             }
@@ -49,6 +59,14 @@ final class AstRenderer {
                 out.append("    Then result: ").append(scenario.expected().literal()).append('\n');
             }
         }
+        project.bindingFiles().forEach(file -> {
+            out.append("BindingFile ").append(file.file()).append('\n');
+            file.httpBindings().forEach(binding -> out.append("  Http ")
+                    .append(binding.operation()).append(' ')
+                    .append(binding.endpoint().method()).append(' ')
+                    .append(binding.endpoint().path()).append(" access=")
+                    .append(binding.access()).append('\n'));
+        });
         return out.toString();
     }
 }

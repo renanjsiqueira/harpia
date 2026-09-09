@@ -15,16 +15,29 @@ public record LogicModel(
         List<Parameter> parameters,
         LogicType returnType,
         List<TypedStatement> body,
+        java.util.Optional<String> customContract,
         SourceRef where) {
+
+    /** A computation Harpia understands and generates in full. */
+    public LogicModel(
+            String name,
+            List<Parameter> parameters,
+            LogicType returnType,
+            List<TypedStatement> body,
+            SourceRef where) {
+        this(name, parameters, returnType, body, java.util.Optional.empty(), where);
+    }
 
     public LogicModel {
         Objects.requireNonNull(name, "name");
         parameters = List.copyOf(parameters);
         Objects.requireNonNull(returnType, "returnType");
         body = List.copyOf(body);
+        Objects.requireNonNull(customContract, "customContract");
         Objects.requireNonNull(where, "where");
-        if (body.isEmpty()) {
-            throw new IllegalArgumentException("logic " + name + " has an empty body");
+        if (body.isEmpty() == customContract.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "logic " + name + " needs exactly one of a body or a custom contract");
         }
     }
 

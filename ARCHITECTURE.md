@@ -10,7 +10,7 @@
 > **The same Harpia specification should preserve the same application semantics across supported
 > targets.**
 
-Última revisão: 2026-09-06. Estado real do working tree, não aspiração.
+Última revisão: 2026-09-07. Estado real do working tree, não aspiração.
 
 Documentos relacionados: [TARGETS.md](TARGETS.md), [LANGUAGE_COVERAGE.md](LANGUAGE_COVERAGE.md),
 [docs/roadmap.md](docs/roadmap.md), [docs/current-architecture.md](docs/current-architecture.md).
@@ -18,27 +18,31 @@ Documentos relacionados: [TARGETS.md](TARGETS.md), [LANGUAGE_COVERAGE.md](LANGUA
 ## 1. Pipeline
 
 ```text
-harpia.yaml ──► ConfigLoader ─────────────┐
-                                          │
-specs/*.harpia.md ──► SourceFile          │
-        │                                 │
-        ▼                                 │
-  MarkdownStructure                       │
-        │                                 │
-        ▼                                 │
-     SpecParser ──► SpecAst / LogicAst    │   TARGET-INDEPENDENT
-        │                                 │
-        ▼                                 │
-  SemanticValidator + LogicAnalyzer       │
-        │                                 │
-        ▼                                 │
-  Resolver ──► Business IR                │
-        │                                 │
-        ▼                                 │
-  CapabilityAnalyzer ──► requirements     │
-        │                                 │
-        ▼                                 │
-  TargetResolver ◄──────────────────────┘   ← A FRONTEIRA
+harpia.yaml ──► ConfigLoader ────────────────────────────┐
+                                                        │
+spec/*.harpia.md ─► MarkdownStructure ─► SpecParser     │
+                                      ─► ModuleAst[] ─┐ │
+bindings/*.harpia.md ─► BindingParser ─► BindingAst[] ─┤ │
+                                                       ▼ │
+                                                  ProjectAst       TARGET-INDEPENDENT
+                                                       │ │
+                                                       ▼ │
+                                                  SymbolTable
+                                                       │ │
+                                                       ▼ │
+                                         BindingResolver/Validator
+                                                       │ │
+                                                       ▼ │
+                                          semantic/Logic analysis
+                                                       │ │
+                                                       ▼ │
+                                           Resolver ─► Business IR
+                                                       │ │
+                                                       ▼ │
+                                      CapabilityAnalyzer ─► requirements
+                                                       │ │
+                                                       ▼ │
+                                           TargetResolver ◄┘   ← A FRONTEIRA
         │
         ▼
   CapabilityResolver ──► providers lógicos
@@ -81,13 +85,15 @@ source ──► ast ──► parse ──► logic ──► validate ──�
 |---|---|---|
 | `dev.harpia.source` | leitura UTF-8, descoberta ordenada | não |
 | `dev.harpia.ast` | estrutura CommonMark e texto cru | não |
-| `dev.harpia.parse` | AST Harpia (`SpecAst`, `LogicAst`) | não |
+| `dev.harpia.parse` | `ProjectAst`, `ModuleAst`, declarações e registry de parsers | não |
 | `dev.harpia.logic` | álgebra de tipos, expressões e efeitos | não |
 | `dev.harpia.validate` | análise semântica, escopo, tipos, pureza | não |
 | `dev.harpia.model` | **Business IR** | não |
 | `dev.harpia.capability` | capability, requirement, provider lógico | não |
+| `dev.harpia.binding` | Binding AST/model/parser/resolver/validator tipados | não |
 | `dev.harpia.application` | **Application IR** e naming relacional | não |
 | `dev.harpia.emit` | infraestrutura de geração (árvore, normalização, templates) | não |
+| `dev.harpia.symbol` | tabela de símbolos do projeto, por namespace | não |
 | `dev.harpia.inspect` | renderização de cada estágio para `harpia inspect` | não |
 | `dev.harpia.target` | **Target API**: id, status, descriptor, catálogo, registry, resolver | não |
 | `dev.harpia.target.javaspring` | target pack Java/Spring: dependências, layout e orquestração | sim, é o target |
@@ -100,6 +106,46 @@ source ──► ast ──► parse ──► logic ──► validate ──�
 Módulos Maven separados foram **avaliados e recusados por ora**: a divisão não reduziria acoplamento
 real, e um teste de arquitetura entrega a mesma garantia sem o custo de build. A direção de
 dependência acima já é a do desenho `harpia-language → … → harpia-target-java-spring`.
+
+### 2.1 Project AST e despacho de declarações
+
+`ProjectAst` é a unidade sintática entregue ao restante do compilador. Seus módulos são ordenados
+por path no construtor, e cada `ModuleAst` preserva a ordem das declarações do arquivo. O pipeline
+não transporta mais um `List<SpecAst>` informal.
+
+`SpecParser` valida somente a estrutura do módulo — H1, cardinalidade de `## Data` e invariantes
+V0. O `DeclarationParserRegistry` resolve o parser pelo `DeclarationKind`; `Data`, `Logic` e
+`Scenario`, `Command` e `Query` têm parsers registrados, e o use case sem prefixo permanece como
+fallback V0 explícito. Adicionar `Value`, `Enum` ou `Event` passa a exigir um novo nó, parser e
+registro, sem acrescentar outro ramo ao parser de módulo.
+
+Os nós atuais implementam `DeclarationAst`: entity V0, use case V0, Logic e Scenario. `SpecAst`
+permanece apenas como namespace dos nós menores da gramática V0, não como raiz de arquivo/projeto.
+`CompileResult.Stages.syntax` carrega o `ProjectAst` realmente compilado para que `harpia inspect
+--stage ast` não reconstrua uma visão paralela.
+
+### 2.2 Dimensões de versão
+
+As três versões são intencionalmente independentes:
+
+| Configuração | Responsabilidade atual |
+|---|---|
+| `harpia.schemaVersion: 1` | estrutura e validação de `harpia.yaml` |
+| `harpia.languageVersion: 0` ou `1` | gramática e semântica Harpia selecionadas pelo compiler |
+| `target.language.version: 21` | versão de Java entendida pelo target `java-spring` |
+
+`ConfigValidator` converte a versão da linguagem em `LanguageVersion`; `HarpiaCompiler` a entrega
+explicitamente ao `SpecParser` e ao `ProjectAst`. O registry de parsers é selecionado por essa
+versão, e `harpia inspect --stage ast` a torna observável. A V1 habilita hoje `Command` e `Query`
+explícitos; conteúdo Markdown nunca escolhe versão por heurística.
+
+No V1, o binding HTTP é opcional para essas declarações. O formato canônico externo vive em
+`bindings/*.harpia.md`: `BindingParser` produz uma `BindingAst.Declaration` selada,
+`BindingResolver` liga o nome ao namespace global de operações e `BindingValidator` valida
+unicidade e coerência da rota. A Business IR guarda `Optional<HttpBinding>` e a Application IR só
+exige capability HTTP quando o binding existe. O target Java/Spring sempre gera o serviço da
+operação, mas só materializa controller e teste web para operações expostas. A forma inline
+continua disponível no recorte V0.
 
 ## 3. O que cada IR pode conter
 
@@ -151,12 +197,17 @@ public record TargetDescriptor(
 public enum TargetStatus { SUPPORTED, EXPERIMENTAL, NOT_SUPPORTED }
 ```
 
-`TargetGenerationResult` contém `GeneratedFile` ordenado com path, conteúdo, tipo e a origem Harpia
-mais próxima. O core o adapta para `GeneratedTree`; só o `OutputWriter` toca o filesystem.
+`TargetGenerationResult` contém `GeneratedFile` ordenado com path, conteúdo, tipo, origem Harpia
+principal e `GeneratedSourceMapping[]`. Cada entrada liga um símbolo e range exclusivo gerado à
+origem da spec ou do binding; o core preserva esse índice ao adaptar para `GeneratedTree`. Só o
+`OutputWriter` toca o filesystem.
 
 `TargetId` é value object, não enum, para que um target de comunidade não exija alterar o core.
-`TargetCatalog` guarda metadata de todos os identificadores conhecidos; `TargetRegistry` guarda
-apenas os que têm generator. Detalhes e ciclo de vida em [TARGETS.md](TARGETS.md).
+`TargetCatalog` guarda metadata dos identificadores conhecidos; `TargetRegistry` guarda os que têm
+generator. O registry é a autoridade sobre o que o compilador consegue gerar: um target registrado
+descreve a si mesmo e resolve sem constar do catálogo, que descreve intenção — quais targets Harpia
+pretende ter — e responde apenas por identificadores sem generator. Detalhes e ciclo de vida em
+[TARGETS.md](TARGETS.md).
 
 ## 5. Onde ficam as restrições
 
@@ -166,7 +217,7 @@ Uma restrição pertence à camada que a origina:
 |---|---|---|
 | palavra reservada do Java | `SemanticValidator` (semântica) | `JavaSpringTarget.validate` |
 | palavra reservada do PostgreSQL | `SemanticValidator` (semântica) | `application.ProviderValidation` |
-| versão mínima da linguagem | `ConfigValidator` (`javaVersion != 21`) | `TargetResolver` + descriptor |
+| versão mínima da linguagem do target | `ConfigValidator` (`javaVersion != 21`) | `TargetResolver` + descriptor |
 | versão do Spring Boot | `HarpiaConfig.TargetConfig` | opção do target |
 | dependências Maven | `capability` | `target.javaspring` |
 | chaves `spring.*` | `capability` | `target.javaspring` |
@@ -181,25 +232,32 @@ Ver [TARGETS.md §2](TARGETS.md). Em resumo: sem LLM, sem relógio, sem random, 
 ordenada. `GeneratedTree` é um `TreeMap` com paths validados; `OutputNormalizer` canonicaliza
 CRLF, espaços finais e newline final; `DeterminismTest` compara hashes de dois builds.
 
+Isso prova que o compilador é uma função, não que sincronizar a árvore com um diretório converge —
+escrever é stateful, consulta manifest e apaga. `RebuildEqualityTest` fecha essa lacuna em disco: um
+diretório reconstruído com `--clean` sobre um build antigo fica byte a byte idêntico a um build
+feito do zero, manifest incluído, e um rebuild sobre saída idêntica não toca em nada.
+
 ## 7. Arquitetura de testes
 
 | Camada | Testes |
 |---|---|
-| Language/Parser | `SpecParserTest`, `SpecParserDiagnosticsTest`, `LineGrammarTest`, `LogicGrammarTest` |
+| Language/Parser | `SpecParserTest`, `SpecParserDiagnosticsTest`, `DeclarationParserRegistryTest`, `ProjectAstTest`, `LineGrammarTest`, `LogicGrammarTest` |
 | Semantic | `SemanticValidatorTest`, `LogicAnalyzerTest` |
 | Business IR | `ResolverTest`, `SemanticFixtureTest` (golden) |
 | Application IR | `ApplicationModelBuilderTest`, `SqlNamingTest`, `SemanticFixtureTest` |
 | Capability | `CapabilityResolverTest` |
-| Target contract | `TargetCatalogTest`, `TargetRegistryTest`, `TargetCapabilityTest`, `UnsupportedTargetTest` |
+| Target contract | `TargetCatalogTest`, `TargetRegistryTest`, `TargetCapabilityTest`, `UnsupportedTargetTest`, `RegisteredTargetTest` |
 | Java/Spring transformer | `JavaSpringEntityTransformerTest` (tipo e annotations antes do rendering) |
 | Java renderer | `JavaSourceRendererTest`, `GeneratedSourcesCompileTest` |
 | Templates | `JavaSpringTemplateRulesTest` |
 | Golden target | `JavaSpringGoldenTest` |
 | Projeto gerado | `GeneratedMavenProjectTest` executa `mvn -o test` |
 | Java/Spring regressão | `JavaSpringTargetTest`, `EmitterPipelineTest`, `LogicEmitterTest`, `GeneratedLogicCompilesTest`, `PersistenceEmitterTest` |
+| Símbolos | `SymbolTableTest` |
+| Diagnostics | `DiagnosticOrderingTest`, `SourceRefTest`, `RelatedLocationTest` |
 | Arquitetura | `ArchitectureBoundaryTest`, e `harpia inspect` como prova externa |
 | Inspeção | `InspectorTest`, `SemanticFixtureTest` (golden de cada estágio) |
-| Determinismo | `DeterminismTest` |
+| Determinismo | `DeterminismTest`, `RebuildEqualityTest` |
 | CLI | `CliExitCodeTest` |
 
 Regra: um teste de Business IR **nunca** afirma "gerou um repositório JPA". Ele afirma
@@ -258,8 +316,7 @@ semântica Harpia, escolher annotation/dependency/package, ler filesystem, usar 
 
 ## 10. Limites conhecidos
 
-- o generator ainda não emite request/response records, service, controller e error handling
-  (E0.7) — sem eles a aplicação gerada compila mas não expõe comportamento;
 - não existe servidor MCP neste repositório; a descoberta de targets hoje é via CLI;
-- `GeneratedFile` preserva a origem principal, mas ainda não existe source map por símbolo/linha;
-- `harpia explain`, `why`, `fmt`, `lint` e `inspect` não existem.
+- o source map existe no resultado em memória, mas ainda não possui formato sidecar público;
+- `harpia explain`, `why`, `fmt` e `lint` ainda não existem; `inspect` cobre os quatro modelos do
+  pipeline anteriores ao target.

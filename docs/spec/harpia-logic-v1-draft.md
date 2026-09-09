@@ -656,9 +656,22 @@ Risk
 custom ComplexRiskCalculator
 ```
 
-Gera uma interface Java pura implementada pelo usuário em `custom/`. Essa fronteira é o que permite
-manter a gramática pequena: tudo que é algoritmo específico, recursivo ou de baixo nível sai da
-linguagem sem sair do produto.
+Status: **implementado** em `languageVersion: 1`.
+
+Gera uma interface Java pura implementada pelo usuário fora da árvore gerada. Essa fronteira é o que
+permite manter a gramática pequena: tudo que é algoritmo específico, recursivo ou de baixo nível sai
+da linguagem sem sair do produto.
+
+Regras:
+
+- `### Implementation` aceita exatamente uma linha, `custom <NomePascalCase>`;
+- uma Logic diz **uma vez** como computa: um corpo `logic` ou um contrato custom, nunca os dois;
+- a assinatura continua sendo de Harpia — input, output e type checking valem igual;
+- o compilador gera **só a interface**, nunca uma implementação. O que o usuário escreve não é
+  gerado, não entra no manifesto e não é limpo;
+- um `## Scenario` sobre uma Logic custom é recusado com `HRP2124`: Harpia teria de executar código
+  que não é dela para saber a resposta, e Harpia não executa nada. Esse teste pertence a onde a
+  implementação vive.
 
 ## 19. Roadmap de slices
 

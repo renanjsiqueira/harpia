@@ -23,9 +23,16 @@ public final class DiagnosticPrinter {
         diagnostic.where().ifPresent(where -> writer.print(location(where) + ": "));
         writer.printf("%s[%s]: %s%n",
                 diagnostic.severity().label(), diagnostic.code(), diagnostic.message());
+        diagnostic.related().forEach(related -> writer.println(
+                "  " + location(related.where()) + ": " + related.message()));
         diagnostic.hint().ifPresent(hint -> writer.println("  hint: " + hint));
     }
 
+    /**
+     * The start only. A terminal line stays the familiar {@code file:line:column} that editors and
+     * CI parsers already understand; the end of the span is data, for a renderer that underlines or
+     * for a structured output, not for this line.
+     */
     private static String location(SourceRef where) {
         return where.hasPosition()
                 ? where.file() + ":" + where.line() + ":" + where.column()

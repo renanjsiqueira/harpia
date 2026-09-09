@@ -1,4 +1,6 @@
-harpia: 1
+harpia:
+  schemaVersion: 1
+  languageVersion: 0
 
 project:
   name: customer-service

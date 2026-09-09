@@ -47,6 +47,7 @@ class InspectorTest {
     void theSyntaxTreeShowsWhatWasWrittenBeforeAnyNameIsResolved() {
         assertThat(Inspector.render(compile("examples/customer"), Stage.AST))
                 .hasValueSatisfying(ast -> assertThat(ast)
+                        .startsWith("Project languageVersion=0\n")
                         .contains("Module Customer (specs/customer.harpia.md)")
                         .contains("  UseCase Create Customer")
                         .contains("    Flow ValidateInput"));

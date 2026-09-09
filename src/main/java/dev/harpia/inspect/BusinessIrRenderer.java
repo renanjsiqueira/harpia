@@ -26,10 +26,18 @@ final class BusinessIrRenderer {
                         .append('\n');
             }
             for (UseCaseModel useCase : entity.useCases()) {
-                out.append("  UseCase ").append(useCase.baseName()).append('\n');
-                out.append("    Http ").append(useCase.http().method())
-                        .append(' ').append(useCase.http().path()).append('\n');
-                out.append("    Access ").append(useCase.access()).append('\n');
+                out.append("  ").append(switch (useCase.nature()) {
+                    case COMMAND -> "Command";
+                    case QUERY -> "Query";
+                    case INFERRED -> "UseCase";
+                }).append(' ').append(useCase.baseName()).append('\n');
+                useCase.http().ifPresentOrElse(
+                        binding -> {
+                            out.append("    Http ").append(binding.method())
+                                    .append(' ').append(binding.path()).append('\n');
+                            out.append("    Access ").append(binding.access()).append('\n');
+                        },
+                        () -> out.append("    Binding none\n"));
                 useCase.input().forEach(field -> out.append("    Input ")
                         .append(field.name()).append(": ").append(field.type().syntax())
                         .append(field.required() ? " required" : "").append('\n'));
@@ -44,7 +52,9 @@ final class BusinessIrRenderer {
                         .append('\n'));
             }
         }
-        project.logics().forEach(logic -> out.append("Logic ").append(logic.name()).append('\n'));
+        project.logics().forEach(logic -> out.append("Logic ").append(logic.name())
+                .append(logic.customContract().map(contract -> " custom " + contract).orElse(""))
+                .append('\n'));
         return out.toString();
     }
 

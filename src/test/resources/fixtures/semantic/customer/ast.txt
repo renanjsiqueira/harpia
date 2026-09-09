@@ -1,3 +1,4 @@
+Project languageVersion=0
 Module Customer (specs/customer.harpia.md)
   Data
     Field id: UUID generated

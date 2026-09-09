@@ -10,12 +10,13 @@ import dev.harpia.config.HarpiaConfig;
 import dev.harpia.diag.DiagnosticCollector;
 import dev.harpia.model.ProjectModel;
 import dev.harpia.model.Resolver;
-import dev.harpia.parse.SpecAst;
+import dev.harpia.parse.ModuleAst;
+import dev.harpia.parse.ProjectAst;
 import dev.harpia.parse.SpecParser;
 import dev.harpia.source.SourceFile;
+import dev.harpia.symbol.SymbolTable;
 import dev.harpia.validate.SemanticValidator;
 import java.nio.file.Path;
-import java.util.List;
 
 /** The canonical Customer example, compiled up to any stage a test needs. */
 public record CustomerFixture(
@@ -30,10 +31,28 @@ public record CustomerFixture(
         SourceFile source = SourceFile.read(
                         root, root.resolve("specs/customer.harpia.md"), diagnostics)
                 .orElseThrow();
-        SpecAst specification = SpecParser.parse(source, diagnostics).orElseThrow();
-        SemanticValidator.validate(List.of(specification), diagnostics);
+        ModuleAst module = SpecParser.parse(
+                source, config.harpia().languageVersion(), diagnostics).orElseThrow();
+        ProjectAst syntax = new ProjectAst(
+                config.harpia().languageVersion(), java.util.List.of(module));
+        SymbolTable symbols = SymbolTable.declare(syntax, diagnostics);
+        dev.harpia.binding.BindingModel bindings =
+                dev.harpia.binding.BindingResolver.resolve(syntax, symbols, diagnostics);
+        dev.harpia.binding.BindingValidator.validate(syntax, bindings, diagnostics);
+        SemanticValidator.validate(
+                syntax,
+                symbols,
+                bindings,
+                diagnostics);
         return new CustomerFixture(
-                config, Resolver.resolve(List.of(specification), List.of(), List.of()), diagnostics);
+                config,
+                Resolver.resolve(
+                        syntax,
+                        bindings,
+                        java.util.List.of(),
+                        java.util.List.of(),
+                        java.util.Map.of()),
+                diagnostics);
     }
 
     public ApplicationProject application() {

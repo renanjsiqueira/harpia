@@ -23,20 +23,49 @@ public final class LogicAst {
         }
     }
 
+    /**
+     * The name of a contract the user implements outside the generated tree.
+     *
+     * <p>This is the boundary that keeps the grammar small: an algorithm that is specific,
+     * recursive or low level leaves the language without leaving the product.
+     */
+    public record CustomImplementation(String contract, SourceRef where) {
+        public CustomImplementation {
+            Objects.requireNonNull(contract, "contract");
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
     public record Declaration(
             String name,
             List<Parameter> parameters,
             String returnType,
             SourceRef returnTypeWhere,
             List<Statement> body,
-            SourceRef where) {
+            Optional<CustomImplementation> custom,
+            SourceRef where) implements DeclarationAst {
         public Declaration {
             Objects.requireNonNull(name, "name");
             parameters = List.copyOf(parameters);
             Objects.requireNonNull(returnType, "returnType");
             Objects.requireNonNull(returnTypeWhere, "returnTypeWhere");
             body = List.copyOf(body);
+            Objects.requireNonNull(custom, "custom");
             Objects.requireNonNull(where, "where");
+            if (body.isEmpty() == custom.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "logic " + name + " needs exactly one of a body or a custom contract");
+            }
+        }
+
+        @Override
+        public DeclarationKind kind() {
+            return DeclarationKind.LOGIC;
+        }
+
+        @Override
+        public String declaredName() {
+            return name;
         }
     }
 
@@ -56,7 +85,7 @@ public final class LogicAst {
             SourceRef computationWhere,
             List<Binding> given,
             Binding expected,
-            SourceRef where) {
+            SourceRef where) implements DeclarationAst {
         public Scenario {
             Objects.requireNonNull(title, "title");
             Objects.requireNonNull(computation, "computation");
@@ -64,6 +93,16 @@ public final class LogicAst {
             given = List.copyOf(given);
             Objects.requireNonNull(expected, "expected");
             Objects.requireNonNull(where, "where");
+        }
+
+        @Override
+        public DeclarationKind kind() {
+            return DeclarationKind.SCENARIO;
+        }
+
+        @Override
+        public String declaredName() {
+            return title;
         }
     }
 

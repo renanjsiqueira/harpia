@@ -4,6 +4,11 @@ import dev.harpia.application.ApplicationModelBuilder;
 import dev.harpia.application.ApplicationProject;
 import dev.harpia.application.ProjectSettings;
 import dev.harpia.application.ProviderValidation;
+import dev.harpia.binding.BindingAst;
+import dev.harpia.binding.BindingModel;
+import dev.harpia.binding.BindingParser;
+import dev.harpia.binding.BindingResolver;
+import dev.harpia.binding.BindingValidator;
 import dev.harpia.capability.CapabilityAnalyzer;
 import dev.harpia.capability.CapabilityRequirementSet;
 import dev.harpia.capability.CapabilityResolver;
@@ -14,14 +19,17 @@ import dev.harpia.diag.DiagnosticCollector;
 import dev.harpia.emit.GeneratedTree;
 import dev.harpia.model.ProjectModel;
 import dev.harpia.model.Resolver;
-import dev.harpia.parse.SpecAst;
+import dev.harpia.parse.ModuleAst;
+import dev.harpia.parse.ProjectAst;
 import dev.harpia.parse.SpecParser;
 import dev.harpia.source.SourceFile;
+import dev.harpia.source.BindingDiscovery;
 import dev.harpia.source.SpecDiscovery;
+import dev.harpia.symbol.SymbolTable;
 import dev.harpia.target.HarpiaTarget;
-import dev.harpia.target.TargetRegistry;
-import dev.harpia.target.TargetGenerationResult;
 import dev.harpia.target.TargetGenerationException;
+import dev.harpia.target.TargetGenerationResult;
+import dev.harpia.target.TargetRegistry;
 import dev.harpia.target.TargetResolution;
 import dev.harpia.target.TargetResolver;
 import dev.harpia.validate.LogicAnalyzer;
@@ -60,7 +68,11 @@ public final class HarpiaCompiler {
     public CompileResult compile(CompileRequest request) {
         DiagnosticCollector diagnostics = new DiagnosticCollector();
         Optional<HarpiaConfig> loaded = ConfigLoader.load(request.projectRoot(), diagnostics);
-        List<SpecAst> specifications = new ArrayList<>();
+        LanguageVersion languageVersion = loaded
+                .map(config -> config.harpia().languageVersion())
+                .orElse(LanguageVersion.CURRENT);
+        List<ModuleAst> modules = new ArrayList<>();
+        List<BindingAst> bindingFiles = new ArrayList<>();
 
         if (loaded.isPresent()) {
             HarpiaConfig config = loaded.orElseThrow();
@@ -68,26 +80,43 @@ public final class HarpiaCompiler {
             for (Path sourcePath : SpecDiscovery.discover(
                     request.projectRoot(), specsDirectory, diagnostics)) {
                 SourceFile.read(request.projectRoot(), sourcePath, diagnostics)
-                        .flatMap(source -> SpecParser.parse(source, diagnostics))
-                        .ifPresent(specifications::add);
+                        .flatMap(source -> SpecParser.parse(source, languageVersion, diagnostics))
+                        .ifPresent(modules::add);
+            }
+            Path bindingsDirectory = Path.of(config.paths().bindings());
+            for (Path sourcePath : BindingDiscovery.discover(
+                    request.projectRoot(), bindingsDirectory, diagnostics)) {
+                SourceFile.read(request.projectRoot(), sourcePath, diagnostics)
+                        .flatMap(source -> BindingParser.parse(
+                                source, languageVersion, diagnostics))
+                        .ifPresent(bindingFiles::add);
             }
         }
 
-        CompileResult.Stages stages = new CompileResult.Stages(
-                specifications, Optional.empty(), Optional.empty());
+        ProjectAst syntax = new ProjectAst(languageVersion, modules, bindingFiles);
+        CompileResult.Stages stages = CompileResult.Stages.parsed(syntax);
         if (diagnostics.hasErrors()) {
             return failed(stages, diagnostics);
         }
 
-        SemanticValidator.validate(specifications, diagnostics);
-        LogicAnalyzer.Result computations = LogicAnalyzer.analyze(specifications, diagnostics);
+        SymbolTable symbols = SymbolTable.declare(syntax, diagnostics);
+        stages = stages.withSymbols(symbols);
+        BindingModel bindings = BindingResolver.resolve(syntax, symbols, diagnostics);
+        BindingValidator.validate(syntax, bindings, diagnostics);
+        SemanticValidator.validate(syntax, symbols, bindings, diagnostics);
+        LogicAnalyzer.Result computations =
+                LogicAnalyzer.analyze(syntax, symbols, diagnostics);
         if (diagnostics.hasErrors()) {
             return failed(stages, diagnostics);
         }
 
         HarpiaConfig config = loaded.orElseThrow();
         ProjectModel business = Resolver.resolve(
-                specifications, computations.logics(), computations.scenarios());
+                syntax,
+                bindings,
+                computations.logics(),
+                computations.scenarios(),
+                computations.rules());
         TestCoverage.report(business, config.generation().tests(), diagnostics);
         stages = stages.withBusiness(business);
         CapabilityRequirementSet requirements = CapabilityAnalyzer.analyze(business);

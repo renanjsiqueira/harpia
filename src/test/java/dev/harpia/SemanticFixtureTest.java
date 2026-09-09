@@ -47,7 +47,7 @@ class SemanticFixtureTest {
     void inspectionShowsWhatWasCompiledRatherThanARecomputation() {
         CompileResult result = compile();
 
-        assertThat(result.stages().modules()).isNotEmpty();
+        assertThat(result.stages().syntax().modules()).isNotEmpty();
         assertThat(result.stages().business()).isPresent();
         assertThat(result.stages().application()).isPresent();
     }

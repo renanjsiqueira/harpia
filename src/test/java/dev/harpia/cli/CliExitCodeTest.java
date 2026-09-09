@@ -246,6 +246,30 @@ class CliExitCodeTest {
         assertThat(execution.stdout()).isEmpty();
     }
 
+    @Test
+    void aDuplicateShowsTheOtherPlaceOnItsOwnLine() throws IOException {
+        writeValidConfig();
+        writeSpec("""
+                # Customer
+
+                ## Data
+
+                - id: UUID generated
+                - name: String
+                - name: String
+                """);
+
+        Execution execution = execute("validate", "--dir", projectRoot.toString());
+
+        assertThat(execution.exitCode()).isEqualTo(ExitCode.COMPILATION_ERROR);
+        assertThat(execution.stderr())
+                .contains("error[HRP2002]: duplicate field 'name'")
+                .contains("first declared here");
+        assertThat(execution.stderr())
+                .as("the terminal line stays the familiar file:line:column")
+                .doesNotContain("-6:");
+    }
+
     private Execution execute(String... args) {
         StringWriter stdout = new StringWriter();
         StringWriter stderr = new StringWriter();
@@ -296,7 +320,9 @@ class CliExitCodeTest {
 
     private void writeValidConfig() throws IOException {
         Files.writeString(projectRoot.resolve("harpia.yaml"), """
-                harpia: 1
+                harpia:
+                  schemaVersion: 1
+                  languageVersion: 0
                 project:
                   name: customer-service
                   group: com.example

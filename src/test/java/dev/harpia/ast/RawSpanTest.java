@@ -8,6 +8,31 @@ import org.junit.jupiter.api.Test;
 class RawSpanTest {
 
     @Test
+    void aBlockKnowsWhereItsTextEnds() {
+        RawSpan single = new RawSpan("specs/a.harpia.md", 3, 1, "# Customer");
+
+        assertThat(single.where().end())
+                .as("the end is derived from the recovered text, so it costs nothing")
+                .contains(new dev.harpia.diag.SourceRef.Position(3, 11));
+    }
+
+    @Test
+    void aMultilineBlockEndsOnItsLastLine() {
+        RawSpan fenced = new RawSpan("specs/a.harpia.md", 5, 1, "```flow\nsave x\n```");
+
+        assertThat(fenced.where().end())
+                .contains(new dev.harpia.diag.SourceRef.Position(7, 4));
+    }
+
+    @Test
+    void anEndCountsCodePointsRatherThanCharUnits() {
+        RawSpan accented = new RawSpan("specs/a.harpia.md", 1, 1, "# Ação");
+
+        assertThat(accented.where().end())
+                .contains(new dev.harpia.diag.SourceRef.Position(1, 7));
+    }
+
+    @Test
     void preservesMarkdownSensitiveTokensFromTheOriginalSource() {
         SourceFile source = new SourceFile("specs/raw.harpia.md", """
                 # Order_Item

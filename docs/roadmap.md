@@ -193,6 +193,8 @@ enum fechada com versões futuras hardcoded.
 |---|---|---|---|---|---|---|---|---|---|
 | EP01 | Language Foundation | AST, symbols, versions, locations; A/tooling | `PARTIAL` | P0 | XL | E0 | EP02–EP21, EP32–EP35 | W2 | 0.2 |
 | EP01.1 | ~~Pipeline inspection~~ | `harpia inspect --stage`; tooling | `SUPPORTED` | P0 | M | E0 | EP01 restante | W2 | 0.2 |
+| EP01.2 | ~~SymbolTable~~ | declare pass determinístico por namespace; A | `SUPPORTED` | P0 | M | EP01.1 | EP02/EP03 | W2 | 0.2 |
+| EP01.3 | ~~Source spans / related~~ | fim de intervalo e related locations; A/tooling | `SUPPORTED` | P0 | M | EP01.1 | diagnostics estruturados | W2 | 0.2 |
 | EP02 | Type System | escalares, nominais e containers; A | `PARTIAL` | P1 | XL | EP01 | EP03–EP06, EP16 | W3/W4 | 0.3 |
 | EP03 | Domain Modeling | Entity, Value, Enum, Aggregate, relações; A | `PARTIAL` | P0 | XL | EP01/EP02/EP08 | EP04/EP06/EP16 | W1/W3 | 0.1–0.3 |
 | EP04 | Rules / Invariants / Policies | predicados reutilizáveis tipados; A | `TODO` | P1 | XL | EP01/EP02 | EP06/EP10/EP16 | W3/W6 | 0.3 |

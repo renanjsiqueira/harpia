@@ -26,7 +26,7 @@ Versões independentes:
 | Version | Responsabilidade | Compatibilidade |
 |---|---|---|
 | Compiler version | comportamento do binário/generator | saída determinística para tuple completa de versões |
-| Language version | grammar e semântica de `*.harpia.md` | selecionada em `harpia.yaml`, com adapter V0 |
+| Language version | grammar e semântica de `*.harpia.md` | selecionada explicitamente em `harpia.yaml` |
 | MCP API version | schemas de resources/tools/results | breaking changes exigem nova major da API |
 
 O handshake MCP deve publicar as três. O servidor rejeita mutation quando a language version do

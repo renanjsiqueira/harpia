@@ -32,6 +32,11 @@ public final class TestCoverage {
                 .map(ScenarioModel::computation)
                 .collect(Collectors.toSet());
         for (LogicModel logic : project.logics()) {
+            // Harpia generates no test for an implementation it does not own, so its absence is
+            // not a gap it can report.
+            if (logic.customContract().isPresent()) {
+                continue;
+            }
             if (!covered.contains(logic.name())) {
                 diagnostics.warning(
                         ErrorCodes.SEMANTIC_SCENARIO_MISSING,

@@ -1,7 +1,9 @@
 package dev.harpia.config;
 
+import dev.harpia.LanguageVersion;
 import dev.harpia.config.HarpiaConfig.DatabaseConfig;
 import dev.harpia.config.HarpiaConfig.GenerationConfig;
+import dev.harpia.config.HarpiaConfig.HarpiaSettings;
 import dev.harpia.config.HarpiaConfig.PathsConfig;
 import dev.harpia.config.HarpiaConfig.ProjectConfig;
 import dev.harpia.config.HarpiaConfig.TargetConfig;
@@ -25,6 +27,7 @@ public final class ConfigValidator {
     private static final String FILE = ConfigLoader.CONFIG_FILE;
     private static final Set<String> ROOT_KEYS = Set.of(
             "harpia", "project", "target", "database", "paths", "generation");
+    private static final Set<String> HARPIA_KEYS = Set.of("schemaVersion", "languageVersion");
     private static final Set<String> PROJECT_KEYS = Set.of("name", "group", "artifact", "package");
     private static final Set<String> TARGET_KEYS = Set.of(
             "id", "language", "options", "type", "javaVersion", "springBootVersion");
@@ -32,7 +35,7 @@ public final class ConfigValidator {
     private static final String LEGACY_TARGET_HINT =
             "the canonical form is 'target.id', 'target.language.version' and 'target.options'";
     private static final Set<String> DATABASE_KEYS = Set.of("vendor");
-    private static final Set<String> PATH_KEYS = Set.of("specs", "output");
+    private static final Set<String> PATH_KEYS = Set.of("specs", "bindings", "output");
     private static final Set<String> GENERATION_KEYS = Set.of("migrations", "tests");
 
     private ConfigValidator() {
@@ -49,12 +52,23 @@ public final class ConfigValidator {
         }
 
         Map<String, Node> root = mapping(document, "root", ROOT_KEYS, diagnostics);
-        Integer version = integer(root.get("harpia"), "harpia", diagnostics);
-        if (version == null) {
-            missingIfAbsent(root, "harpia", diagnostics);
-        } else if (version != 1) {
+        Map<String, Node> harpia = requiredMapping(root, "harpia", HARPIA_KEYS, diagnostics);
+        Integer schemaVersion = requiredInteger(harpia, "schemaVersion", diagnostics);
+        if (schemaVersion != null && schemaVersion != 1) {
             errorAt(diagnostics, ErrorCodes.CONFIG_SCHEMA_VERSION,
-                    "harpia must be 1 (the only schema version supported by V0)", root.get("harpia"));
+                    "harpia.schemaVersion must be 1 (the only configuration schema supported)",
+                    harpia.get("schemaVersion"));
+        }
+        Integer languageNumber = requiredInteger(harpia, "languageVersion", diagnostics);
+        LanguageVersion languageVersion = languageNumber == null
+                ? null
+                : LanguageVersion.from(languageNumber).orElse(null);
+        if (languageNumber != null && languageVersion == null) {
+            errorAt(diagnostics, ErrorCodes.CONFIG_LANGUAGE_VERSION,
+                    "harpia.languageVersion " + languageNumber
+                            + " is not supported; supported versions: "
+                            + LanguageVersion.supportedNumbers(),
+                    harpia.get("languageVersion"));
         }
 
         Map<String, Node> project = requiredMapping(root, "project", PROJECT_KEYS, diagnostics);
@@ -71,10 +85,13 @@ public final class ConfigValidator {
         requireSupported("database.vendor", vendor, "postgres", database.get("vendor"), diagnostics);
 
         Map<String, Node> paths = optionalMapping(root, "paths", PATH_KEYS, diagnostics);
-        String specs = optionalString(paths, "specs", "specs", diagnostics);
+        String specs = optionalString(paths, "specs", "spec", diagnostics);
+        String bindings = optionalString(paths, "bindings", "bindings", diagnostics);
         String output = optionalString(paths, "output", "generated", diagnostics);
         validateRelativePath("paths.specs", specs, paths.get("specs"), diagnostics);
+        validateRelativePath("paths.bindings", bindings, paths.get("bindings"), diagnostics);
         validateRelativePath("paths.output", output, paths.get("output"), diagnostics);
+        validateSeparateSourcePaths(specs, bindings, paths, diagnostics);
 
         Map<String, Node> generation = requiredMapping(root, "generation", GENERATION_KEYS, diagnostics);
         Boolean migrations = requiredBoolean(generation, "migrations", diagnostics);
@@ -86,11 +103,11 @@ public final class ConfigValidator {
             return Optional.empty();
         }
         return Optional.of(new HarpiaConfig(
-                version,
+                new HarpiaSettings(schemaVersion, languageVersion),
                 new ProjectConfig(name, group, artifact, packageName),
                 targetConfig,
                 new DatabaseConfig(vendor),
-                new PathsConfig(specs, output),
+                new PathsConfig(specs, bindings, output),
                 new GenerationConfig(migrations, tests)));
     }
 
@@ -292,6 +309,30 @@ public final class ConfigValidator {
         }
     }
 
+    private static void validateSeparateSourcePaths(
+            String specs,
+            String bindings,
+            Map<String, Node> paths,
+            DiagnosticCollector diagnostics) {
+        if (specs == null || bindings == null) {
+            return;
+        }
+        try {
+            if (Path.of(specs).normalize().equals(Path.of(bindings).normalize())) {
+                Node where = paths.get("bindings") != null
+                        ? paths.get("bindings")
+                        : paths.get("specs");
+                errorAt(
+                        diagnostics,
+                        ErrorCodes.CONFIG_UNSUPPORTED_VALUE,
+                        "paths.specs and paths.bindings must be different directories",
+                        where);
+            }
+        } catch (InvalidPathException ignored) {
+            // validateRelativePath already reports the malformed value with its own key.
+        }
+    }
+
     private static void requireSupported(
             String key, String actual, String expected, Node node, DiagnosticCollector diagnostics) {
         if (actual != null && !actual.equals(expected)) {
@@ -305,13 +346,6 @@ public final class ConfigValidator {
         if (Boolean.FALSE.equals(value)) {
             errorAt(diagnostics, ErrorCodes.CONFIG_UNSUPPORTED_VALUE,
                     key + " must be true in Harpia V0", node);
-        }
-    }
-
-    private static void missingIfAbsent(
-            Map<String, Node> values, String key, DiagnosticCollector diagnostics) {
-        if (!values.containsKey(key)) {
-            missing(key, diagnostics);
         }
     }
 

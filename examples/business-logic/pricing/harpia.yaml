@@ -1,15 +1,19 @@
-harpia: 1
+harpia:
+  schemaVersion: 1
+  languageVersion: 0
 
 project:
-  name: pricing-service
+  name: commerce-service
   group: com.example
-  artifact: pricing-service
-  package: com.example.pricing
+  artifact: commerce-service
+  package: com.example.commerce
 
 target:
   id: java-spring
+
   language:
     version: 21
+
   options:
     springBootVersion: "3.3.6"
 

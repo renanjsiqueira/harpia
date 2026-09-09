@@ -22,7 +22,7 @@ public final class JavaSpringRepositoryTransformer {
         JavaTypeRef repository = JavaTypeRef.parameterized(
                 "org.springframework.data.jpa.repository.JpaRepository",
                 domainType,
-                JavaTypeMapper.map(entity.idField().type()));
+                JavaTypeMapper.map(entity.idField().scalarType()));
         JavaTypeModel type = new JavaTypeModel(
                 JavaTypeModel.Kind.INTERFACE,
                 context.layout().packageName(JavaLayout.REPOSITORY),

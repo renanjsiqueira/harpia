@@ -23,10 +23,10 @@ public final class CapabilityAnalyzer {
                     "entity " + entity.name() + " declares persistent data",
                     entity.where()));
             for (UseCaseModel useCase : entity.useCases()) {
-                requirements.add(new CapabilityRequirement(
+                useCase.http().ifPresent(ignored -> requirements.add(new CapabilityRequirement(
                         Capability.HTTP,
-                        "use case " + useCase.baseName() + " declares an endpoint",
-                        useCase.where()));
+                        "operation " + useCase.baseName() + " declares an HTTP binding",
+                        useCase.where())));
                 for (FlowStep step : useCase.flow().steps()) {
                     if (usesPersistence(step)) {
                         requirements.add(new CapabilityRequirement(

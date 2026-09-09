@@ -50,22 +50,26 @@ public final class JavaSpringControllerTestTransformer {
 
     public JavaSourceFile transform(JavaSpringContext context, ApplicationEntity entity) {
         Names names = Names.of(context, entity);
+        List<ApplicationOperation> operations = entity.operations().stream()
+                .filter(operation -> operation.endpoint().isPresent())
+                .toList();
         TreeSet<String> imports = new TreeSet<>(FIXED_IMPORTS);
         imports.add(names.responseImport());
         entity.fields().forEach(field ->
-                JavaSampleValues.requiredImport(field.type()).ifPresent(imports::add));
-        for (ApplicationOperation operation : entity.operations()) {
+                imports.addAll(JavaSampleValues.requiredImports(
+                        field, context.layout().packageName(JavaLayout.DOMAIN))));
+        for (ApplicationOperation operation : operations) {
             boolean notFound = operation.failures().stream()
                     .anyMatch(failure -> failure.condition() == FailureCondition.NOT_FOUND);
             if (notFound && has(operation, FlowCommand.LOAD_BY_ID)) {
                 imports.add(names.notFoundImport());
-                JavaSampleValues.requiredImport(entity.idField().type())
+                JavaSampleValues.requiredImport(entity.idField().scalarType())
                         .ifPresent(imports::add);
             }
         }
 
         List<JavaMethodModel> methods = new ArrayList<>();
-        for (ApplicationOperation operation : entity.operations()) {
+        for (ApplicationOperation operation : operations) {
             methods.add(declaredStatus(names, entity, operation, imports));
             for (ApplicationOperation.Failure failure : operation.failures()) {
                 failure(names, entity, operation, failure, imports).ifPresent(methods::add);
@@ -101,7 +105,7 @@ public final class JavaSpringControllerTestTransformer {
     private static JavaFieldModel identifier(ApplicationEntity entity) {
         return new JavaFieldModel(
                 "ID",
-                dev.harpia.target.javaspring.mapping.JavaTypeMapper.map(entity.idField().type()),
+                dev.harpia.target.javaspring.mapping.JavaTypeMapper.map(entity.idField().scalarType()),
                 JavaVisibility.PRIVATE,
                 Set.of(JavaModifier.STATIC, JavaModifier.FINAL),
                 List.of(),
@@ -159,9 +163,20 @@ public final class JavaSpringControllerTestTransformer {
                 if (operation.input().isEmpty()) {
                     return Optional.empty();
                 }
-                perform(names, entity, operation, statements, Optional.of("{}"), List.of(
-                        MATCHERS_RESULT + ".status().is(" + status + ")"));
-                return Optional.of(test(operation, "RejectsAnIncompleteBody", statements));
+                if (operation.endpoint().orElseThrow().hasBody()) {
+                    perform(names, entity, operation, statements, Optional.of("{}"), List.of(
+                            MATCHERS_RESULT + ".status().is(" + status + ")"));
+                    return Optional.of(test(operation, "RejectsAnIncompleteBody", statements));
+                }
+                // Bound from parameters, an empty body proves nothing: the request has no body.
+                // Only a value that is present and invalid exercises the declared validation.
+                Optional<String> blank = blankable(operation);
+                if (blank.isEmpty()) {
+                    return Optional.empty();
+                }
+                perform(names, entity, operation, statements, Optional.empty(), List.of(
+                        MATCHERS_RESULT + ".status().is(" + status + ")"), blank);
+                return Optional.of(test(operation, "RejectsAnInvalidParameter", statements));
             }
             case NOT_FOUND -> {
                 if (!has(operation, FlowCommand.LOAD_BY_ID)) {
@@ -231,7 +246,7 @@ public final class JavaSpringControllerTestTransformer {
 
     private static String stubArguments(ApplicationOperation operation) {
         List<String> arguments = new ArrayList<>();
-        if (operation.endpoint().hasIdPathVariable()) {
+        if (operation.requiresId()) {
             arguments.add(MATCHERS + ".any()");
         }
         if (operation.requestTypeName().isPresent()) {
@@ -247,12 +262,37 @@ public final class JavaSpringControllerTestTransformer {
             List<String> statements,
             Optional<String> body,
             List<String> expectations) {
-        String method = operation.endpoint().method().name().toLowerCase(java.util.Locale.ROOT);
-        String path = "\"" + operation.endpoint().path() + "\"";
-        String uriVariables = operation.endpoint().hasIdPathVariable() ? ", ID" : "";
+        perform(names, entity, operation, statements, body, expectations, Optional.empty());
+    }
+
+    /**
+     * @param blankInput the mapped input to send empty, so a request bound from parameters can be
+     *     invalid in the way the specification declared rather than merely incomplete
+     */
+    private static void perform(
+            Names names,
+            ApplicationEntity entity,
+            ApplicationOperation operation,
+            List<String> statements,
+            Optional<String> body,
+            List<String> expectations,
+            Optional<String> blankInput) {
+        ApplicationOperation.Endpoint endpoint = operation.endpoint().orElseThrow();
+        String method = endpoint.method().name().toLowerCase(java.util.Locale.ROOT);
+        String path = "\"" + endpoint.effectivePath() + "\"";
+        String uriVariables = endpoint.hasIdPathVariable() ? ", ID" : "";
         String open = "mockMvc.perform(" + REQUESTS + "." + method
                 + "(" + path + uriVariables + ")";
-        if (body.isEmpty()) {
+        for (ApplicationOperation.RequestMapping mapping : endpoint.request()) {
+            if (mapping instanceof ApplicationOperation.Query value) {
+                open += ".queryParam(\"" + value.parameter() + "\", "
+                        + requestValue(operation, value.input(), blankInput) + ")";
+            } else if (mapping instanceof ApplicationOperation.Header value) {
+                open += ".header(\"" + value.header() + "\", "
+                        + requestValue(operation, value.input(), blankInput) + ")";
+            }
+        }
+        if (body.isEmpty() || !endpoint.hasBody()) {
             statements.add(open + ")");
         } else {
             statements.add(open);
@@ -265,14 +305,52 @@ public final class JavaSpringControllerTestTransformer {
         }
     }
 
+    /** The first mapped input that is required text, which is blank-invalid. */
+    private static Optional<String> blankable(ApplicationOperation operation) {
+        for (ApplicationOperation.RequestMapping mapping
+                : operation.endpoint().orElseThrow().request()) {
+            if (!(mapping instanceof ApplicationOperation.Query)
+                    && !(mapping instanceof ApplicationOperation.Header)) {
+                continue;
+            }
+            Optional<ApplicationField> field = operation.input().stream()
+                    .filter(candidate -> candidate.name().equals(mapping.input()))
+                    .findFirst();
+            if (field.filter(ApplicationField::required).filter(JavaSpringControllerTestTransformer
+                    ::isText).isPresent()) {
+                return Optional.of(mapping.input());
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static boolean isText(ApplicationField field) {
+        return field.scalarType() == dev.harpia.application.ApplicationScalarType.STRING
+                || field.scalarType() == dev.harpia.application.ApplicationScalarType.TEXT
+                || field.scalarType() == dev.harpia.application.ApplicationScalarType.EMAIL;
+    }
+
     private static Optional<String> body(ApplicationOperation operation) {
-        if (operation.input().isEmpty()) {
+        if (operation.input().isEmpty()
+                || operation.endpoint().stream().noneMatch(ApplicationOperation.Endpoint::hasBody)) {
             return Optional.empty();
         }
         List<String> entries = operation.input().stream()
                 .map(field -> "\\\"" + field.name() + "\\\":" + JavaSampleValues.json(field))
                 .toList();
         return Optional.of("{" + String.join(",", entries) + "}");
+    }
+
+    private static String requestValue(
+            ApplicationOperation operation, String input, Optional<String> blankInput) {
+        if (blankInput.filter(input::equals).isPresent()) {
+            return "\"\"";
+        }
+        ApplicationField field = operation.input().stream()
+                .filter(candidate -> candidate.name().equals(input))
+                .findFirst()
+                .orElseThrow();
+        return "\"" + JavaSampleValues.plain(field) + "\"";
     }
 
     private static JavaMethodModel sampleResponse(Names names, ApplicationEntity entity) {

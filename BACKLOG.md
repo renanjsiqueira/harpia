@@ -1,7 +1,7 @@
 # Harpia Backlog
 
 Fonte única oficial de status e prioridade do produto, da linguagem, do compilador, dos targets,
-do MCP e do brownfield. Auditoria realizada em **2026-09-06** diretamente sobre a codebase e os
+do MCP e do brownfield. Auditoria atualizada em **2026-09-07** diretamente sobre a codebase e os
 testes; documentos anteriores foram usados apenas como inventário de intenção.
 
 > **Harpia is a backend semantic specification language and project bootstrapper.**
@@ -77,14 +77,14 @@ não dependem de LLM.
 
 ## Estado atual comprovado
 
-| Fato auditado | Estado em 2026-09-06 |
+| Fato auditado | Estado em 2026-09-09 |
 |---|---|
-| Código de produção | 160 arquivos Java, 12.364 linhas |
-| Testes | 46 arquivos Java, 238 testes verdes, 0 falhas, 0 erros, 0 ignorados |
-| Linguagem executável | V0 escalar: Entity, casos de uso CRUD, Flow fechado e Logic pura |
+| Código de produção | 207 arquivos Java |
+| Testes | 66 arquivos Java, 357 testes verdes, 0 falhas, 0 erros, 0 ignorados |
+| Linguagem executável | V0 escalar; V1 acrescenta `## Command`, `## Query`, `## Enum`, `## Value`, `### Rules` executáveis e erros de domínio nomeados |
 | Pipeline | Markdown → syntax AST → semantic analysis → Business IR → Application IR → target |
 | Target executável | Somente `java-spring` |
-| Projeto gerado | Maven, Spring Boot, DTO, controller, service, JPA, repository, Flyway e testes |
+| Projeto gerado | Maven, Spring Boot, DTO, service, JPA, repository, Flyway e testes; controller somente quando há binding HTTP |
 | Gates | golden byte a byte, determinismo, `javac` e `mvn -o test` do projeto gerado |
 | MCP | Inexistente |
 | Brownfield | Inexistente |
@@ -99,12 +99,12 @@ Visão operacional dos itens P0 ainda abertos; os registros canônicos permanece
 
 | Slice | IDs | Estado | Por que agora |
 |---|---|---|---|
-| Project model | `CORE-007`–`CORE-011` | `PARTIAL` / `TODO` | Base de símbolos e referências V1. |
-| Source/version/inspection | `CORE-016`, `CORE-018`, `CORE-026`, `CLI-008` | `PARTIAL` / `TODO` | Explica inferências e estabiliza evolução/tooling. |
-| Operações explícitas | `CMD-001`, `QUERY-001`, `CMD-011`, `JAVA-004` | `PARTIAL` / `TODO` | Desacopla comportamento de HTTP. |
-| Binding foundation | `BIND-001`–`BIND-006` | `PARTIAL` / `TODO` | Separa spec, conexão e config. |
-| Target extensibility | `TARGET-003` | `PARTIAL` | Remove acoplamento residual ao catálogo estático. |
-| V0 hardening | `CMD-004`, `API-009`, `DET-003` | `PARTIAL` | Fecha generalidade de erros/validation e prova rebuild físico. |
+| Operações explícitas | `CMD-001`, `QUERY-001`, `CMD-011`, `JAVA-004` | `DONE` / `PARTIAL` | Command/Query independem de HTTP, aceitam exposição externa e a natureza declarada chega ao target; falta especialização dos transformers além de CRUD. |
+| Escopos e referências | `CORE-010`, `CORE-011` | `PARTIAL` | Operações já cruzam módulos na V1; falta escopo léxico fora de Logic e tipos nominais. |
+| Source mapping detalhado | `CORE-016` | `DONE` | Range, related locations e índice de origem por símbolo/linha gerada estão no resultado do compiler. |
+| Binding foundation | `BIND-001`–`BIND-006` | `DONE` / `PARTIAL` | AST/model/parser/resolver externos prontos; base URL e mappings query/header/path/body chegam ao controller gerado; falta content negotiation. |
+| Target extensibility | `TARGET-003` | `DONE` | Registry é a autoridade sobre o que gera; catálogo estático descreve apenas intenção. |
+| V0 hardening | — | `DONE` | `CMD-004`, `API-009` e `DET-003` fechados; erros de domínio, validação em toda a fronteira HTTP e rebuild físico provado. |
 | MCP safety gate | `MCP-020` | `TODO` | Obrigatório antes de expor operações a agentes. |
 
 ---
@@ -118,21 +118,21 @@ Visão operacional dos itens P0 ainda abertos; os registros canônicos permanece
 - [x] `CORE-003` **Parser estrutural CommonMark** — `DONE` · `P0` · `M` · Area: `Language Core`
   - Evidence: [`MarkdownStructure`](src/main/java/dev/harpia/ast/MarkdownStructure.java), [`RawSpanTest`](src/test/java/dev/harpia/ast/RawSpanTest.java).
 - [x] `CORE-004` **Syntax AST V0** — `DONE` para Entity/use case/Logic atuais · `P0` · `L` · Area: `Language Core`
-  - Evidence: [`SpecAst`](src/main/java/dev/harpia/parse/SpecAst.java), [`LogicAst`](src/main/java/dev/harpia/parse/LogicAst.java).
+  - Evidence: [`ProjectAst`](src/main/java/dev/harpia/parse/ProjectAst.java), [`ModuleAst`](src/main/java/dev/harpia/parse/ModuleAst.java), [`SpecAst`](src/main/java/dev/harpia/parse/SpecAst.java), [`LogicAst`](src/main/java/dev/harpia/parse/LogicAst.java).
 - [x] `CORE-005` **Parser da gramática V0** — `DONE` · `P0` · `L` · Area: `Language Core`
-  - Evidence: [`SpecParser`](src/main/java/dev/harpia/parse/SpecParser.java), [`SpecParserDiagnosticsTest`](src/test/java/dev/harpia/parse/SpecParserDiagnosticsTest.java).
+  - Evidence: [`SpecParser`](src/main/java/dev/harpia/parse/SpecParser.java), [`DeclarationParserRegistry`](src/main/java/dev/harpia/parse/DeclarationParserRegistry.java), [`SpecParserDiagnosticsTest`](src/test/java/dev/harpia/parse/SpecParserDiagnosticsTest.java).
 - [x] `CORE-006` **Descoberta e compilação multi-file determinística** — `DONE` · `P0` · `M` · Area: `Language Core`
   - Evidence: [`SpecDiscovery`](src/main/java/dev/harpia/source/SpecDiscovery.java), [`HarpiaCompiler`](src/main/java/dev/harpia/HarpiaCompiler.java).
-- [ ] `CORE-007` **Modelo de projeto multi-file** — `PARTIAL`; o compiler agrega `List<SpecAst>` e resolve `ProjectModel`, sem um Project AST próprio · `P0` · `L` · Area: `Language Core`
-  - Evidence: [`HarpiaCompiler`](src/main/java/dev/harpia/HarpiaCompiler.java), [`ProjectModel`](src/main/java/dev/harpia/model/ProjectModel.java).
-- [ ] `CORE-008` **Project AST explícita** — `TODO` · `P0` · `L` · Area: `Language Core`
-  - Depends on: `CORE-004`, `CORE-006`.
-- [ ] `CORE-009` **Symbol Table global em duas passagens** — `PARTIAL`; entidades e Logic são resolvidas globalmente, mas não há tabela unificada de todos os símbolos · `P0` · `L` · Area: `Language Core`
-  - Evidence: [`Resolver`](src/main/java/dev/harpia/model/Resolver.java), [`LogicSymbols`](src/main/java/dev/harpia/validate/LogicSymbols.java).
+- [x] `CORE-007` **Modelo de projeto multi-file** — `DONE`; o pipeline inteiro consome `ProjectAst` ordenado por path · `P0` · `L` · Area: `Language Core`
+  - Evidence: [`ProjectAst`](src/main/java/dev/harpia/parse/ProjectAst.java), [`HarpiaCompiler`](src/main/java/dev/harpia/HarpiaCompiler.java), [`ProjectAstTest`](src/test/java/dev/harpia/parse/ProjectAstTest.java).
+- [x] `CORE-008` **Project AST explícita** — `DONE` para os kinds executáveis atuais; `ModuleAst` preserva declarações ordenadas e o registry permite extensão incremental · `P0` · `L` · Area: `Language Core`
+  - Evidence: [`ModuleAst`](src/main/java/dev/harpia/parse/ModuleAst.java), [`DeclarationAst`](src/main/java/dev/harpia/parse/DeclarationAst.java), [`DeclarationParserRegistryTest`](src/test/java/dev/harpia/parse/DeclarationParserRegistryTest.java).
+- [x] `CORE-009` **Symbol Table global em duas passagens** — `DONE` para todos os namespaces/kinds executáveis; declare global determinístico e resolve nos analyzers · `P0` · `L` · Area: `Language Core`
+  - Evidence: [`SymbolTable`](src/main/java/dev/harpia/symbol/SymbolTable.java), [`SymbolTableTest`](src/test/java/dev/harpia/symbol/SymbolTableTest.java), [`LogicAnalyzer`](src/main/java/dev/harpia/validate/LogicAnalyzer.java).
 - [ ] `CORE-010` **Escopos léxicos** — `PARTIAL`; existem em Logic, não no conjunto futuro da linguagem · `P1` · `M` · Area: `Language Core`
   - Evidence: [`LogicAnalyzer`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`LogicAnalyzerTest`](src/test/java/dev/harpia/logic/LogicAnalyzerTest.java).
-- [ ] `CORE-011` **Referências cross-file** — `PARTIAL`; Logic e validações de projeto cruzam módulos, mas os tipos nominais e operações futuras não existem · `P0` · `L` · Area: `Language Core`
-  - Evidence: [`LogicAnalyzer`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java).
+- [ ] `CORE-011` **Referências cross-file** — `PARTIAL`; a partir da V1 uma operação pertence à entidade que seu flow nomeia, podendo viver em módulo próprio; faltam os tipos nominais (`TYPE-*`) como referência de campo · `P0` · `L` · Area: `Language Core`
+  - Evidence: [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java), [`Resolver`](src/main/java/dev/harpia/model/Resolver.java), [`CrossModuleReferenceTest`](src/test/java/dev/harpia/validate/CrossModuleReferenceTest.java).
 - [x] `CORE-012` **Semantic Analyzer V0** — `DONE` para o recorte executável atual · `P0` · `L` · Area: `Language Core`
   - Evidence: [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java), [`SemanticValidatorTest`](src/test/java/dev/harpia/validate/SemanticValidatorTest.java).
 - [x] `CORE-013` **Business IR independente de target** — `DONE` para o recorte V0 · `P0` · `L` · Area: `Language Core`
@@ -141,12 +141,12 @@ Visão operacional dos itens P0 ainda abertos; os registros canônicos permanece
   - Evidence: [`ApplicationProject`](src/main/java/dev/harpia/application/ApplicationProject.java), [`ApplicationModelBuilderTest`](src/test/java/dev/harpia/application/ApplicationModelBuilderTest.java).
 - [x] `CORE-015` **SourceLocation pontual** — `DONE` · `P0` · `M` · Area: `Language Core`
   - Evidence: [`SourceRef`](src/main/java/dev/harpia/diag/SourceRef.java), [`RawSpan`](src/main/java/dev/harpia/ast/RawSpan.java).
-- [ ] `CORE-016` **SourceRange, related locations e source mapping por símbolo/linha gerada** — `PARTIAL`; há `SourceRef` por nó/arquivo gerado, sem posição final ou índice detalhado · `P0` · `L` · Area: `Language Core`
-  - Evidence: [`GeneratedFile`](src/main/java/dev/harpia/emit/GeneratedFile.java), [`GeneratedTreeTest`](src/test/java/dev/harpia/emit/GeneratedTreeTest.java).
+- [x] `CORE-016` **SourceRange, related locations e source mapping por símbolo/linha gerada** — `DONE`; ranges exclusivos e related locations chegam ao índice imutável de cada `GeneratedFile` · `P0` · `L` · Area: `Language Core`
+  - Evidence: [`SourceRef`](src/main/java/dev/harpia/diag/SourceRef.java), [`RelatedLocation`](src/main/java/dev/harpia/diag/RelatedLocation.java), [`GeneratedSourceMapping`](src/main/java/dev/harpia/emit/GeneratedSourceMapping.java), [`JavaSourceRendererTest`](src/test/java/dev/harpia/target/javaspring/renderer/JavaSourceRendererTest.java).
 - [x] `CORE-017` **Diagnostics estruturados, códigos estáveis e ordenação determinística** — `DONE` · `P0` · `M` · Area: `Language Core`
   - Evidence: [`Diagnostic`](src/main/java/dev/harpia/diag/Diagnostic.java), [`DiagnosticOrderingTest`](src/test/java/dev/harpia/diag/DiagnosticOrderingTest.java).
-- [ ] `CORE-018` **Versão da linguagem independente** — `TODO`; `harpia: 1` hoje versiona o schema de configuração e `target.language.version` é a versão Java · `P0` · `M` · Area: `Language Core`
-  - Depends on: `CORE-008`.
+- [x] `CORE-018` **Versão da linguagem independente** — `DONE`; schema `1`, linguagem Harpia `0` e linguagem do target Java `21` são dimensões explícitas; a versão Harpia seleciona parser registry, pertence ao `ProjectAst` e aparece no inspect · `P0` · `M` · Area: `Language Core`
+  - Evidence: [`LanguageVersion`](src/main/java/dev/harpia/LanguageVersion.java), [`ConfigValidator`](src/main/java/dev/harpia/config/ConfigValidator.java), [`ProjectAst`](src/main/java/dev/harpia/parse/ProjectAst.java), [`ConfigLoaderTest`](src/test/java/dev/harpia/config/ConfigLoaderTest.java), [`InspectorTest`](src/test/java/dev/harpia/inspect/InspectorTest.java).
 - [x] `CORE-019` **Versão do compilador** — `DONE` · `P1` · `XS` · Area: `Language Core`
   - Evidence: [`VersionCommand`](src/main/java/dev/harpia/cli/VersionCommand.java), [`harpia-version.properties`](src/main/resources/harpia-version.properties).
 - [x] `CORE-020` **Compilação determinística e ordem estável de arquivos** — `DONE` · `P0` · `M` · Area: `Language Core`
@@ -161,8 +161,8 @@ Visão operacional dos itens P0 ainda abertos; os registros canônicos permanece
   - Depends on: `CORE-008`, `CORE-016`, `CORE-018`.
 - [ ] `CORE-025` **Linter separado de validação** — `TODO` · `P2` · `M` · Area: `CLI/DX`
   - Depends on: `CORE-008`, `CORE-017`.
-- [ ] `CORE-026` **Inspect de AST/symbols/Business IR/Application IR** — `TODO` · `P0` · `M` · Area: `CLI/DX`
-  - Depends on: `CORE-008`, `CORE-009`.
+- [x] `CORE-026` **Inspect de AST/symbols/Business IR/Application IR** — `DONE`; renderiza os modelos carregados em `CompileResult.Stages`, sem pipeline paralelo · `P0` · `M` · Area: `CLI/DX`
+  - Evidence: [`Inspector`](src/main/java/dev/harpia/inspect/Inspector.java), [`InspectorTest`](src/test/java/dev/harpia/inspect/InspectorTest.java), [`SemanticFixtureTest`](src/test/java/dev/harpia/SemanticFixtureTest.java).
 - [x] `CORE-027` **Escrita idempotente, manifesto e proteção de arquivos desconhecidos** — `DONE` · `P0` · `L` · Area: `Ownership`
   - Evidence: [`OutputWriter`](src/main/java/dev/harpia/emit/OutputWriter.java), [`OutputWriterTest`](src/test/java/dev/harpia/emit/OutputWriterTest.java).
 
@@ -197,15 +197,15 @@ Visão operacional dos itens P0 ainda abertos; os registros canônicos permanece
 - [ ] `TYPE-017` **Phone** — `TODO` · `P3` · `S` · Area: `Language Core`
 - [ ] `TYPE-018` **IPAddress** — `TODO` · `P3` · `S` · Area: `Security`
 - [ ] `TYPE-019` **Secret** — `TODO` · `P1` · `M` · Area: `Security`
-- [ ] `TYPE-020` **Enum nominal** — `TODO` · `P1` · `L` · Area: `Domain`
-  - Depends on: `CORE-008`, `CORE-009`.
+- [x] `TYPE-020` **Enum nominal** — `DONE` na V1; `## Enum <Nome>` declara um conjunto fechado de valores, entra na symbol table, é referenciável como tipo de campo e gera enum Java, coluna e constraint. O tipo de campo passou a ser álgebra selada (`FieldType`/`ApplicationFieldType`), então todo mapeamento precisa responder pelo nominal em vez de tratá-lo como texto · `P1` · `L` · Area: `Domain`
+  - Evidence: [`EnumDeclarationParser`](src/main/java/dev/harpia/parse/EnumDeclarationParser.java), [`FieldType`](src/main/java/dev/harpia/model/FieldType.java), [`ApplicationFieldType`](src/main/java/dev/harpia/application/ApplicationFieldType.java), [`JavaSpringEnumTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringEnumTransformer.java), [`DeclaredEnumTest`](src/test/java/dev/harpia/validate/DeclaredEnumTest.java).
 - [ ] `TYPE-021` **List&lt;T&gt; geral** — `PARTIAL`; listas de Entity existem em output/Flow, não como tipo de primeira classe · `P1` · `L` · Area: `Language Core`
   - Evidence: [`OutputModel`](src/main/java/dev/harpia/model/OutputModel.java), [`FlowModel`](src/main/java/dev/harpia/model/FlowModel.java).
 - [ ] `TYPE-022` **Optional&lt;T&gt; explícito** — `TODO`; opcionalidade de campo hoje é ausência de `required` · `P1` · `M` · Area: `Language Core`
-- [ ] `TYPE-023` **Reference&lt;T&gt;** — `TODO` · `P1` · `L` · Area: `Domain`
-  - Depends on: `CORE-009`, `TYPE-020`.
-- [ ] `TYPE-024` **ValueObject nominal** — `TODO` · `P1` · `L` · Area: `Domain`
-  - Depends on: `CORE-008`, `CORE-009`.
+- [ ] `TYPE-023` **Reference&lt;T&gt;** — `TODO`; a álgebra de tipo de campo e o primeiro nominal já existem · `P1` · `L` · Area: `Domain`
+  - Depends on: `CORE-009`, `TYPE-020` (pronto).
+- [x] `TYPE-024` **ValueObject nominal** — `DONE` na V1; `## Value <Nome>` declara um grupo de campos sem identidade, referenciável como tipo de campo, gerado como `@Embeddable` e armazenado como colunas prefixadas da entidade que o contém, com `@AttributeOverride` casando com a migração. Campos `generated`/`unique` são recusados: identidade é de entidade · `P1` · `L` · Area: `Domain`
+  - Evidence: [`ValueDeclarationParser`](src/main/java/dev/harpia/parse/ValueDeclarationParser.java), [`FieldType`](src/main/java/dev/harpia/model/FieldType.java), [`JavaSpringValueTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringValueTransformer.java), [`DeclaredValueTest`](src/test/java/dev/harpia/validate/DeclaredValueTest.java).
 - [ ] `TYPE-025` **Page&lt;T&gt;** — `TODO` · `P1` · `M` · Area: `API`
   - Depends on: `TYPE-021`, `QUERY-005`.
 - [ ] `TYPE-026` **CPF** — `TODO` · `P3` · `S` · Area: `Domain`
@@ -255,10 +255,10 @@ Visão operacional dos itens P0 ainda abertos; os registros canônicos permanece
 
 ## EPIC — Rules, Invariants and Policies
 
-- [ ] `RULE-001` **Rule executável tipada** — `TODO`; `### Rules` é documentação ignorada semanticamente no V0 · `P1` · `L` · Area: `Domain`
-  - Depends on: `CORE-009`, `LOGIC-014`.
-- [ ] `RULE-002` **Invariant** — `TODO` · `P1` · `L` · Area: `Domain`
-  - Depends on: `RULE-001`, `CMD-001`.
+- [x] `RULE-001` **Rule executável tipada** — `DONE` na V1; um item de lista sob `### Rules` é uma condição booleana sobre o input, tipada pelo mesmo analisador de expressões da Logic, carregada pelos dois IRs e verificada onde o flow declara `validate input`. Prosa continua documentação e a V0 não muda de significado · `P1` · `L` · Area: `Domain`
+  - Evidence: [`UseCaseDeclarationParser`](src/main/java/dev/harpia/parse/UseCaseDeclarationParser.java), [`LogicAnalyzer.analyzeExpression`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`RuleModel`](src/main/java/dev/harpia/model/RuleModel.java), [`ApplicationRule`](src/main/java/dev/harpia/application/ApplicationRule.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`RuleTest`](src/test/java/dev/harpia/validate/RuleTest.java).
+- [ ] `RULE-002` **Invariant** — `TODO`; a condição tipada já existe, falta o escopo da entidade e o momento em que ela vale · `P1` · `L` · Area: `Domain`
+  - Depends on: `RULE-001` (pronto), `CMD-001`.
 - [ ] `RULE-003` **Policy reutilizável** — `TODO` · `P1` · `XL` · Area: `Security`
   - Depends on: `RULE-001`, `SEC-003`.
 - [ ] `RULE-004` **Requires / precondition** — `TODO` · `P1` · `M` · Area: `Domain`
@@ -356,8 +356,8 @@ Princípio: **Formula computes. Decision chooses. Logic reasons. Flow acts.**
   - Depends on: `TYPE-021`, `DOM-012`.
 - [ ] `FLOW-012` **`require`** — `TODO` · `P1` · `M` · Area: `API`
   - Depends on: `RULE-001`.
-- [ ] `FLOW-013` **`fail` com erro tipado** — `TODO` · `P1` · `M` · Area: `API`
-  - Depends on: `CMD-004`.
+- [ ] `FLOW-013` **`fail` com erro tipado** — `TODO`; o tipo já existe e é mapeado, falta a instrução que o levanta · `P1` · `M` · Area: `API`
+  - Depends on: `CMD-004` (pronto).
 - [ ] `FLOW-014` **`call` Logic/Command/Integration** — `TODO` · `P1` · `L` · Area: `API`
   - Depends on: `CORE-009`, `CMD-001`, `INTEG-001`.
 - [ ] `FLOW-015` **`emit` Event** — `TODO` · `P1` · `M` · Area: `Messaging`
@@ -378,14 +378,14 @@ Princípio: **Formula computes. Decision chooses. Logic reasons. Flow acts.**
 
 ## EPIC — Commands
 
-- [ ] `CMD-001` **Command como símbolo explícito independente de HTTP** — `PARTIAL`; mutações CRUD são inferidas de use cases e Flow, sem `CommandAst` · `P0` · `L` · Area: `API`
-  - Evidence: [`ApplicationOperation`](src/main/java/dev/harpia/application/ApplicationOperation.java), [`ApplicationModelBuilder`](src/main/java/dev/harpia/application/ApplicationModelBuilder.java).
+- [x] `CMD-001` **Command como símbolo explícito independente de HTTP** — `DONE`; `## Command` é kind V1, dita a transação e pode omitir o binding HTTP sem desaparecer dos IRs ou da geração de service · `P0` · `L` · Area: `API`
+  - Evidence: [`OperationNature`](src/main/java/dev/harpia/model/OperationNature.java), [`OperationDeclarationTest`](src/test/java/dev/harpia/parse/OperationDeclarationTest.java), [`UnboundOperationTest`](src/test/java/dev/harpia/target/javaspring/UnboundOperationTest.java).
 - [x] `CMD-002` **Input tipado de operação V0** — `DONE` · `P0` · `M` · Area: `API`
   - Evidence: [`FieldLineParser`](src/main/java/dev/harpia/parse/FieldLineParser.java), [`JavaSpringDtoTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringDtoTransformer.java).
 - [x] `CMD-003` **Output tipado de operação V0** — `DONE` para Entity/List/ nothing · `P0` · `M` · Area: `API`
   - Evidence: [`OutputModel`](src/main/java/dev/harpia/model/OutputModel.java), [`JavaSpringControllerTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringControllerTransformer.java).
-- [ ] `CMD-004` **Errors tipados gerais** — `PARTIAL`; V0 aceita somente invalid input, duplicate field e not found com status fixos · `P0` · `L` · Area: `API`
-  - Evidence: [`ErrorLineParser`](src/main/java/dev/harpia/parse/ErrorLineParser.java), [`JavaSpringErrorTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringErrorTransformer.java).
+- [x] `CMD-004` **Errors tipados gerais** — `DONE` para a declaração do tipo; além das três condições detectadas, um erro de domínio nomeado (`insufficient balance -> 422`) vira símbolo canônico, tipo gerado e mapeamento de status, com um status por erro no projeto inteiro. O gatilho é `FLOW-013` (`fail`), que depende deste · `P0` · `L` · Area: `API`
+  - Evidence: [`ErrorLineParser`](src/main/java/dev/harpia/parse/ErrorLineParser.java), [`Naming`](src/main/java/dev/harpia/model/Naming.java), [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java), [`JavaSpringErrorTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringErrorTransformer.java), [`DomainErrorTest`](src/test/java/dev/harpia/validate/DomainErrorTest.java).
 - [ ] `CMD-005` **Rules de Command** — `TODO` · `P1` · `M` · Area: `Domain`
   - Depends on: `CMD-001`, `RULE-001`.
 - [x] `CMD-006` **Flow de mutação CRUD V0** — `DONE` · `P0` · `L` · Area: `API`
@@ -398,15 +398,16 @@ Princípio: **Formula computes. Decision chooses. Logic reasons. Flow acts.**
   - Depends on: `IDEMP-001`.
 - [ ] `CMD-010` **Events de Command** — `TODO` · `P1` · `M` · Area: `Messaging`
   - Depends on: `EVENT-001`, `FLOW-015`.
-- [ ] `CMD-011` **Exposure opcional por bindings** — `TODO`; endpoint é obrigatório no use case V0 · `P0` · `L` · Area: `API`
+- [x] `CMD-011` **Exposure opcional por bindings** — `DONE`; Command/Query V1 podem permanecer internos ou ser expostos por binding HTTP externo; capability/controller/teste web só existem quando há binding · `P0` · `L` · Area: `API`
   - Depends on: `BIND-001`.
+  - Evidence: [`ApplicationOperation`](src/main/java/dev/harpia/application/ApplicationOperation.java), [`JavaSpringProjectTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringProjectTransformer.java), [`UnboundOperationTest`](src/test/java/dev/harpia/target/javaspring/UnboundOperationTest.java), [`ExternalHttpBindingTest`](src/test/java/dev/harpia/binding/ExternalHttpBindingTest.java).
 - [ ] `CMD-012` **Implementação custom de Command** — `TODO` · `P1` · `M` · Area: `Extensibility`
   - Depends on: `CUSTOM-001`.
 
 ## EPIC — Queries
 
-- [ ] `QUERY-001` **Query como símbolo explícito independente de HTTP** — `PARTIAL`; read/list CRUD são inferidos de use cases · `P0` · `L` · Area: `API`
-  - Evidence: [`ApplicationOperation`](src/main/java/dev/harpia/application/ApplicationOperation.java), [`ApplicationModelBuilder`](src/main/java/dev/harpia/application/ApplicationModelBuilder.java).
+- [x] `QUERY-001` **Query como símbolo explícito independente de HTTP** — `DONE`; `## Query` é kind V1, rejeita mutação (`HRP2120`) e pode existir sem capability ou adapter HTTP · `P0` · `L` · Area: `API`
+  - Evidence: [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java), [`OperationNatureTest`](src/test/java/dev/harpia/validate/OperationNatureTest.java), [`UnboundOperationTest`](src/test/java/dev/harpia/target/javaspring/UnboundOperationTest.java).
 - [x] `QUERY-002` **Input/output/Flow de Query CRUD V0** — `DONE` para load-by-id e list-all · `P0` · `L` · Area: `API`
   - Evidence: [`Resolver`](src/main/java/dev/harpia/model/Resolver.java), [`ApplicationLayerTransformerTest`](src/test/java/dev/harpia/target/javaspring/transformer/ApplicationLayerTransformerTest.java).
 - [ ] `QUERY-003` **Filters** — `TODO` · `P1` · `L` · Area: `Persistence`
@@ -449,8 +450,8 @@ Princípio: **Formula computes. Decision chooses. Logic reasons. Flow acts.**
   - Evidence: [`OutputParser`](src/main/java/dev/harpia/parse/OutputParser.java), [`JavaSpringErrorTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringErrorTransformer.java).
 - [ ] `API-008` **Authentication e authorization HTTP** — `TODO` · `P1` · `XL` · Area: `Security`
   - Depends on: `SEC-002`, `SEC-003`.
-- [ ] `API-009` **Validação HTTP** — `PARTIAL`; Bean Validation cobre required/Email no request quando Flow declara validate · `P0` · `M` · Area: `API`
-  - Evidence: [`SpringValidationMapper`](src/main/java/dev/harpia/target/javaspring/mapping/SpringValidationMapper.java), [`ApplicationLayerTransformerTest`](src/test/java/dev/harpia/target/javaspring/transformer/ApplicationLayerTransformerTest.java).
+- [x] `API-009` **Validação HTTP** — `DONE` para o recorte atual; `validate input` vale na fronteira HTTP inteira, não só no corpo: parâmetros de path/query/header carregam as constraints declaradas, `ConstraintViolationException` responde o status declarado, e o teste de controller gerado envia valores de requisição em texto puro e um valor realmente inválido · `P0` · `M` · Area: `API`
+  - Evidence: [`SpringValidationMapper`](src/main/java/dev/harpia/target/javaspring/mapping/SpringValidationMapper.java), [`JavaSpringControllerTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringControllerTransformer.java), [`JavaSpringErrorTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringErrorTransformer.java), [`ExternalHttpBindingTest`](src/test/java/dev/harpia/binding/ExternalHttpBindingTest.java).
 - [ ] `API-010` **Pagination HTTP** — `TODO` · `P1` · `M` · Area: `API`
   - Depends on: `QUERY-005`.
 - [ ] `API-011` **Multipart e file upload/download** — `TODO` · `P2` · `L` · Area: `Integration`
@@ -523,18 +524,19 @@ Princípio: **Formula computes. Decision chooses. Logic reasons. Flow acts.**
 
 Regra alvo: **Spec = what software does; Binding = how software connects; Config = target/provider/environment.**
 
-- [ ] `BIND-001` **Diretórios `spec/`, `bindings/` e separação formal Spec/Binding/Config** — `TODO` · `P0` · `L` · Area: `Integration`
+- [x] `BIND-001` **Diretórios `spec/`, `bindings/` e separação formal Spec/Binding/Config** — `DONE`; defaults distintos, descoberta segura e binding opcional entram pelo mesmo compiler sem misturar config com semântica · `P0` · `L` · Area: `Integration`
   - Depends on: `CORE-008`, `CORE-018`.
-- [ ] `BIND-002` **Binding AST e Binding Model** — `PARTIAL`; há apenas `HttpBinding` básico acoplado ao use case · `P0` · `XL` · Area: `Integration`
-  - Evidence: [`HttpBinding`](src/main/java/dev/harpia/model/HttpBinding.java), [`UseCaseModel`](src/main/java/dev/harpia/model/UseCaseModel.java).
-- [ ] `BIND-003` **Binding Parser** — `PARTIAL`; `EndpointParser` cobre método/path V0 inline, sem arquivo de binding · `P0` · `L` · Area: `Integration`
-  - Evidence: [`EndpointParser`](src/main/java/dev/harpia/parse/EndpointParser.java), [`SpecParser`](src/main/java/dev/harpia/parse/SpecParser.java).
-- [ ] `BIND-004` **Binding Validator/Resolver tipado** — `PARTIAL`; validações V0 de rota e `{id}` existem, sem resolver geral · `P0` · `XL` · Area: `Integration`
-  - Evidence: [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java), [`Resolver`](src/main/java/dev/harpia/model/Resolver.java).
-- [ ] `BIND-005` **Source mapping de bindings** — `PARTIAL`; endpoint preserva posição no syntax AST, sem ranges/índice gerado · `P1` · `M` · Area: `Integration`
-  - Evidence: [`SpecAst.Endpoint`](src/main/java/dev/harpia/parse/SpecAst.java), [`SourceRef`](src/main/java/dev/harpia/diag/SourceRef.java).
-- [ ] `BIND-006` **HTTP binding: base URL, method/path, path/query/header/body/response mapping** — `PARTIAL`; method/path e body/output implícitos apenas · `P0` · `XL` · Area: `Integration`
-  - Evidence: [`HttpBinding`](src/main/java/dev/harpia/model/HttpBinding.java), [`JavaSpringControllerTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringControllerTransformer.java).
+  - Evidence: [`BindingDiscovery`](src/main/java/dev/harpia/source/BindingDiscovery.java), [`PathsConfig`](src/main/java/dev/harpia/config/HarpiaConfig.java), [`BindingDiscoveryTest`](src/test/java/dev/harpia/source/BindingDiscoveryTest.java).
+- [x] `BIND-002` **Binding AST e Binding Model** — `DONE` para a fundação tipada e extensível por kind; `BindingAst.Declaration` é selada, `BindingModel` preserva origem e source refs e os IRs carregam exposição opcional · `P0` · `XL` · Area: `Integration`
+  - Evidence: [`BindingAst`](src/main/java/dev/harpia/binding/BindingAst.java), [`BindingModel`](src/main/java/dev/harpia/binding/BindingModel.java), [`UseCaseModel`](src/main/java/dev/harpia/model/UseCaseModel.java).
+- [x] `BIND-003` **Binding Parser** — `DONE` para o primeiro kind HTTP V1, com H1/H2/H3 formais e diagnostics de versão/estrutura · `P0` · `L` · Area: `Integration`
+  - Evidence: [`BindingParser`](src/main/java/dev/harpia/binding/BindingParser.java), [`BindingParserTest`](src/test/java/dev/harpia/binding/BindingParserTest.java).
+- [x] `BIND-004` **Binding Validator/Resolver tipado** — `DONE`; resolve símbolos de operação e valida binding único, rota única e coerência de `{id}` entre path e Flow · `P0` · `XL` · Area: `Integration`
+  - Evidence: [`BindingResolver`](src/main/java/dev/harpia/binding/BindingResolver.java), [`BindingValidator`](src/main/java/dev/harpia/binding/BindingValidator.java), [`ExternalHttpBindingTest`](src/test/java/dev/harpia/binding/ExternalHttpBindingTest.java).
+- [x] `BIND-005` **Source mapping de bindings** — `DONE`; declaration/endpoint preservam ranges e cada método de controller aponta da linha Java gerada para a origem exata do endpoint Markdown · `P1` · `M` · Area: `Integration`
+  - Evidence: [`BindingModel`](src/main/java/dev/harpia/binding/BindingModel.java), [`GeneratedSourceMapping`](src/main/java/dev/harpia/emit/GeneratedSourceMapping.java), [`JavaSourceRenderer`](src/main/java/dev/harpia/target/javaspring/renderer/JavaSourceRenderer.java), [`ExternalHttpBindingTest`](src/test/java/dev/harpia/binding/ExternalHttpBindingTest.java).
+- [ ] `BIND-006` **HTTP binding: base URL, method/path, path/query/header/body/response mapping** — `PARTIAL`; base URL, method/path e mappings explícitos `path`/`query`/`header`/`body` mais `output: body`/`none` atravessam parser, resolver e controller gerado, provados por compilação real; falta content negotiation (`BIND-007`) e mapping de response além do corpo inteiro · `P0` · `XL` · Area: `Integration`
+  - Evidence: [`HttpBinding`](src/main/java/dev/harpia/model/HttpBinding.java), [`BindingParser`](src/main/java/dev/harpia/binding/BindingParser.java), [`JavaSpringControllerTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringControllerTransformer.java), [`ExternalHttpBindingTest`](src/test/java/dev/harpia/binding/ExternalHttpBindingTest.java).
 - [ ] `BIND-007` **HTTP status/content-type/accept mapping** — `PARTIAL`; status é mapeado, media types não · `P1` · `M` · Area: `Integration`
   - Evidence: [`OutputParser`](src/main/java/dev/harpia/parse/OutputParser.java), [`JavaSpringControllerTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringControllerTransformer.java).
 - [ ] `BIND-008` **HTTP auth: bearer, API key e OAuth** — `TODO` · `P1` · `L` · Area: `Security`
@@ -867,10 +869,10 @@ Regra alvo: **Spec = what software does; Binding = how software connects; Config
 
 ## EPIC — Custom Java Escape Hatch
 
-- [ ] `CUSTOM-001` **Custom implementation como feature oficial** — `TODO`; princípio documentado, nenhum contrato gerado · `P1` · `L` · Area: `Extensibility`
-  - Depends on: `CORE-008`, `CORE-009`, `CORE-027`.
-- [ ] `CUSTOM-002` **Interface/contract gerado e dependency injection** — `TODO` · `P1` · `L` · Area: `Extensibility`
-  - Depends on: `CUSTOM-001`.
+- [x] `CUSTOM-001` **Custom implementation como feature oficial** — `DONE` na V1 para Logic; `### Implementation` com `custom <Contrato>` substitui o corpo, o compilador mantém assinatura e type checking e gera a interface, sem gerar implementação. Scenario sobre uma Logic custom é recusado (`HRP2124`), porque Harpia teria de executar código que não é dela · `P1` · `L` · Area: `Extensibility`
+  - Evidence: [`LogicDeclarationParser`](src/main/java/dev/harpia/parse/LogicDeclarationParser.java), [`JavaSpringLogicTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringLogicTransformer.java), [`ScenarioAnalyzer`](src/main/java/dev/harpia/validate/ScenarioAnalyzer.java), [`CustomImplementationTest`](src/test/java/dev/harpia/logic/CustomImplementationTest.java).
+- [ ] `CUSTOM-002` **Interface/contract gerado e dependency injection** — `PARTIAL`; a interface é gerada com a assinatura tipada; falta injetar o bean no chamador, o que depende de `FLOW-014` (`call` Logic a partir de Flow) · `P1` · `L` · Area: `Extensibility`
+  - Depends on: `CUSTOM-001` (pronto), `FLOW-014`.
 - [ ] `CUSTOM-003` **Diretório custom protegido e preservado** — `TODO` · `P1` · `M` · Area: `Ownership`
   - Depends on: `CUSTOM-001`, `CORE-027`.
 - [ ] `CUSTOM-004` **Custom Maven dependencies/proprietary SDKs** — `TODO` · `P2` · `M` · Area: `Extensibility`
@@ -902,8 +904,8 @@ Regra alvo: **Spec = what software does; Binding = how software connects; Config
   - Evidence: [`HarpiaTarget`](src/main/java/dev/harpia/target/HarpiaTarget.java), [`ArchitectureBoundaryTest`](src/test/java/dev/harpia/ArchitectureBoundaryTest.java).
 - [x] `TARGET-002` **TargetId, TargetDescriptor e TargetStatus** — `DONE` · `P0` · `M` · Area: `Multi-target`
   - Evidence: [`TargetId`](src/main/java/dev/harpia/target/TargetId.java), [`TargetDescriptor`](src/main/java/dev/harpia/target/TargetDescriptor.java).
-- [ ] `TARGET-003` **TargetRegistry extensível** — `PARTIAL`; registro por instância existe, mas `TargetResolver` ainda exige descriptor no catálogo estático · `P0` · `M` · Area: `Multi-target`
-  - Evidence: [`TargetRegistry`](src/main/java/dev/harpia/target/TargetRegistry.java), [`TargetResolver`](src/main/java/dev/harpia/target/TargetResolver.java).
+- [x] `TARGET-003` **TargetRegistry extensível** — `DONE`; um target registrado descreve a si mesmo e resolve sem constar do catálogo estático, e o hint de diagnóstico lista o que o registry realmente contém · `P0` · `M` · Area: `Multi-target`
+  - Evidence: [`TargetRegistry`](src/main/java/dev/harpia/target/TargetRegistry.java), [`TargetResolver`](src/main/java/dev/harpia/target/TargetResolver.java), [`RegisteredTargetTest`](src/test/java/dev/harpia/target/RegisteredTargetTest.java).
 - [x] `TARGET-004` **TargetResolver sem fallback silencioso** — `DONE` para catálogo built-in · `P0` · `M` · Area: `Multi-target`
   - Evidence: [`TargetResolver`](src/main/java/dev/harpia/target/TargetResolver.java), [`UnsupportedTargetTest`](src/test/java/dev/harpia/target/UnsupportedTargetTest.java).
 - [x] `TARGET-005` **Target capabilities reais** — `DONE` para HTTP/persistence do target atual · `P0` · `M` · Area: `Multi-target`
@@ -960,8 +962,8 @@ Nenhum target `NOT_SUPPORTED` possui generator falso ou capabilities fictícias.
   - Evidence: [`JavaSpringEntityTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringEntityTransformer.java), [`JavaSpringEntityTransformerTest`](src/test/java/dev/harpia/target/javaspring/transformer/JavaSpringEntityTransformerTest.java).
 - [ ] `JAVA-003` **ValueObject e Enum transformers** — `TODO` · `P1` · `L` · Area: `Java/Spring Target`
   - Depends on: `TYPE-020`, `TYPE-024`.
-- [ ] `JAVA-004` **Command/Query transformers explícitos** — `PARTIAL`; service/controller cobrem operações CRUD inferidas · `P0` · `L` · Area: `Java/Spring Target`
-  - Evidence: [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`JavaSpringControllerTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringControllerTransformer.java).
+- [ ] `JAVA-004` **Command/Query transformers explícitos** — `PARTIAL`; a natureza declarada (`Command`/`Query`/inferida) atravessa a Application IR e chega ao target, que a documenta no serviço gerado; falta especializar a geração além da forma CRUD · `P0` · `L` · Area: `Java/Spring Target`
+  - Evidence: [`ApplicationOperation`](src/main/java/dev/harpia/application/ApplicationOperation.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`JavaSpringControllerTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringControllerTransformer.java), [`UnboundOperationTest`](src/test/java/dev/harpia/target/javaspring/UnboundOperationTest.java), [`OperationNatureTest`](src/test/java/dev/harpia/validate/OperationNatureTest.java).
 - [x] `JAVA-005` **Logic transformer** — `DONE` para L1/L2 · `P1` · `L` · Area: `Java/Spring Target`
   - Evidence: [`JavaSpringLogicTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringLogicTransformer.java), [`LogicEmitterTest`](src/test/java/dev/harpia/target/javaspring/LogicEmitterTest.java).
 - [x] `JAVA-006` **Flow CRUD transformer** — `DONE` para oito comandos V0 · `P0` · `L` · Area: `Java/Spring Target`
@@ -1040,8 +1042,8 @@ Nenhum target `NOT_SUPPORTED` possui generator falso ou capabilities fictícias.
   - Depends on: `CORE-024`.
 - [ ] `CLI-007` **`harpia lint`** — `TODO` · `P2` · `M` · Area: `CLI/DX`
   - Depends on: `CORE-025`.
-- [ ] `CLI-008` **`harpia inspect`** — `TODO` · `P0` · `M` · Area: `CLI/DX`
-  - Depends on: `CORE-026`.
+- [x] `CLI-008` **`harpia inspect`** — `DONE` para `ast`, `symbols`, `business-ir` e `application-ir` · `P0` · `M` · Area: `CLI/DX`
+  - Evidence: [`InspectCommand`](src/main/java/dev/harpia/cli/InspectCommand.java), [`CliExitCodeTest`](src/test/java/dev/harpia/cli/CliExitCodeTest.java).
 - [x] `CLI-009` **`harpia version`** — `DONE` · `P1` · `XS` · Area: `CLI/DX`
   - Evidence: [`VersionCommand`](src/main/java/dev/harpia/cli/VersionCommand.java), [`CliExitCodeTest`](src/test/java/dev/harpia/cli/CliExitCodeTest.java).
 - [ ] `CLI-010` **`harpia capabilities`** — `PARTIAL`; `harpia targets <id>` exibe capabilities, sem comando global próprio · `P1` · `S` · Area: `CLI/DX`
@@ -1175,14 +1177,14 @@ Esta visão referencia itens canônicos para não duplicar implementação:
 | golden tests | `TEST-012` | `DONE` |
 | output hashing exposto ao usuário | `DET-001` | `PARTIAL` |
 | build fingerprint | `DET-002` | `TODO` |
-| clean + rebuild equality em disco | `DET-003` | `PARTIAL` |
+| clean + rebuild equality em disco | `DET-003` | `DONE` |
 
 - [ ] `DET-001` **Output hashing** — `PARTIAL`; testes calculam hash, o produto não o publica · `P1` · `S` · Area: `CLI/DX`
   - Evidence: [`DeterminismTest`](src/test/java/dev/harpia/DeterminismTest.java).
 - [ ] `DET-002` **Build fingerprint versionado** — `TODO` · `P1` · `M` · Area: `CLI/DX`
   - Depends on: `CORE-018`, `TARGET-002`, `DET-001`.
-- [ ] `DET-003` **Clean + rebuild equality test em filesystem** — `PARTIAL`; compilação repetida e escrita idempotente são testadas separadamente · `P0` · `S` · Area: `Testing`
-  - Evidence: [`DeterminismTest`](src/test/java/dev/harpia/DeterminismTest.java), [`OutputWriterTest`](src/test/java/dev/harpia/emit/OutputWriterTest.java).
+- [x] `DET-003` **Clean + rebuild equality test em filesystem** — `DONE`; um diretório reconstruído com `--clean` sobre um build antigo é byte a byte idêntico a um build feito do zero, manifest incluído · `P0` · `S` · Area: `Testing`
+  - Evidence: [`RebuildEqualityTest`](src/test/java/dev/harpia/RebuildEqualityTest.java), [`DeterminismTest`](src/test/java/dev/harpia/DeterminismTest.java), [`OutputWriterTest`](src/test/java/dev/harpia/emit/OutputWriterTest.java).
 
 ## EPIC — Developer Ownership / Bootstrap Mode
 
@@ -1323,7 +1325,7 @@ Esta é uma visão de cobertura; cada linha aponta para um item canônico e não
 | Capacidade | Item canônico | Estado |
 |---|---|---|
 | Target API e catálogo | `TARGET-001`, `TARGET-002`, `TARGET-014` | `DONE` |
-| Registro externo completo | `TARGET-003` | `PARTIAL` |
+| Registro externo completo | `TARGET-003` | `DONE` |
 | Target SDK/community targets/conformance | `TARGET-013`, `TARGET-015` | `PARTIAL` / `TODO` |
 | Provider SPI/community providers | `TARGET-016` | `TODO` |
 | Plugin architecture | `TARGET-017` | `RESEARCH` |
@@ -1353,9 +1355,9 @@ referência Spring, Determinism e Extensibility não são contadas novamente.
 
 | Status | Items |
 |---|---:|
-| `DONE` | 127 |
-| `PARTIAL` | 43 |
-| `TODO` | 290 |
+| `DONE` | 142 |
+| `PARTIAL` | 34 |
+| `TODO` | 284 |
 | `BLOCKED` | 0 |
 | `RESEARCH` | 56 |
 | `NOT_SUPPORTED` | 10 |
@@ -1363,10 +1365,10 @@ referência Spring, Determinism e Extensibility não são contadas novamente.
 | `WONT_DO` | 9 |
 | **Total** | **546** |
 
-- Completion bruto: **127 / 546 = 23,3%**.
+- Completion bruto: **142 / 546 = 26,0%**.
 - Universo implementável atual, excluindo `NOT_SUPPORTED`, `CUSTOM` e `WONT_DO`: **516 itens**.
-- Completion estrito nesse universo: **127 / 516 = 24,6%**.
-- Progresso ponderado nesse universo, contando `PARTIAL` como 0,5: **28,8%**.
+- Completion estrito nesse universo: **142 / 516 = 27,5%**.
+- Progresso ponderado nesse universo, contando `PARTIAL` como 0,5: **30,8%**.
 
 Esses percentuais medem apenas este backlog enumerado; não representam uma porcentagem universal
 de tudo que um backend ou o ecossistema Spring pode fazer.
@@ -1377,18 +1379,18 @@ de tudo que um backend ou o ecossistema Spring pode fazer.
 
 | Area | Total | Done | Partial | Todo | Research | Not Supported | Custom | Won't Do |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Language Core | 39 | 27 | 6 | 6 | 0 | 0 | 0 | 0 |
+| Language Core | 39 | 32 | 3 | 4 | 0 | 0 | 0 | 0 |
 | Domain | 31 | 7 | 0 | 24 | 0 | 0 | 0 | 0 |
 | Logic | 26 | 11 | 1 | 14 | 0 | 0 | 0 | 0 |
-| API | 41 | 14 | 5 | 19 | 3 | 0 | 0 | 0 |
+| API | 41 | 17 | 3 | 18 | 3 | 0 | 0 | 0 |
 | Persistence | 51 | 11 | 7 | 22 | 11 | 0 | 0 | 0 |
-| Integration | 34 | 0 | 6 | 24 | 4 | 0 | 0 | 0 |
+| Integration | 34 | 5 | 2 | 23 | 4 | 0 | 0 | 0 |
 | Messaging | 30 | 0 | 0 | 28 | 2 | 0 | 0 | 0 |
 | Security | 25 | 1 | 4 | 15 | 5 | 0 | 0 | 0 |
 | Java/Spring Target | 58 | 26 | 2 | 20 | 10 | 0 | 0 | 0 |
 | Multi-target | 25 | 13 | 2 | 0 | 0 | 10 | 0 | 0 |
 | Testing | 19 | 7 | 2 | 10 | 0 | 0 | 0 | 0 |
-| CLI/DX | 28 | 4 | 6 | 18 | 0 | 0 | 0 | 0 |
+| CLI/DX | 28 | 6 | 6 | 16 | 0 | 0 | 0 | 0 |
 | MCP | 26 | 0 | 0 | 25 | 1 | 0 | 0 | 0 |
 | Brownfield | 17 | 0 | 0 | 15 | 2 | 0 | 0 | 0 |
 | Runtime | 44 | 0 | 0 | 31 | 13 | 0 | 0 | 0 |
@@ -1396,43 +1398,43 @@ de tudo que um backend ou o ecossistema Spring pode fazer.
 | Ownership | 8 | 6 | 0 | 1 | 1 | 0 | 0 | 0 |
 | Extensibility | 20 | 0 | 0 | 7 | 2 | 0 | 11 | 0 |
 | Scope | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 9 |
-| **Total** | **546** | **127** | **43** | **290** | **56** | **10** | **11** | **9** |
+| **Total** | **546** | **142** | **34** | **284** | **56** | **10** | **11** | **9** |
 
 ## Top 10 Next Features
 
 Ordem baseada em alavancagem arquitetural, compressão semântica, frequência, experiência de
 humanos/agentes e dependências desbloqueadas — não apenas em interesse técnico.
 
-1. **Project AST explícita** (`CORE-008`) — cria uma unidade estável para tooling, MCP e linguagem V1.
-2. **Symbol Table global em duas passagens** (`CORE-009`) — desbloqueia todos os símbolos e referências V1.
-3. **SourceRange/source mapping + inspect** (`CORE-016`, `CORE-026`) — torna inferências e diagnostics auditáveis.
-4. **Versão da linguagem independente** (`CORE-018`) — permite evoluir grammar/semântica sem confundir Java/config.
-5. **Command e Query explícitos, independentes de HTTP** (`CMD-001`, `QUERY-001`) — remove o maior acoplamento do V0.
-6. **Binding AST/model/parser/resolver** (`BIND-001`–`BIND-004`) — separa comportamento de transporte/provider.
-7. **Rule e Invariant tipadas** (`RULE-001`, `RULE-002`) — alta compressão de comportamento de negócio recorrente.
-8. **ValueObject e Enum nominais** (`TYPE-024`, `TYPE-020`) — amplia domain modeling sem introduzir infraestrutura.
-9. **Custom Java escape hatch completo** (`CUSTOM-001`–`CUSTOM-004`) — evita expandir a DSL para casos sem compressão.
-10. **MCP M1 read-only/STDIO** (`MCP-001`, `MCP-002`, `MCP-007`–`MCP-012`) — prova o fluxo agent-native sobre o mesmo core.
+Concluídos desta lista: HTTP binding com base URL e os quatro mappings (`BIND-006`, parcial),
+`RULE-001`, `TYPE-020`, `TYPE-024`, `CORE-016`, `CMD-004`, `API-009` e `DET-003`.
 
-Depois desses itens: Flow `call`/`require`, Scenario, Event local e schema evolution são os próximos
-slices naturais, respectivamente `FLOW-014`, `FLOW-012`, `TEST-001`, `EVENT-005` e `DBEV-001`.
+1. **Diretório custom protegido** (`CUSTOM-003`) — o contrato já é gerado; falta garantir por teste que `custom/` nunca entra no manifesto nem é limpo.
+2. **Invariant** (`RULE-002`) — a condição tipada já existe; falta o escopo da entidade e o momento em que ela vale.
+3. **Containers no type system** (`TYPE-021` `List<T>`, `TYPE-022` `Optional<T>`, `TYPE-025` `Page<T>`) — a álgebra de tipo de campo já é selada; containers são a extensão natural.
+4. **`Reference<T>` e relacionamentos** (`TYPE-023`, `DOM-012`) — primeiro caso em que um campo aponta para outra entidade.
+5. **MCP M1 read-only/STDIO** (`MCP-001`, `MCP-002`, `MCP-007`–`MCP-012`) — prova o fluxo agent-native sobre o mesmo core e é o único desbloqueio de `MCP-020`, o último P0 aberto.
+6. **Flow `fail`, `call` e `require`** (`FLOW-013`, `FLOW-014`, `FLOW-012`) — `fail` fecha `CMD-004`, cujo tipo já é gerado e mapeado.
+7. **Content negotiation e response mapping** (`BIND-007`) — fecha o que resta de `BIND-006`.
+8. **Especialização Command/Query no target** (`JAVA-004`) — a natureza declarada já chega ao gerador; falta usá-la além da forma CRUD.
+9. **Generalização de escopos/referências** (`CORE-010`, `CORE-011`) — estende a resolução pronta aos novos kinds V1.
+
+Depois desses itens: Scenario, Event local e schema evolution são os próximos slices naturais,
+respectivamente `TEST-001`, `EVENT-005` e `DBEV-001`.
 
 ## Most Important Architectural Gaps
 
-1. `List<SpecAst>` ainda não é uma Project AST, e a tabela de símbolos é fragmentada.
-2. `SourceRef` não modela ranges/related locations nem mapeamento detalhado para o código gerado.
-3. Language version ainda não existe como dimensão separada de config/compiler/target.
-4. Use cases V0 exigem Endpoint; Command/Query ainda não existem independentemente de transporte.
-5. O Binding System formal ainda não existe; o `HttpBinding` atual é pequeno e inline.
-6. O type system global continua um enum de dez escalares; nominais e containers estão ausentes.
-7. `TargetRegistry` aceita instâncias externas, mas `TargetResolver` ainda consulta o catálogo estático.
-8. Migrations geram apenas `V1__init.sql`; não há snapshot, diff ou evolução segura.
-9. O escape hatch Custom Java está documentado, mas não possui contrato/preservação/DI implementados.
-10. MCP e brownfield não possuem implementação; são backlog, não capacidades atuais.
+1. O Binding System formal cobre HTTP externo com base URL e mappings de path/query/header/body; falta content negotiation e outros kinds.
+3. O type system de campo é álgebra selada com Enum e ValueObject; faltam containers (`List`/`Optional`/`Page`) e referências tipadas.
+4. `SourceRef` e related locations têm ranges, mas ainda falta source mapping por símbolo/linha gerada.
+5. `TargetRegistry` aceita instâncias externas, mas `TargetResolver` ainda consulta o catálogo estático.
+6. Migrations geram apenas `V1__init.sql`; não há snapshot, diff ou evolução segura.
+7. O escape hatch Custom Java está documentado, mas não possui contrato/preservação/DI implementados.
+8. MCP e brownfield não possuem implementação; são backlog, não capacidades atuais.
 
 ## Features Already Strong
 
 - Ingestão UTF-8, descoberta segura multi-file, CommonMark estrutural e diagnostics determinísticos.
+- Versionamento explícito e separado para schema de config, linguagem Harpia e linguagem do target.
 - Entity/CRUD V0 completo até DTO, service, controller, error mapping, JPA, repository e Flyway.
 - Harpia Logic L1/L2 com AST tipada, pureza, escopos, inferência, chamadas e Java executado em teste.
 - Business IR → Application IR → target transformer → Java Target Model → renderer.
@@ -1445,22 +1447,22 @@ slices naturais, respectivamente `FLOW-014`, `FLOW-012`, `TEST-001`, `EVENT-005`
 
 - Rules/Invariants/Policies executáveis, ValueObject, Enum, relações, aggregates e lifecycle.
 - Queries reais, filtros, paginação, projections e schema evolution.
-- Binding System, integrations, events, messaging, email, cache e files/storage.
+- Bindings avançados, integrations, events, messaging, email, cache e files/storage.
 - Authentication/authorization, sensitive data, audit, observability e Actuator.
 - Idempotency, reliability distribuída, scheduling, batch, state machine e workflows.
-- Formatter/linter/inspect, semantic diff/impact/explain/why e benchmarks executáveis.
+- Formatter/linter, semantic diff/impact/explain/why e benchmarks executáveis.
 - Custom Java completo, MCP Agent API e brownfield semantic reconstruction.
 - Todos os targets além de Java/Spring.
 
 ## Verification Record
 
 ```text
-Command: mvn -o test
+Command: mvn -o clean test
 Result: BUILD SUCCESS
-Tests run: 238
+Tests run: 330
 Failures: 0
 Errors: 0
 Skipped: 0
-Audited production files: 160 Java files / 12,364 lines
-Audited test files: 46 Java files / 4,800 lines
+Audited production files: 195 Java files / 15,364 lines
+Audited test files: 59 Java files / 7,058 lines
 ```

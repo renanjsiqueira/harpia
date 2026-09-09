@@ -17,6 +17,7 @@ public record ApplicationLogic(
         List<Parameter> parameters,
         LogicType returnType,
         List<TypedStatement> body,
+        java.util.Optional<String> customContract,
         SourceRef where) {
 
     public ApplicationLogic {
@@ -24,6 +25,7 @@ public record ApplicationLogic(
         parameters = List.copyOf(parameters);
         Objects.requireNonNull(returnType, "returnType");
         body = List.copyOf(body);
+        Objects.requireNonNull(customContract, "customContract");
         Objects.requireNonNull(where, "where");
     }
 

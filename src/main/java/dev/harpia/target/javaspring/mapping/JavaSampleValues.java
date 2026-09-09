@@ -1,6 +1,7 @@
 package dev.harpia.target.javaspring.mapping;
 
 import dev.harpia.application.ApplicationField;
+import dev.harpia.application.ApplicationFieldType;
 import dev.harpia.application.ApplicationScalarType;
 import java.util.Objects;
 import java.util.Optional;
@@ -25,7 +26,20 @@ public final class JavaSampleValues {
     /** The value as a Java expression. */
     public static String java(ApplicationField field) {
         Objects.requireNonNull(field, "field");
-        return switch (field.type()) {
+        Optional<String> declared = field.enumTypeName();
+        if (declared.isPresent()) {
+            return declared.orElseThrow() + "." + enumSample(field);
+        }
+        if (field.valueType().isPresent()) {
+            ApplicationFieldType.ValueType value = field.valueType().orElseThrow();
+            return "new " + value.name() + "("
+                    + value.components().stream()
+                            .map(JavaSampleValues::java)
+                            .reduce((left, right) -> left + ", " + right)
+                            .orElse("")
+                    + ")";
+        }
+        return switch (field.scalarType()) {
             case STRING, TEXT -> "\"" + text(field) + "\"";
             case EMAIL -> "\"" + text(field) + "\"";
             case INT -> "1";
@@ -41,7 +55,17 @@ public final class JavaSampleValues {
     /** The same value as a JSON literal, for a request body. */
     public static String json(ApplicationField field) {
         Objects.requireNonNull(field, "field");
-        return switch (field.type()) {
+        if (field.valueType().isPresent()) {
+            ApplicationFieldType.ValueType value = field.valueType().orElseThrow();
+            return "{" + value.components().stream()
+                    .map(component -> "\\\"" + component.name() + "\\\":" + json(component))
+                    .reduce((left, right) -> left + "," + right)
+                    .orElse("") + "}";
+        }
+        if (field.enumTypeName().isPresent()) {
+            return "\\\"" + enumSample(field) + "\\\"";
+        }
+        return switch (field.scalarType()) {
             case STRING, TEXT, EMAIL -> "\\\"" + text(field) + "\\\"";
             case INT, LONG -> "1";
             case DECIMAL -> "1.00";
@@ -50,6 +74,46 @@ public final class JavaSampleValues {
             case DATE -> "\\\"" + DATE_VALUE + "\\\"";
             case DATE_TIME -> "\\\"" + DATE_TIME_VALUE + "\\\"";
         };
+    }
+
+    /**
+     * The same value as plain request text, for a query parameter or a header.
+     *
+     * <p>A query parameter is not JSON: quoting it as a JSON literal would send the quotes as part
+     * of the value, and an {@code Email} constraint would then reject the happy path.
+     */
+    public static String plain(ApplicationField field) {
+        Objects.requireNonNull(field, "field");
+        return switch (field.scalarType()) {
+            case STRING, TEXT, EMAIL -> text(field);
+            case INT, LONG -> "1";
+            case DECIMAL -> "1.00";
+            case BOOLEAN -> "true";
+            case UUID -> UUID_VALUE;
+            case DATE -> DATE_VALUE;
+            case DATE_TIME -> DATE_TIME_VALUE;
+        };
+    }
+
+    /**
+     * The import a field's sample value needs, when it needs one.
+     *
+     * <p>A declared type lives in the domain package, which a scalar never does, so the field is
+     * asked rather than its scalar kind.
+     */
+    public static java.util.List<String> requiredImports(
+            ApplicationField field, String domainPackage) {
+        Objects.requireNonNull(field, "field");
+        Objects.requireNonNull(domainPackage, "domainPackage");
+        java.util.List<String> imports = new java.util.ArrayList<>();
+        field.declaredType().ifPresent(name -> imports.add(domainPackage + "." + name));
+        // Building a value's sample means naming its components' types too.
+        field.valueType().ifPresent(value -> value.components()
+                .forEach(component -> imports.addAll(requiredImports(component, domainPackage))));
+        if (field.declaredType().isEmpty()) {
+            requiredImport(field.scalarType()).ifPresent(imports::add);
+        }
+        return java.util.List.copyOf(imports);
     }
 
     /** The import a Java sample value needs, when it needs one. */
@@ -63,8 +127,17 @@ public final class JavaSampleValues {
         };
     }
 
+    /** The sample constant of a declared enum, which the field itself cannot know. */
+    private static String enumSample(ApplicationField field) {
+        return field.enumValues().stream()
+                .findFirst()
+                .map(JavaTypeMapper::enumConstant)
+                .orElseThrow(() -> new IllegalStateException(
+                        "enum field '" + field.name() + "' has no values"));
+    }
+
     private static String text(ApplicationField field) {
-        return field.type() == ApplicationScalarType.EMAIL
+        return field.scalarType() == ApplicationScalarType.EMAIL
                 ? field.name() + "@example.com"
                 : field.name();
     }

@@ -35,7 +35,7 @@ public class CustomerController {
     }
 
     @GetMapping("/customers/{id}")
-    public ResponseEntity<CustomerResponse> getCustomer(@PathVariable UUID id) {
+    public ResponseEntity<CustomerResponse> getCustomer(@PathVariable("id") UUID id) {
         return ResponseEntity.status(200).body(service.getCustomer(id));
     }
 
@@ -45,12 +45,12 @@ public class CustomerController {
     }
 
     @PutMapping("/customers/{id}")
-    public ResponseEntity<CustomerResponse> updateCustomer(@PathVariable UUID id, @Valid @RequestBody UpdateCustomerRequest request) {
+    public ResponseEntity<CustomerResponse> updateCustomer(@PathVariable("id") UUID id, @Valid @RequestBody UpdateCustomerRequest request) {
         return ResponseEntity.status(200).body(service.updateCustomer(id, request));
     }
 
     @DeleteMapping("/customers/{id}")
-    public ResponseEntity<Void> deleteCustomer(@PathVariable UUID id) {
+    public ResponseEntity<Void> deleteCustomer(@PathVariable("id") UUID id) {
         service.deleteCustomer(id);
         return ResponseEntity.status(204).build();
     }

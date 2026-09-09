@@ -7,7 +7,12 @@ import java.util.Optional;
 public final class JavaDefaultValueMapper {
 
     public Optional<String> map(ApplicationField field) {
-        return field.defaultValue().map(literal -> switch (field.type()) {
+        if (field.enumTypeName().isPresent()) {
+            return field.defaultValue()
+                    .map(literal -> field.enumTypeName().orElseThrow() + "."
+                            + JavaTypeMapper.enumConstant(literal));
+        }
+        return field.defaultValue().map(literal -> switch (field.scalarType()) {
             case BOOLEAN, INT -> literal;
             case LONG -> literal + "L";
             case DECIMAL -> "new BigDecimal(" + quoted(literal) + ")";

@@ -19,6 +19,8 @@ import dev.harpia.model.FieldModel;
 import dev.harpia.model.FlowModel;
 import dev.harpia.model.FlowStep;
 import dev.harpia.model.LogicModel;
+import dev.harpia.model.HttpBinding;
+import dev.harpia.model.OperationNature;
 import dev.harpia.model.ScenarioModel;
 import dev.harpia.model.OutputModel;
 import dev.harpia.model.ProjectModel;
@@ -44,6 +46,18 @@ public final class ApplicationModelBuilder {
         Objects.requireNonNull(capabilities, "capabilities");
         return new ApplicationProject(
                 settings,
+                business.enums().stream()
+                        .map(source -> new ApplicationEnum(
+                                source.name(), source.values(), source.where()))
+                        .toList(),
+                business.values().stream()
+                        .map(source -> new ApplicationValue(
+                                source.name(),
+                                source.components().stream()
+                                        .map(ApplicationModelBuilder::field)
+                                        .toList(),
+                                source.where()))
+                        .toList(),
                 business.entities().stream().map(ApplicationModelBuilder::entity).toList(),
                 business.logics().stream().map(ApplicationModelBuilder::logic).toList(),
                 business.scenarios().stream().map(ApplicationModelBuilder::scenario).toList(),
@@ -73,6 +87,7 @@ public final class ApplicationModelBuilder {
                         .toList(),
                 source.returnType(),
                 source.body(),
+                source.customContract(),
                 source.where());
     }
 
@@ -95,8 +110,24 @@ public final class ApplicationModelBuilder {
                 source.where());
     }
 
+    private static ApplicationFieldType nominal(dev.harpia.model.FieldType type) {
+        dev.harpia.model.FieldType.Nominal declared =
+                (dev.harpia.model.FieldType.Nominal) type;
+        return switch (declared.kind()) {
+            case ENUM -> ApplicationFieldType.enumeration(declared.name(), declared.values());
+            case VALUE -> ApplicationFieldType.value(
+                    declared.name(),
+                    declared.components().stream()
+                            .map(ApplicationModelBuilder::field)
+                            .toList());
+        };
+    }
+
     private static ApplicationField field(FieldModel source) {
-        ApplicationScalarType type = ApplicationScalarType.valueOf(source.type().name());
+        ApplicationFieldType type = source.type().scalarKind()
+                .<ApplicationFieldType>map(scalar ->
+                        ApplicationFieldType.scalar(ApplicationScalarType.valueOf(scalar.name())))
+                .orElseGet(() -> nominal(source.type()));
         return new ApplicationField(
                 source.name(),
                 SqlNaming.identifier(source.name()),
@@ -119,20 +150,68 @@ public final class ApplicationModelBuilder {
         return new ApplicationOperation(
                 source.title(),
                 lowerFirst(source.baseName()),
+                source.nature(),
                 kind,
-                new Endpoint(
-                        HttpMethod.valueOf(source.http().method().name()),
-                        source.http().path(),
-                        source.http().hasIdPathVariable(),
-                        Access.PUBLIC),
+                source.http().map(binding -> new Endpoint(
+                        HttpMethod.valueOf(binding.method().name()),
+                        binding.baseUrl(),
+                        binding.path(),
+                        binding.hasIdPathVariable(),
+                        Access.valueOf(binding.access().name()),
+                        binding.request().stream()
+                                .map(ApplicationModelBuilder::requestMapping)
+                                .toList(),
+                        responseMapping(binding.response()),
+                        binding.where(),
+                        binding.endpointWhere())),
                 input.isEmpty() ? Optional.empty() : Optional.of(source.baseName() + "Request"),
                 input,
+                source.rules().stream()
+                        .map(rule -> new ApplicationRule(
+                                rule.text(), rule.condition(), rule.where()))
+                        .toList(),
                 flow,
                 variables(source.flow()),
                 result(source.output(), entityName),
                 source.errors().stream().map(ApplicationModelBuilder::failure).toList(),
-                kind == Kind.CREATE || kind == Kind.UPDATE || kind == Kind.DELETE,
+                transactional(source.nature(), kind),
                 source.where());
+    }
+
+    private static ApplicationOperation.RequestMapping requestMapping(
+            HttpBinding.RequestMapping mapping) {
+        return switch (mapping) {
+            case HttpBinding.Path value -> new ApplicationOperation.Path(
+                    value.input(), value.parameter(), value.where());
+            case HttpBinding.Query value -> new ApplicationOperation.Query(
+                    value.input(), value.parameter(), value.where());
+            case HttpBinding.Header value -> new ApplicationOperation.Header(
+                    value.input(), value.header(), value.where());
+            case HttpBinding.Body value ->
+                    new ApplicationOperation.Body(value.input(), value.where());
+        };
+    }
+
+    private static ApplicationOperation.ResponseMapping responseMapping(
+            HttpBinding.ResponseMapping mapping) {
+        return switch (mapping) {
+            case HttpBinding.ResponseBody value ->
+                    new ApplicationOperation.ResponseBody(value.output(), value.where());
+            case HttpBinding.NoResponse value ->
+                    new ApplicationOperation.NoResponse(value.where());
+        };
+    }
+
+    /**
+     * A declared Command writes and a declared Query reads, whatever their steps happen to be.
+     * Only a V0 heading, which declares nothing, still has its boundary inferred from the flow.
+     */
+    private static boolean transactional(OperationNature nature, Kind kind) {
+        return switch (nature) {
+            case COMMAND -> true;
+            case QUERY -> false;
+            case INFERRED -> kind == Kind.CREATE || kind == Kind.UPDATE || kind == Kind.DELETE;
+        };
     }
 
     private static Kind operationKind(List<FlowStep> steps) {
@@ -237,8 +316,10 @@ public final class ApplicationModelBuilder {
                     case INVALID_INPUT -> FailureCondition.INVALID_INPUT;
                     case DUPLICATE -> FailureCondition.DUPLICATE;
                     case NOT_FOUND -> FailureCondition.NOT_FOUND;
+                    case DOMAIN -> FailureCondition.DOMAIN;
                 },
                 source.field(),
+                source.name(),
                 source.status(),
                 source.where());
     }

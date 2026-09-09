@@ -7,16 +7,19 @@ import com.example.customer.dto.CustomerResponse;
 import com.example.customer.dto.UpdateCustomerRequest;
 import com.example.customer.error.NotFoundException;
 import com.example.customer.repository.CustomerRepository;
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Application service generated from the Harpia use cases of Customer.
  */
 @Service
+@Validated
 public class CustomerService {
 
     private final CustomerRepository repository;
@@ -26,7 +29,7 @@ public class CustomerService {
     }
 
     @Transactional
-    public CustomerResponse createCustomer(CreateCustomerRequest request) {
+    public CustomerResponse createCustomer(@Valid CreateCustomerRequest request) {
         Customer customer = new Customer();
         customer.setName(request.name());
         customer.setEmail(request.email());
@@ -48,7 +51,7 @@ public class CustomerService {
     }
 
     @Transactional
-    public CustomerResponse updateCustomer(UUID id, UpdateCustomerRequest request) {
+    public CustomerResponse updateCustomer(UUID id, @Valid UpdateCustomerRequest request) {
         Customer customer = repository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Customer", id));
         customer.setName(request.name());

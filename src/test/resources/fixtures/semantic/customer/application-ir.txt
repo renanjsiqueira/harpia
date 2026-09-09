@@ -8,7 +8,7 @@ Application customer-service
     Column name: STRING required
     Column email: EMAIL required unique
     Column active: BOOLEAN required
-    Operation createCustomer kind=CREATE transactional=true
+    Operation createCustomer nature=INFERRED kind=CREATE transactional=true
       HttpOperation POST /customers access=PUBLIC
       RequestModel CreateCustomerRequest
       Result 201 ENTITY CustomerResponse
@@ -18,18 +18,18 @@ Application customer-service
       Instruction RETURN
       Failure INVALID_INPUT -> 400
       Failure DUPLICATE -> 409
-    Operation getCustomer kind=READ transactional=false
+    Operation getCustomer nature=INFERRED kind=READ transactional=false
       HttpOperation GET /customers/{id} access=PUBLIC
       Result 200 ENTITY CustomerResponse
       Instruction LOAD_BY_ID
       Instruction RETURN
       Failure NOT_FOUND -> 404
-    Operation listCustomers kind=LIST transactional=false
+    Operation listCustomers nature=INFERRED kind=LIST transactional=false
       HttpOperation GET /customers access=PUBLIC
       Result 200 LIST CustomerResponse
       Instruction LIST_ALL
       Instruction RETURN
-    Operation updateCustomer kind=UPDATE transactional=true
+    Operation updateCustomer nature=INFERRED kind=UPDATE transactional=true
       HttpOperation PUT /customers/{id} access=PUBLIC
       RequestModel UpdateCustomerRequest
       Result 200 ENTITY CustomerResponse
@@ -41,7 +41,7 @@ Application customer-service
       Failure INVALID_INPUT -> 400
       Failure NOT_FOUND -> 404
       Failure DUPLICATE -> 409
-    Operation deleteCustomer kind=DELETE transactional=true
+    Operation deleteCustomer nature=INFERRED kind=DELETE transactional=true
       HttpOperation DELETE /customers/{id} access=PUBLIC
       Result 204 NOTHING
       Instruction LOAD_BY_ID

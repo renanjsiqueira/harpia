@@ -28,11 +28,23 @@ public final class ErrorCodes {
     public static final String SYNTAX_USE_CASE_TITLE = "HRP1009";
     public static final String SYNTAX_ENDPOINT = "HRP1010";
 
+    // --- HRP12xx: external binding syntax ----------------------------------------------------
+    /** Malformed external binding file or declaration heading. */
+    public static final String SYNTAX_BINDING_FILE = "HRP1201";
+    /** Missing, repeated or malformed section of an external binding. */
+    public static final String SYNTAX_BINDING_SECTION = "HRP1202";
+
     // --- HRP11xx: Harpia Logic syntax ---------------------------------------------------------
     /** Malformed {@code ## Logic Name} declaration or its subsections. */
     public static final String SYNTAX_LOGIC_SECTION = "HRP1101";
     /** Malformed {@code ## Scenario Title} declaration or its subsections. */
     public static final String SYNTAX_SCENARIO_SECTION = "HRP1106";
+    /** A declaration this language version does not know, but a later one does. */
+    public static final String SYNTAX_DECLARATION_TOO_NEW = "HRP1107";
+    /** An enum heading or one of its values is malformed. */
+    public static final String SYNTAX_ENUM_VALUE = "HRP1108";
+    /** A value heading or one of its fields is malformed. */
+    public static final String SYNTAX_VALUE_FIELD = "HRP1109";
     /** Indentation inside a {@code logic} block is not a multiple of four spaces. */
     public static final String SYNTAX_LOGIC_INDENT = "HRP1102";
     /** A character or word that does not belong to the Harpia Logic lexicon. */
@@ -100,6 +112,24 @@ public final class ErrorCodes {
     public static final String SEMANTIC_SCENARIO_VALUE = "HRP2118";
     /** Tests were requested but a computation declares no scenario. Warning. */
     public static final String SEMANTIC_SCENARIO_MISSING = "HRP2119";
+    /** A Query declares a flow step that mutates state. */
+    public static final String SEMANTIC_QUERY_MUTATES = "HRP2120";
+    /** The same domain error is declared with two different statuses. */
+    public static final String SEMANTIC_ERROR_STATUS_CONFLICT = "HRP2121";
+    /** An operation declares rules but no input for them to constrain. */
+    public static final String SEMANTIC_RULE_WITHOUT_INPUT = "HRP2122";
+    /** A field names a type no declaration in the project provides. */
+    public static final String SEMANTIC_UNKNOWN_TYPE = "HRP2123";
+    /** A scenario targets a computation whose implementation Harpia does not own. */
+    public static final String SEMANTIC_SCENARIO_CUSTOM = "HRP2124";
+
+    // --- HRP22xx: external binding semantics -------------------------------------------------
+    /** A binding references an operation that is not declared. */
+    public static final String SEMANTIC_BINDING_OPERATION = "HRP2201";
+    /** More than one binding attempts to expose the same operation. */
+    public static final String SEMANTIC_DUPLICATE_BINDING = "HRP2202";
+    /** A request or response mapping does not match the bound operation contract. */
+    public static final String SEMANTIC_BINDING_MAPPING = "HRP2203";
 
     // --- HRP3xxx: configuration ---------------------------------------------------------------
     /** {@code harpia.yaml} is missing. Exit 2. */
@@ -112,7 +142,7 @@ public final class ErrorCodes {
     public static final String CONFIG_INVALID_PACKAGE = "HRP3004";
     /** {@code specs/} missing or without {@code *.harpia.md}. Exit 2. */
     public static final String CONFIG_NO_SPECS = "HRP3005";
-    /** {@code harpia:} missing or different from 1. */
+    /** {@code harpia.schemaVersion} is missing or not supported. */
     public static final String CONFIG_SCHEMA_VERSION = "HRP3006";
     /** Value outside M1 support. */
     public static final String CONFIG_UNSUPPORTED_VALUE = "HRP3007";
@@ -120,6 +150,8 @@ public final class ErrorCodes {
     public static final String CONFIG_MISSING_KEY = "HRP3008";
     /** A legacy configuration shape that still works but will be removed. Warning. */
     public static final String CONFIG_DEPRECATED = "HRP3009";
+    /** {@code harpia.languageVersion} is not implemented by this compiler. */
+    public static final String CONFIG_LANGUAGE_VERSION = "HRP3010";
 
     // --- HRP4xxx: out of MVP scope ------------------------------------------------------------
     /** Authentication requested (capability or {@code ### Access: authenticated}). */
@@ -136,9 +168,9 @@ public final class ErrorCodes {
     public static final String IO_FAILURE = "HRP5002";
     /** Source file is not valid UTF-8. */
     public static final String IO_NOT_UTF8 = "HRP5003";
-    /** A resolved path escapes {@code paths.output} (or {@code paths.specs}). Exit 2. */
+    /** A resolved path escapes output, specs or bindings. Exit 2. */
     public static final String IO_PATH_ESCAPE = "HRP5004";
-    /** Symlink inside {@code specs/}: never followed, ignored with a warning. */
+    /** Symlink inside a source tree: never followed, ignored with a warning. */
     public static final String IO_SYMLINK_IGNORED = "HRP5005";
     /** {@code harpia init} refuses to overwrite an existing target file. Exit 2. */
     public static final String IO_INIT_TARGET_EXISTS = "HRP5006";

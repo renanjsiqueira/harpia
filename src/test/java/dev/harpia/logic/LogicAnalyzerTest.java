@@ -272,7 +272,15 @@ class LogicAnalyzerTest {
                 ```
                 """);
 
-        assertThat(analysis.codes()).containsExactly(ErrorCodes.SEMANTIC_LOGIC_DUPLICATE);
+        assertThat(analysis.codes())
+                .as("a duplicate is visible from either declaration")
+                .containsExactly(
+                        ErrorCodes.SEMANTIC_LOGIC_DUPLICATE, ErrorCodes.SEMANTIC_LOGIC_DUPLICATE);
+        assertThat(analysis.diagnostics())
+                .allSatisfy(diagnostic -> assertThat(diagnostic.related())
+                        .as("the other declaration is a related location, not message text")
+                        .singleElement()
+                        .satisfies(related -> assertThat(related.where().hasPosition()).isTrue()));
     }
 
     @Test

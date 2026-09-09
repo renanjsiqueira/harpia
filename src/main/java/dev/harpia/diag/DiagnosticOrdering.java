@@ -36,7 +36,17 @@ public final class DiagnosticOrdering {
                     .thenComparing(Diagnostic::code)
                     .thenComparing(Diagnostic::message)
                     .thenComparing(d -> d.severity().name())
-                    .thenComparing(d -> d.hint().orElse(""));
+                    .thenComparing(d -> d.hint().orElse(""))
+                    .thenComparing(DiagnosticOrdering::relatedKey);
+
+    /** Related locations join the tie-break so the order stays total. */
+    private static String relatedKey(Diagnostic diagnostic) {
+        return diagnostic.related().stream()
+                .sorted()
+                .map(related -> related.where().describe() + " " + related.message())
+                .reduce((left, right) -> left + "|" + right)
+                .orElse("");
+    }
 
     /** Returns an immutable, sorted copy. The input list is not modified. */
     public static List<Diagnostic> sorted(Collection<Diagnostic> diagnostics) {

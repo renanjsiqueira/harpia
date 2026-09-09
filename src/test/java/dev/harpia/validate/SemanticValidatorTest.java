@@ -2,12 +2,15 @@ package dev.harpia.validate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.harpia.LanguageVersion;
 import dev.harpia.diag.Diagnostic;
 import dev.harpia.diag.DiagnosticCollector;
 import dev.harpia.diag.ErrorCodes;
 import dev.harpia.diag.Severity;
-import dev.harpia.parse.SpecAst;
+import dev.harpia.parse.ModuleAst;
+import dev.harpia.parse.ProjectAst;
 import dev.harpia.parse.SpecParser;
+import dev.harpia.symbol.SymbolTable;
 import dev.harpia.source.SourceFile;
 import java.util.ArrayList;
 import java.util.List;
@@ -156,16 +159,60 @@ class SemanticValidatorTest {
         assertThat(validate(List.of(validCrud("Customer", "/customers")))).isEmpty();
     }
 
+    @Test
+    void aReferenceToAnotherModulesEntityIsDistinguishedFromAnUndeclaredOne() {
+        String customer = spec("Customer", "- id: UUID generated", listUseCase("Customer", "/customers"));
+        String account = spec(
+                "Account",
+                "- id: UUID generated",
+                listUseCaseNamed("List Records", "Customer", "/accounts"));
+
+        List<Diagnostic> diagnostics = validate(List.of(customer, account));
+
+        assertThat(diagnostics)
+                .filteredOn(diagnostic ->
+                        diagnostic.code().equals(ErrorCodes.SEMANTIC_FOREIGN_ENTITY))
+                .singleElement()
+                .satisfies(diagnostic -> {
+                    assertThat(diagnostic.message())
+                            .as("V0 keeps a flow inside the module that declares its entity")
+                            .contains("Harpia 0 keeps a flow inside the module")
+                            .contains("'Customer' is declared elsewhere");
+                    assertThat(diagnostic.related()).singleElement().satisfies(related ->
+                            assertThat(related.where().file())
+                                    .isEqualTo("specs/spec-1.harpia.md"));
+                });
+    }
+
+    @Test
+    void aReferenceToAnEntityNobodyDeclaresSaysSo() {
+        String account = spec(
+                "Account",
+                "- id: UUID generated",
+                listUseCaseNamed("List Records", "Ghost", "/accounts"));
+
+        assertThat(validate(List.of(account)))
+                .filteredOn(diagnostic ->
+                        diagnostic.code().equals(ErrorCodes.SEMANTIC_FOREIGN_ENTITY))
+                .singleElement()
+                .satisfies(diagnostic -> assertThat(diagnostic.message())
+                        .contains("entity 'Ghost' is not declared"));
+    }
+
     private static List<Diagnostic> validate(List<String> sources) {
         DiagnosticCollector diagnostics = new DiagnosticCollector();
-        List<SpecAst> specifications = new ArrayList<>();
+        List<ModuleAst> modules = new ArrayList<>();
         for (int index = 0; index < sources.size(); index++) {
             SourceFile source = new SourceFile(
                     "specs/spec-" + (index + 1) + ".harpia.md", sources.get(index));
-            specifications.add(SpecParser.parse(source, diagnostics).orElseThrow(() ->
+            modules.add(SpecParser.parse(source, LanguageVersion.V0, diagnostics).orElseThrow(() ->
                     new AssertionError("test fixture has syntax errors: " + diagnostics.diagnostics())));
         }
-        SemanticValidator.validate(specifications, diagnostics);
+        ProjectAst project = new ProjectAst(LanguageVersion.V0, modules);
+        SemanticValidator.validate(
+                project,
+                SymbolTable.declare(project, diagnostics),
+                diagnostics);
         return diagnostics.diagnostics();
     }
 

@@ -1,7 +1,8 @@
 # Harpia Language Specification — V1 Draft
 
-Status: proposta arquitetural, **não implementada**. A sintaxe normativa aceita pelo compilador
-continua em [`harpia-language.md`](harpia-language.md).
+Status: **implementação incremental**. `Command` e `Query` já são executáveis em
+`languageVersion: 1`; as demais construções deste documento continuam propostas. A gramática V0
+normativa permanece em [`harpia-language.md`](harpia-language.md).
 
 Este draft transforma a V0 incrementalmente em uma Semantic Software Specification Language sem
 recriar Java e sem invalidar specs existentes antes de haver migração e formatter.
@@ -25,21 +26,26 @@ O formato canônico proposto é:
 
 ```yaml
 harpia:
+  schemaVersion: 1
   languageVersion: 1
 ```
 
-O formato atual:
+O compilador atual usa a mesma dimensão explícita para a gramática V0:
 
 ```yaml
-harpia: 1
+harpia:
+  schemaVersion: 1
+  languageVersion: 0
 ```
 
-é um schema marker legado da fase V0, não uma language version explícita. Durante a série `0.x`, o
-loader deve aceitar os dois formatos, mapear o legado para a gramática V0 e emitir no máximo um
-warning de migração. Não deve existir detecção heurística de versão a partir do conteúdo Markdown.
+`schemaVersion` versiona somente a estrutura de `harpia.yaml`; `languageVersion` seleciona a
+gramática e a semântica Harpia; `target.language.version` continua pertencendo ao target (Java no
+primeiro target pack). O antigo scalar `harpia: 1` foi removido antes da adoção pública, sem camada
+de compatibilidade. Não existe detecção heurística de versão a partir do conteúdo Markdown.
 
-Uma spec V0 válida continua válida sob o modo de compatibilidade. A V1 recomenda Command/Query
-explícitos; os H2 de use case legados continuam reconhecidos até uma versão major documentada.
+`languageVersion: 1` seleciona um registry próprio. Ele acrescenta `Command` e `Query`, mantém H2
+de use case legado como fallback e rejeita construções ainda futuras com diagnóstico estável. Em
+V0, um prefixo que somente a V1 entende é rejeitado, nunca reinterpretado silenciosamente.
 
 ## 3. Unidade de fonte
 
@@ -77,32 +83,52 @@ seja confundida com um caso de uso.
 
 ## 4. Command e Query
 
+Status: **implementado** em `languageVersion: 1`. O que já vale hoje:
+
+- `## Command <Nome>` e `## Query <Nome>` são kinds de declaração próprios;
+- a natureza deixa de ser inferida da forma do flow: um Command é transacional e uma Query é
+  `readOnly` por declaração, não por acaso dos seus passos;
+- uma Query que declara `create`, `update`, `save` ou `delete` é rejeitada com `HRP2120`;
+- `Endpoint` e `Access` formam um binding HTTP inline opcional; se um aparecer, o outro é
+  obrigatório;
+- sem binding HTTP, a operação continua nos IRs e gera service/teste, mas não controller;
+- o H2 sem prefixo continua válido e mantém a inferência V0, então nada já escrito muda de sentido;
+- em `languageVersion: 0`, um `## Command X` é recusado com `HRP1107` em vez de ser lido em
+  silêncio como um caso de uso chamado `CommandX`;
+- **uma operação pertence à entidade que seu flow nomeia**, não ao arquivo onde foi escrita. Na V0
+  as duas coincidem por regra; a partir da V1 um `## Command` pode viver num módulo próprio e operar
+  sobre entidade declarada em outro arquivo. Uma operação que nomeia duas entidades é recusada, e
+  uma entidade que nenhuma operação do projeto toca continua sendo reportada como órfã.
+
 ```ebnf
 command-declaration = h2, sp, "Command", sp, symbol-name, newline,
-                      [ endpoint-section ], [ access-section ],
+                      [ endpoint-section, access-section ],
                       [ input-section ], [ rules-section ],
                       [ implementation-section ], flow-section,
                       output-section, [ errors-section ], [ scenarios-section ] ;
 
 query-declaration   = h2, sp, "Query", sp, symbol-name, newline,
-                      [ endpoint-section ], [ access-section ],
+                      [ endpoint-section, access-section ],
                       [ input-section ], [ rules-section ],
                       [ implementation-section ], flow-section,
                       output-section, [ errors-section ], [ scenarios-section ] ;
 ```
 
-Regras semânticas propostas:
+Regras semânticas implementadas neste slice:
 
 - Command representa mutação e possui transação por default quando usa persistence;
 - Query representa leitura e rejeita `create`, `save`, `delete`, `emit` e `send` por default;
 - Endpoint é um binding opcional; Command/Query não dependem de HTTP;
-- nomes de Command/Query pertencem a namespaces globais distintos;
-- `### Implementation custom X` substitui o flow e gera um contrato Java;
+- nomes de Command/Query pertencem ao namespace global de operações;
 - não se infere endpoint a partir do nome. Se deve existir controller, o endpoint é explícito.
+
+Bindings HTTP em arquivo já seguem a especificação executável
+[`harpia-bindings-v1.md`](harpia-bindings-v1.md). `### Implementation custom X` e os demais itens
+deste draft ainda são propostas.
 
 O comportamento transacional default precisa aparecer em `harpia inspect --stage application-ir`.
 
-## 5. Primeiro slice V1: Command + Event
+## 5. Próximo slice proposto: Command + Event
 
 Forma canônica proposta:
 
@@ -262,21 +288,30 @@ Regras de superfície:
 
 ## 9. Project AST
 
+Status: **fundação implementada para as declarações V0 atuais**. `LanguageVersion` e `SourceIndex`
+serão acrescentados nos próximos slices sem voltar a usar uma lista informal de specs.
+
 ```java
-record ProjectAst(LanguageVersion languageVersion,
-                  List<ModuleAst> modules,
-                  SourceIndex sources) {}
+record ProjectAst(List<ModuleAst> modules) {}
 
-record ModuleAst(SymbolName name,
+record ModuleAst(String file,
+                 String name,
                  List<DeclarationAst> declarations,
-                 SourceRange range) {}
+                 SourceRef where) {}
 
-sealed interface DeclarationAst permits EntityAst, ValueObjectAst, EnumAst,
-        CommandAst, QueryAst, EventAst, IntegrationAst, CustomContractAst, ScenarioAst {}
+sealed interface DeclarationAst permits EntityDeclaration, UseCaseDeclaration,
+        LogicDeclaration, ScenarioDeclaration {}
 ```
 
-`SpecAst` V0 deve ser convertido por um adapter para `ModuleAst`, permitindo migração incremental
-sem duplicar todas as gramáticas existentes.
+`ProjectAst` ordena módulos por source path; `ModuleAst` preserva a ordem das declarações. O antigo
+root `SpecAst` foi substituído por esses containers e permanece apenas como namespace dos nós V0
+menores. O `DeclarationParserRegistry` despacha `Data`, `Logic`, `Scenario` e o fallback de use case
+por `DeclarationKind`, permitindo adicionar os kinds V1 sem transformar `SpecParser` em um parser
+monolítico.
+
+A forma alvo ainda acrescentará `LanguageVersion`, `SourceIndex`, nomes tipados e os nós V1
+`ValueObjectAst`, `EnumAst`, `CommandAst`, `QueryAst`, `EventAst`, `IntegrationAst` e
+`CustomContractAst` conforme cada slice for implementado.
 
 ## 10. SymbolTable
 
@@ -313,14 +348,22 @@ referência ambígua. A regra conservadora inicial é unicidade por namespace em
 
 Modelo proposto:
 
+Implementado com uma diferença deliberada em relação ao esboço original:
+
 ```java
-record SourcePosition(int line, int column, int offset) {}
-record SourceRange(String file, SourcePosition start, SourcePosition end) {}
-record RelatedLocation(String message, SourceRange range) {}
+record SourceRef(String file, int line, int column, Optional<Position> end) {}
+record Position(int line, int column) {}
+record RelatedLocation(String message, SourceRef where) {}
 ```
 
+O fim vive no mesmo `SourceRef` em vez de um `SourceRange` separado, porque um tipo paralelo
+obrigaria a reescrever todo produtor de localização do compilador para ganhar uma coordenada. O
+`offset` não entrou: nada o consome ainda, e enfiar um valor que ninguém lê contraria a regra de não
+gerar código sem consumidor. Ele volta quando existir LSP ou source map.
+
 - linhas/colunas continuam 1-indexadas e contam code points Unicode;
-- `end` é exclusivo;
+- `end` é exclusivo e opcional: a maioria das posições nasce de um ponto, e inventar um fim seria
+  mentira;
 - offsets são relativos ao source UTF-16 normalizado apenas internamente, nunca exibidos como
   coluna sem conversão;
 - `SourceRef` permanece como adapter de início durante a migração;
@@ -446,4 +489,3 @@ Uma keyword sai de draft somente quando o mesmo change set contém:
 9. golden test;
 10. compilação/teste Maven do projeto gerado;
 11. atualização de `LANGUAGE_COVERAGE.md` e SKILL.md.
-

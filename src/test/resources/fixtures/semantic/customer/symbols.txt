@@ -1,12 +1,12 @@
 Namespace types
-  Customer
+  Customer  [specs/customer.harpia.md]
 Namespace operations
-  CreateCustomer
-  DeleteCustomer
-  GetCustomer
-  ListCustomers
-  UpdateCustomer
+  CreateCustomer  [specs/customer.harpia.md]
+  GetCustomer  [specs/customer.harpia.md]
+  ListCustomers  [specs/customer.harpia.md]
+  UpdateCustomer  [specs/customer.harpia.md]
+  DeleteCustomer  [specs/customer.harpia.md]
 Namespace computations
   (empty)
-Namespace scenarios
+Namespace tests
   (empty)

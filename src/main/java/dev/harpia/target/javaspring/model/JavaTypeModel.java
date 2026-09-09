@@ -16,6 +16,7 @@ public record JavaTypeModel(
         Optional<String> documentation,
         List<JavaAnnotationModel> annotations,
         List<JavaImportModel> explicitImports,
+        List<String> constants,
         List<JavaTypeRef> superTypes,
         List<JavaFieldModel> fields,
         List<JavaConstructorModel> constructors,
@@ -31,6 +32,10 @@ public record JavaTypeModel(
         Objects.requireNonNull(documentation, "documentation");
         annotations = List.copyOf(annotations);
         explicitImports = explicitImports.stream().sorted().distinct().toList();
+        constants = List.copyOf(constants);
+        if (!constants.isEmpty() && kind != Kind.ENUM) {
+            throw new IllegalArgumentException("only an enum declares constants: " + name);
+        }
         superTypes = List.copyOf(superTypes);
         fields = List.copyOf(fields);
         constructors = List.copyOf(constructors);
@@ -38,10 +43,30 @@ public record JavaTypeModel(
         Objects.requireNonNull(source, "source");
     }
 
+    /** A type that declares no constants, which is every kind but an enum. */
+    public JavaTypeModel(
+            Kind kind,
+            String packageName,
+            String name,
+            JavaVisibility visibility,
+            Set<JavaModifier> modifiers,
+            Optional<String> documentation,
+            List<JavaAnnotationModel> annotations,
+            List<JavaImportModel> explicitImports,
+            List<JavaTypeRef> superTypes,
+            List<JavaFieldModel> fields,
+            List<JavaConstructorModel> constructors,
+            List<JavaMethodModel> methods,
+            Optional<SourceRef> source) {
+        this(kind, packageName, name, visibility, modifiers, documentation, annotations,
+                explicitImports, List.of(), superTypes, fields, constructors, methods, source);
+    }
+
     public enum Kind {
         CLASS("class"),
         INTERFACE("interface"),
-        RECORD("record");
+        RECORD("record"),
+        ENUM("enum");
 
         private final String keyword;
 

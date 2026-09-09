@@ -6,7 +6,7 @@ import java.util.Optional;
 
 public record FieldModel(
         String name,
-        TypeRef type,
+        FieldType type,
         boolean required,
         boolean unique,
         boolean generated,

@@ -64,10 +64,10 @@ class ApplicationLayerTransformerTest {
     }
 
     @Test
-    void validateInputProducesNoServiceStatementAndMarksTheBodyInstead() {
+    void validateInputMarksBothServiceAndHttpBoundaries() {
         assertThat(service())
-                .as("validation is enforced at the HTTP boundary, not inside the flow")
-                .doesNotContain("validate");
+                .contains("@Validated")
+                .contains("createCustomer(@Valid CreateCustomerRequest request)");
         assertThat(controller())
                 .contains("@Valid @RequestBody CreateCustomerRequest request");
     }
@@ -85,7 +85,7 @@ class ApplicationLayerTransformerTest {
                 .contains("return ResponseEntity.status(201).body(service.createCustomer(request));")
                 .contains("@DeleteMapping(\"/customers/{id}\")")
                 .contains("return ResponseEntity.status(204).build();")
-                .contains("@PathVariable UUID id");
+                .contains("@PathVariable(\"id\") UUID id");
     }
 
     @Test

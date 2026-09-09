@@ -24,12 +24,28 @@ public final class JavaSpringMigrationTransformer {
                         : Optional.of(application.entities().getFirst().where()));
     }
 
+    private static String columnType(ApplicationField field) {
+        return field.enumTypeName().isPresent()
+                ? "varchar(64)"
+                : PostgresTypes.column(field.scalarType());
+    }
+
     private static SqlMigrationModel.Table table(ApplicationEntity entity) {
         List<String> columns = new ArrayList<>();
         for (ApplicationField field : entity.fields()) {
             boolean identifier = field.equals(entity.idField());
+            // A value has no column of its own: it is stored as the columns it groups, prefixed by
+            // the field that holds it, so two values in one table cannot collide.
+            if (field.valueType().isPresent()) {
+                for (ApplicationField component : field.valueType().orElseThrow().components()) {
+                    columns.add(field.columnName() + "_" + component.columnName()
+                            + " " + columnType(component)
+                            + (field.required() && component.required() ? " NOT NULL" : ""));
+                }
+                continue;
+            }
             columns.add(field.columnName()
-                    + " " + PostgresTypes.column(field.type())
+                    + " " + columnType(field)
                     + (field.required() || identifier ? " NOT NULL" : ""));
         }
 

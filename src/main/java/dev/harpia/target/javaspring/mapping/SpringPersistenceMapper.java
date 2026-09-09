@@ -20,6 +20,11 @@ public final class SpringPersistenceMapper {
                         new Attribute("name", quote(entity.tableName()))));
     }
 
+    /** A value is embedded, so the owner declares no column for the field itself. */
+    public boolean ownsColumn(ApplicationField field) {
+        return field.valueType().isEmpty();
+    }
+
     public List<JavaAnnotationModel> fieldAnnotations(
             ApplicationEntity entity, ApplicationField field) {
         boolean identifier = field.equals(entity.idField());
@@ -42,9 +47,15 @@ public final class SpringPersistenceMapper {
         if (identifier) {
             attributes.add(new Attribute("updatable", "false"));
         }
-        PostgresTypes.columnAttributes(field.type())
-                .map(SpringPersistenceMapper::attribute)
-                .ifPresent(attributes::add);
+        // A declared type is stored by name, so its column carries a length rather than one of
+        // the scalar shapes Postgres has a type for.
+        if (field.enumTypeName().isPresent()) {
+            attributes.add(new Attribute("length", "64"));
+        } else {
+            PostgresTypes.columnAttributes(field.scalarType())
+                    .map(SpringPersistenceMapper::attribute)
+                    .ifPresent(attributes::add);
+        }
         annotations.add(new JavaAnnotationModel(
                 dev.harpia.target.javaspring.model.JavaTypeRef.of("jakarta.persistence.Column"),
                 attributes));
