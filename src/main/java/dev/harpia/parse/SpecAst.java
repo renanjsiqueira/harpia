@@ -220,6 +220,27 @@ public final class SpecAst {
         }
     }
 
+    /** Conditions the module's entity satisfies whenever it is stored. */
+    public record InvariantDeclaration(
+            String entity, List<RuleDeclaration> conditions, SourceRef where)
+            implements DeclarationAst {
+        public InvariantDeclaration {
+            Objects.requireNonNull(entity, "entity");
+            conditions = List.copyOf(conditions);
+            Objects.requireNonNull(where, "where");
+        }
+
+        @Override
+        public DeclarationKind kind() {
+            return DeclarationKind.INVARIANT;
+        }
+
+        @Override
+        public String declaredName() {
+            return entity;
+        }
+    }
+
     public record UseCaseDeclaration(
             DeclarationKind declaredKind,
             String title,

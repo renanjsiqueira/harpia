@@ -23,12 +23,14 @@ public final class Resolver {
             BindingModel bindings,
             List<LogicModel> logics,
             List<ScenarioModel> scenarios,
-            Map<String, List<RuleModel>> rules) {
+            Map<String, List<RuleModel>> rules,
+            Map<String, List<RuleModel>> invariants) {
         Objects.requireNonNull(syntax, "syntax");
         Objects.requireNonNull(bindings, "bindings");
         Objects.requireNonNull(logics, "logics");
         Objects.requireNonNull(scenarios, "scenarios");
         Objects.requireNonNull(rules, "rules");
+        Objects.requireNonNull(invariants, "invariants");
         Map<String, List<String>> enums = new LinkedHashMap<>();
         Map<String, List<FieldModel>> values = new LinkedHashMap<>();
         for (ModuleAst module : syntax.modules()) {
@@ -96,7 +98,8 @@ public final class Resolver {
                                 byEntity.get(module.entity().name()),
                                 bindings,
                                 rules,
-                                declared))
+                                declared,
+                                invariants))
                         .toList(),
                 logics,
                 scenarios);
@@ -123,7 +126,8 @@ public final class Resolver {
             List<SpecAst.UseCaseDeclaration> operations,
             BindingModel bindings,
             Map<String, List<RuleModel>> rules,
-            Declared declared) {
+            Declared declared,
+            Map<String, List<RuleModel>> invariants) {
         SpecAst.EntityDeclaration declaration = module.entity();
         List<FieldModel> fields = declaration.fields().stream()
                 .map(field -> field(field, declared))
@@ -144,6 +148,7 @@ public final class Resolver {
                 fields,
                 idField,
                 useCases,
+                invariants.getOrDefault(declaration.name(), List.of()),
                 module.where());
     }
 

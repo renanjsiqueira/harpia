@@ -44,6 +44,8 @@ final class ApplicationIrRenderer {
                         .append(field.unique() ? " unique" : "")
                         .append(field.generated() ? " generated" : "").append('\n');
             }
+            entity.invariants().forEach(invariant -> out.append("    Invariant ")
+                    .append(invariant.text()).append('\n'));
             for (ApplicationOperation operation : entity.operations()) {
                 out.append("    Operation ").append(operation.methodName())
                         .append(" nature=").append(operation.nature())

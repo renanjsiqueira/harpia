@@ -17,6 +17,7 @@ public record ApplicationEntity(
         List<ApplicationField> fields,
         ApplicationField idField,
         List<ApplicationOperation> operations,
+        List<ApplicationRule> invariants,
         SourceRef where) {
 
     public ApplicationEntity {
@@ -26,6 +27,7 @@ public record ApplicationEntity(
         fields = List.copyOf(fields);
         Objects.requireNonNull(idField, "idField");
         operations = List.copyOf(operations);
+        invariants = List.copyOf(invariants);
         Objects.requireNonNull(where, "where");
         if (fields.stream().noneMatch(idField::equals)) {
             throw new IllegalArgumentException("id field must belong to the entity");

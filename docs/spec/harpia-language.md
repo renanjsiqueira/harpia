@@ -297,6 +297,37 @@ permanece. O valor **não ganha tabela**: seus campos viram colunas da entidade 
 prefixadas pelo nome do campo (`destination_street`), com `@AttributeOverride` correspondente. O
 prefixo existe para que dois valores na mesma tabela não colidam.
 
+## 7.3 Invariants
+
+Na V1, `## Invariants` declara condições que a entidade do módulo satisfaz sempre:
+
+```markdown
+## Data
+
+- id: UUID generated
+- total: Decimal required
+- discount: Decimal required
+
+## Invariants
+
+- discount <= total
+- total > 0
+```
+
+A diferença para `### Rules` (§8.1) é de escopo e de momento:
+
+| | Escopo | Quando vale |
+|---|---|---|
+| `### Rules` | o input de **uma** operação | onde o flow declara `validate input` |
+| `## Invariants` | os campos da **entidade** | antes de cada `save`, em qualquer operação |
+
+- a condição é tipada contra os campos da entidade pelo mesmo analisador de expressões de Logic;
+- o módulo precisa declarar `## Data`, senão não há o que restringir (`HRP2125`);
+- violar um invariante responde **422**, não 400: uma requisição bem formada pedindo um estado que
+  a entidade não permite não é input inválido.
+
+A verificação acontece antes do `save` porque depois dele o estado proibido já está armazenado.
+
 ## 8.1 Rules
 
 Na V1, cada item de lista sob `### Rules` é uma condição booleana sobre o input da operação:

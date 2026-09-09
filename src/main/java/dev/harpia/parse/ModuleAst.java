@@ -35,6 +35,10 @@ public record ModuleAst(
         return declarations(SpecAst.ValueDeclaration.class);
     }
 
+    public List<SpecAst.InvariantDeclaration> invariants() {
+        return declarations(SpecAst.InvariantDeclaration.class);
+    }
+
     public List<SpecAst.UseCaseDeclaration> useCases() {
         return declarations(SpecAst.UseCaseDeclaration.class);
     }

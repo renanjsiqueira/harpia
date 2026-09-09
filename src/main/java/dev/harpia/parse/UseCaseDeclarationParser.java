@@ -42,6 +42,7 @@ final class UseCaseDeclarationParser implements DeclarationParser {
      */
     private static final Map<String, String> LATER_KINDS =
             Map.of("Command", "1", "Query", "1", "Enum", "1", "Value", "1");
+    private static final Map<String, String> LATER_SECTIONS = Map.of("Invariants", "1");
 
     /** The legacy V0 form: any heading, kind inferred later, `### Rules` documentary. */
     UseCaseDeclarationParser() {

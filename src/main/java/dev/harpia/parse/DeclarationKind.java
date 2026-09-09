@@ -5,6 +5,7 @@ public enum DeclarationKind {
     ENTITY,
     ENUM,
     VALUE,
+    INVARIANT,
     USE_CASE,
     COMMAND,
     QUERY,

@@ -45,6 +45,8 @@ public final class ErrorCodes {
     public static final String SYNTAX_ENUM_VALUE = "HRP1108";
     /** A value heading or one of its fields is malformed. */
     public static final String SYNTAX_VALUE_FIELD = "HRP1109";
+    /** An invariant list is malformed. */
+    public static final String SYNTAX_INVARIANT = "HRP1110";
     /** Indentation inside a {@code logic} block is not a multiple of four spaces. */
     public static final String SYNTAX_LOGIC_INDENT = "HRP1102";
     /** A character or word that does not belong to the Harpia Logic lexicon. */
@@ -122,6 +124,8 @@ public final class ErrorCodes {
     public static final String SEMANTIC_UNKNOWN_TYPE = "HRP2123";
     /** A scenario targets a computation whose implementation Harpia does not own. */
     public static final String SEMANTIC_SCENARIO_CUSTOM = "HRP2124";
+    /** A module declares invariants but no entity for them to constrain. */
+    public static final String SEMANTIC_INVARIANT_WITHOUT_ENTITY = "HRP2125";
 
     // --- HRP22xx: external binding semantics -------------------------------------------------
     /** A binding references an operation that is not declared. */

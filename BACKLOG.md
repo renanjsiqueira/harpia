@@ -257,8 +257,8 @@ Visão operacional dos itens P0 ainda abertos; os registros canônicos permanece
 
 - [x] `RULE-001` **Rule executável tipada** — `DONE` na V1; um item de lista sob `### Rules` é uma condição booleana sobre o input, tipada pelo mesmo analisador de expressões da Logic, carregada pelos dois IRs e verificada onde o flow declara `validate input`. Prosa continua documentação e a V0 não muda de significado · `P1` · `L` · Area: `Domain`
   - Evidence: [`UseCaseDeclarationParser`](src/main/java/dev/harpia/parse/UseCaseDeclarationParser.java), [`LogicAnalyzer.analyzeExpression`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`RuleModel`](src/main/java/dev/harpia/model/RuleModel.java), [`ApplicationRule`](src/main/java/dev/harpia/application/ApplicationRule.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`RuleTest`](src/test/java/dev/harpia/validate/RuleTest.java).
-- [ ] `RULE-002` **Invariant** — `TODO`; a condição tipada já existe, falta o escopo da entidade e o momento em que ela vale · `P1` · `L` · Area: `Domain`
-  - Depends on: `RULE-001` (pronto), `CMD-001`.
+- [x] `RULE-002` **Invariant** — `DONE` na V1; `## Invariants` declara condições sobre a entidade, tipadas contra os campos dela pelo mesmo analisador de expressões, e verificadas antes de cada `save` — o momento em que o estado se torna durável. Violação é `InvariantViolationException` com 422, porque uma requisição bem formada pedindo um estado proibido não é input inválido · `P1` · `L` · Area: `Domain`
+  - Evidence: [`InvariantDeclarationParser`](src/main/java/dev/harpia/parse/InvariantDeclarationParser.java), [`LogicAnalyzer`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`InvariantTest`](src/test/java/dev/harpia/validate/InvariantTest.java).
 - [ ] `RULE-003` **Policy reutilizável** — `TODO` · `P1` · `XL` · Area: `Security`
   - Depends on: `RULE-001`, `SEC-003`.
 - [ ] `RULE-004` **Requires / precondition** — `TODO` · `P1` · `M` · Area: `Domain`
@@ -1410,14 +1410,13 @@ Concluídos desta lista: HTTP binding com base URL e os quatro mappings (`BIND-0
 `RULE-001`, `TYPE-020`, `TYPE-024`, `CORE-016`, `CMD-004`, `API-009` e `DET-003`.
 
 1. **Layout do código custom** (`CUSTOM-003`) — a garantia de propriedade está provada; falta decidir onde a implementação vive para compilar com a interface gerada.
-2. **Invariant** (`RULE-002`) — a condição tipada já existe; falta o escopo da entidade e o momento em que ela vale.
-3. **Containers no type system** (`TYPE-021` `List<T>`, `TYPE-022` `Optional<T>`, `TYPE-025` `Page<T>`) — a álgebra de tipo de campo já é selada; containers são a extensão natural.
-4. **`Reference<T>` e relacionamentos** (`TYPE-023`, `DOM-012`) — primeiro caso em que um campo aponta para outra entidade.
-5. **MCP M1 read-only/STDIO** (`MCP-001`, `MCP-002`, `MCP-007`–`MCP-012`) — prova o fluxo agent-native sobre o mesmo core e é o único desbloqueio de `MCP-020`, o último P0 aberto.
-6. **Flow `fail`, `call` e `require`** (`FLOW-013`, `FLOW-014`, `FLOW-012`) — `fail` fecha `CMD-004`, cujo tipo já é gerado e mapeado.
-7. **Content negotiation e response mapping** (`BIND-007`) — fecha o que resta de `BIND-006`.
-8. **Especialização Command/Query no target** (`JAVA-004`) — a natureza declarada já chega ao gerador; falta usá-la além da forma CRUD.
-9. **Generalização de escopos/referências** (`CORE-010`, `CORE-011`) — estende a resolução pronta aos novos kinds V1.
+2. **Containers no type system** (`TYPE-021` `List<T>`, `TYPE-022` `Optional<T>`, `TYPE-025` `Page<T>`) — a álgebra de tipo de campo já é selada; containers são a extensão natural.
+3. **`Reference<T>` e relacionamentos** (`TYPE-023`, `DOM-012`) — primeiro caso em que um campo aponta para outra entidade.
+4. **MCP M1 read-only/STDIO** (`MCP-001`, `MCP-002`, `MCP-007`–`MCP-012`) — prova o fluxo agent-native sobre o mesmo core e é o único desbloqueio de `MCP-020`, o último P0 aberto.
+5. **Flow `fail`, `call` e `require`** (`FLOW-013`, `FLOW-014`, `FLOW-012`) — `fail` fecha `CMD-004`, cujo tipo já é gerado e mapeado.
+6. **Content negotiation e response mapping** (`BIND-007`) — fecha o que resta de `BIND-006`.
+7. **Especialização Command/Query no target** (`JAVA-004`) — a natureza declarada já chega ao gerador; falta usá-la além da forma CRUD.
+8. **Generalização de escopos/referências** (`CORE-010`, `CORE-011`) — estende a resolução pronta aos novos kinds V1.
 
 Depois desses itens: Scenario, Event local e schema evolution são os próximos slices naturais,
 respectivamente `TEST-001`, `EVENT-005` e `DBEV-001`.

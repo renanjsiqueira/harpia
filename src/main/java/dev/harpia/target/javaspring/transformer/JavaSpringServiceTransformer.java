@@ -208,6 +208,22 @@ public final class JavaSpringServiceTransformer {
                 }
                 case SAVE -> {
                     String variable = instruction.variable().orElseThrow();
+                    // An invariant is about what the entity is allowed to be, so it is checked
+                    // where the entity is about to become durable — whichever operation got here.
+                    for (ApplicationRule invariant : entity.invariants()) {
+                        explicitImports.add(names.invariantViolationException());
+                        JavaLogicWriter.Result condition = JavaLogicWriter.condition(
+                                invariant.condition(),
+                                operation.methodName(),
+                                field -> variable + "." + JavaLayout.accessor("get", field) + "()");
+                        explicitImports.addAll(condition.imports());
+                        statements.add("if (!(" + condition.body() + ")) {");
+                        statements.add("    throw new InvariantViolationException(\""
+                                + entityName + "\", \""
+                                + invariant.text().replace("\\", "\\\\").replace("\"", "\\\"")
+                                + "\");");
+                        statements.add("}");
+                    }
                     statements.add(variable + " = " + REPOSITORY_FIELD
                             + ".save(" + variable + ");");
                 }
@@ -290,6 +306,10 @@ public final class JavaSpringServiceTransformer {
 
         private String ruleViolationException() {
             return errorPackage + ".RuleViolationException";
+        }
+
+        private String invariantViolationException() {
+            return errorPackage + ".InvariantViolationException";
         }
     }
 }

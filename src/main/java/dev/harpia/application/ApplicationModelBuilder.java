@@ -107,6 +107,10 @@ public final class ApplicationModelBuilder {
                 source.useCases().stream()
                         .map(useCase -> operation(useCase, entityName))
                         .toList(),
+                source.invariants().stream()
+                        .map(invariant -> new ApplicationRule(
+                                invariant.text(), invariant.condition(), invariant.where()))
+                        .toList(),
                 source.where());
     }
 

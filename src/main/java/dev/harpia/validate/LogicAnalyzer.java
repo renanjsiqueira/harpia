@@ -75,7 +75,50 @@ public final class LogicAnalyzer {
         return new Result(
                 List.copyOf(models),
                 ScenarioAnalyzer.analyze(project, symbols, diagnostics),
-                rules(project, symbols, diagnostics));
+                rules(project, symbols, diagnostics),
+                invariants(project, symbols, diagnostics));
+    }
+
+    /**
+     * The typed invariants of every entity, by entity name.
+     *
+     * <p>A rule is a condition over what one operation was asked to do. An invariant is a condition
+     * over what the entity is allowed to be, so its scope is the entity's own fields and it holds
+     * whichever operation ran.
+     */
+    private static Map<String, List<RuleModel>> invariants(
+            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+        Map<String, List<RuleModel>> byEntity = new LinkedHashMap<>();
+        for (ModuleAst module : project.modules()) {
+            for (SpecAst.InvariantDeclaration declaration : module.invariants()) {
+                if (!module.declaresEntity()) {
+                    diagnostics.error(
+                            ErrorCodes.SEMANTIC_INVARIANT_WITHOUT_ENTITY,
+                            "'## Invariants' needs a '## Data' in the same module to constrain",
+                            declaration.where());
+                    continue;
+                }
+                List<LogicModel.Parameter> scope = module.entity().fields().stream()
+                        .map(field -> new LogicModel.Parameter(
+                                field.name(), LogicType.of(field.type()), field.where()))
+                        .toList();
+                List<RuleModel> typed = new ArrayList<>();
+                for (SpecAst.RuleDeclaration condition : declaration.conditions()) {
+                    analyzeExpression(
+                            "invariant '" + condition.text() + "'",
+                            scope,
+                            LogicType.BOOLEAN,
+                            condition.condition(),
+                            symbols,
+                            condition.where(),
+                            diagnostics)
+                            .ifPresent(expression -> typed.add(new RuleModel(
+                                    condition.text(), expression, condition.where())));
+                }
+                byEntity.put(module.entity().name(), List.copyOf(typed));
+            }
+        }
+        return Map.copyOf(byEntity);
     }
 
     /**
@@ -120,9 +163,11 @@ public final class LogicAnalyzer {
     public record Result(
             List<LogicModel> logics,
             List<ScenarioModel> scenarios,
-            Map<String, List<RuleModel>> rules) {
+            Map<String, List<RuleModel>> rules,
+            Map<String, List<RuleModel>> invariants) {
         public Result {
             rules = Map.copyOf(rules);
+            invariants = Map.copyOf(invariants);
             logics = List.copyOf(logics);
             scenarios = List.copyOf(scenarios);
         }
