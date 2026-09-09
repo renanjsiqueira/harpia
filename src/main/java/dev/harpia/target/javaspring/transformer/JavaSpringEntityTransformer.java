@@ -42,7 +42,7 @@ public final class JavaSpringEntityTransformer {
             }
             explicitImports.addAll(persistence.additionalImports(entity, field));
             String domain = context.layout().packageName(JavaLayout.DOMAIN);
-            JavaTypeRef type = JavaTypeMapper.map(field.type(), domain);
+            JavaTypeRef type = JavaTypeMapper.stored(field.type(), domain);
             field.elementType().ifPresent(element -> {
                 // A collection cannot live in a column of the owner's row, so it gets a table of
                 // its own, keyed back to the owner. The names match what the migration created.
@@ -102,7 +102,7 @@ public final class JavaSpringEntityTransformer {
                     annotations,
                     defaults.map(field),
                     Optional.of(field.where())));
-            methods.add(getter(field, type));
+            methods.add(getter(field, type, JavaTypeMapper.map(field.type(), domain)));
             methods.add(setter(field, type));
         }
 
@@ -135,15 +135,23 @@ public final class JavaSpringEntityTransformer {
                 Optional.of(entity.where()));
     }
 
-    private static JavaMethodModel getter(ApplicationField field, JavaTypeRef type) {
+    /**
+     * @param stored the type the field is held in, which JPA reads
+     * @param exposed the type callers see, which says whether the value can be absent
+     */
+    private static JavaMethodModel getter(
+            ApplicationField field, JavaTypeRef stored, JavaTypeRef exposed) {
+        boolean optional = field.optionalType().isPresent();
         return new JavaMethodModel(
                 accessor("get", field.name()),
-                type,
+                exposed,
                 JavaVisibility.PUBLIC,
                 Set.of(),
                 List.of(),
                 List.of(),
-                List.of("return " + field.name() + ";"),
+                List.of(optional
+                        ? "return Optional.ofNullable(" + field.name() + ");"
+                        : "return " + field.name() + ";"),
                 Optional.of(field.where()));
     }
 

@@ -265,6 +265,28 @@ vazia é o mesmo que uma coleção ausente.
 Fora do recorte: `List<Entity>` é relacionamento (`DOM-012`); `List<Value>` e `List<List<...>>` são
 recusados. Coleção como parâmetro ou retorno de Logic é `LOGIC-006`.
 
+### 7.0.1 Optional
+
+Na V1, `Optional<T>` declara que o valor pode não estar lá:
+
+```markdown
+- nickname: Optional<String>
+```
+
+Um campo sem `required` já é nullable, mas nada no contrato gerado diz isso — quem consome recebe um
+`String` e descobre em tempo de execução. `Optional<T>` move esse fato para o tipo entregue ao
+chamador, **sem mudar como o valor é armazenado**:
+
+| | Tipo |
+|---|---|
+| campo JPA e coluna | `String`, nullable — JPA mapeia pelo tipo declarado e não entende `Optional` |
+| getter e response DTO | `Optional<String>` |
+| setter | `String` — recebe o valor, não a possibilidade de um |
+
+`Optional<T> required` é contradição e é recusada (`HRP2126`). Esse é o ganho de tornar a
+opcionalidade um tipo: as duas formas de dizê-la agora podem se contradizer, e uma contradição que o
+compilador resolvesse em silêncio seria um bug atribuído ao gerador.
+
 ## 7.1 Enum
 
 Na V1, `## Enum <Nome>` declara um conjunto fechado de valores que o projeto nomeia:

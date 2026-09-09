@@ -260,7 +260,7 @@ public final class JavaSpringServiceTestTransformer {
         statements.add(entity.typeName() + " entity = new " + entity.typeName() + "();");
         for (ApplicationField field : entity.fields()) {
             statements.add("entity." + JavaLayout.accessor("set", field.name()) + "("
-                    + JavaSampleValues.java(field) + ");");
+                    + JavaSampleValues.stored(field) + ");");
         }
         statements.add("return entity;");
         return new JavaMethodModel(

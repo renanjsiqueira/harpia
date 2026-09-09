@@ -114,8 +114,15 @@ public final class FieldLineParser {
     }
 
     public static boolean knownType(String type) {
-        return elementOf(type).map(FieldLineParser::knownType)
+        Optional<String> inner = elementOf(type).or(() -> optionalOf(type));
+        return inner.map(FieldLineParser::knownType)
                 .orElseGet(() -> TYPES.contains(type) || NOMINAL.matcher(type).matches());
+    }
+
+    /** The type an optional wraps, when the syntax names one. */
+    public static Optional<String> optionalOf(String type) {
+        Matcher matcher = OPTIONAL.matcher(type);
+        return matcher.matches() ? Optional.of(matcher.group(1)) : Optional.empty();
     }
 
     /** The element type of a collection, when the syntax names one. */
@@ -128,6 +135,7 @@ public final class FieldLineParser {
     private static final Pattern NOMINAL = Pattern.compile("[A-Z][A-Za-z0-9]*");
     /** A collection names its element type, which may itself be declared. */
     private static final Pattern LIST = Pattern.compile("List<([^<>]+)>");
+    private static final Pattern OPTIONAL = Pattern.compile("Optional<([^<>]+)>");
 
     private static void unknownType(
             String raw,

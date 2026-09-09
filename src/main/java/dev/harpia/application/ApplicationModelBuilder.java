@@ -118,6 +118,9 @@ public final class ApplicationModelBuilder {
         if (type instanceof dev.harpia.model.FieldType.Container container) {
             return ApplicationFieldType.list(fieldType(container.element()));
         }
+        if (type instanceof dev.harpia.model.FieldType.Optionality optional) {
+            return ApplicationFieldType.optional(fieldType(optional.element()));
+        }
         dev.harpia.model.FieldType.Nominal declared =
                 (dev.harpia.model.FieldType.Nominal) type;
         return switch (declared.kind()) {

@@ -26,6 +26,9 @@ public final class JavaSampleValues {
     /** The value as a Java expression. */
     public static String java(ApplicationField field) {
         Objects.requireNonNull(field, "field");
+        if (field.optionalType().isPresent()) {
+            return "Optional.of(" + java(present(field)) + ")";
+        }
         Optional<String> declared = field.enumTypeName();
         if (declared.isPresent()) {
             return declared.orElseThrow() + "." + enumSample(field);
@@ -113,6 +116,10 @@ public final class JavaSampleValues {
         Objects.requireNonNull(domainPackage, "domainPackage");
         java.util.List<String> imports = new java.util.ArrayList<>();
         field.declaredType().ifPresent(name -> imports.add(domainPackage + "." + name));
+        field.optionalType().ifPresent(inner -> {
+            imports.add("java.util.Optional");
+            imports.addAll(requiredImports(present(field), domainPackage));
+        });
         field.elementType().ifPresent(element -> {
             imports.add("java.util.List");
             imports.addAll(requiredImports(sample(field), domainPackage));
@@ -120,7 +127,9 @@ public final class JavaSampleValues {
         // Building a value's sample means naming its components' types too.
         field.valueType().ifPresent(value -> value.components()
                 .forEach(component -> imports.addAll(requiredImports(component, domainPackage))));
-        if (field.declaredType().isEmpty() && field.elementType().isEmpty()) {
+        if (field.declaredType().isEmpty()
+                && field.elementType().isEmpty()
+                && field.optionalType().isEmpty()) {
             requiredImport(field.scalarType()).ifPresent(imports::add);
         }
         return java.util.List.copyOf(imports);
@@ -135,6 +144,30 @@ public final class JavaSampleValues {
             case DATE_TIME -> Optional.of("java.time.OffsetDateTime");
             default -> Optional.empty();
         };
+    }
+
+    /**
+     * The value as the field is stored, which is what a setter takes.
+     *
+     * <p>A setter takes the type JPA holds, not the type callers are handed back, so a sample that
+     * feeds one is not the same expression as a sample that fills the other.
+     */
+    public static String stored(ApplicationField field) {
+        Objects.requireNonNull(field, "field");
+        return java(present(field));
+    }
+
+    /** The same field as if the value were always there, for building the value itself. */
+    private static ApplicationField present(ApplicationField field) {
+        return new ApplicationField(
+                field.name(),
+                field.columnName(),
+                field.present(),
+                true,
+                field.unique(),
+                field.generated(),
+                field.defaultValue(),
+                field.where());
     }
 
     /** One element of a collection, standing in as a field of the element's own type. */

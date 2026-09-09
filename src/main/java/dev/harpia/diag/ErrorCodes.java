@@ -126,6 +126,8 @@ public final class ErrorCodes {
     public static final String SEMANTIC_SCENARIO_CUSTOM = "HRP2124";
     /** A module declares invariants but no entity for them to constrain. */
     public static final String SEMANTIC_INVARIANT_WITHOUT_ENTITY = "HRP2125";
+    /** A field is declared both optional and required. */
+    public static final String SEMANTIC_OPTIONAL_REQUIRED = "HRP2126";
 
     // --- HRP22xx: external binding semantics -------------------------------------------------
     /** A binding references an operation that is not declared. */

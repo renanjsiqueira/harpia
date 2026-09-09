@@ -40,11 +40,29 @@ public final class JavaTypeMapper {
         if (type instanceof ApplicationFieldType.ValueType declared) {
             return JavaTypeRef.of(domainPackage + "." + declared.name());
         }
+        if (type instanceof ApplicationFieldType.Optionality optional) {
+            return JavaTypeRef.parameterized(
+                    "java.util.Optional", map(optional.element(), domainPackage));
+        }
         if (type instanceof ApplicationFieldType.Container container) {
             return JavaTypeRef.parameterized(
                     "java.util.List", map(container.element(), domainPackage));
         }
         return map(type.scalarKind().orElseThrow());
+    }
+
+    /**
+     * The type a field is stored as.
+     *
+     * <p>JPA maps fields by reflection over their declared type, and it does not understand
+     * {@code Optional}. The column is simply nullable; what the absence means is said in the types
+     * the project exposes, not in the one Hibernate reads.
+     */
+    public static JavaTypeRef stored(ApplicationFieldType type, String domainPackage) {
+        Objects.requireNonNull(type, "type");
+        return type instanceof ApplicationFieldType.Optionality optional
+                ? map(optional.element(), domainPackage)
+                : map(type, domainPackage);
     }
 
     /** {@code awaiting_payment} names the constant {@code AWAITING_PAYMENT}. */

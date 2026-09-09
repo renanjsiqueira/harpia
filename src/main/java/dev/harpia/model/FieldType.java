@@ -63,6 +63,22 @@ public sealed interface FieldType {
         }
     }
 
+    /** A value that may be absent, said out loud instead of inferred from a missing modifier. */
+    record Optionality(FieldType element) implements FieldType {
+        public Optionality {
+            Objects.requireNonNull(element, "element");
+        }
+
+        @Override
+        public String syntax() {
+            return "Optional<" + element.syntax() + ">";
+        }
+    }
+
+    static FieldType optional(FieldType element) {
+        return new Optionality(element);
+    }
+
     static FieldType list(FieldType element) {
         return new Container(element);
     }

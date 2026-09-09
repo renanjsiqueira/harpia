@@ -62,6 +62,7 @@ public final class SemanticValidator {
                     validateDeclaredType(
                             project.languageVersion(), field.type(), field.where(), symbols,
                             diagnostics);
+                    validateOptionality(field.type(), field.required(), field.where(), diagnostics);
                 }
             }
         }
@@ -144,6 +145,30 @@ public final class SemanticValidator {
             SourceRef where,
             SymbolTable symbols,
             DiagnosticCollector diagnostics) {
+        Optional<String> optional = FieldLineParser.optionalOf(type);
+        if (optional.isPresent()) {
+            if (languageVersion == LanguageVersion.V0) {
+                diagnostics.error(
+                        ErrorCodes.SYNTAX_UNKNOWN_TYPE,
+                        "Optional needs harpia.languageVersion 1",
+                        where,
+                        "set harpia.languageVersion to 1");
+                return;
+            }
+            String inner = optional.orElseThrow();
+            if (FieldLineParser.elementOf(inner).isPresent()
+                    || FieldLineParser.optionalOf(inner).isPresent()
+                    || symbols.entity(inner).isPresent()) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_UNKNOWN_TYPE,
+                        "'" + type + "' is not supported; Optional wraps a scalar, a declared enum "
+                                + "or a declared value",
+                        where);
+                return;
+            }
+            validateDeclaredType(languageVersion, inner, where, symbols, diagnostics);
+            return;
+        }
         Optional<String> element = FieldLineParser.elementOf(type);
         if (element.isPresent()) {
             if (languageVersion == LanguageVersion.V0) {
@@ -183,6 +208,24 @@ public final class SemanticValidator {
                 ErrorCodes.SEMANTIC_UNKNOWN_TYPE,
                 "unknown type '" + type + "'; no declaration in this project provides it",
                 where);
+    }
+
+    /**
+     * {@code Optional<T> required} says a value may be absent and must be present.
+     *
+     * <p>Refusing it is the point of making optionality a type: the two ways of saying it can now
+     * contradict each other, and a contradiction the compiler resolves silently is a bug waiting to
+     * be blamed on the generator.
+     */
+    private static void validateOptionality(
+            String type, boolean required, SourceRef where, DiagnosticCollector diagnostics) {
+        if (required && FieldLineParser.optionalOf(type).isPresent()) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_OPTIONAL_REQUIRED,
+                    "'" + type + "' is declared required; a value cannot be both optional and "
+                            + "mandatory",
+                    where);
+        }
     }
 
     private static Entity validateEntity(ModuleAst module, DiagnosticCollector diagnostics) {
@@ -227,6 +270,7 @@ public final class SemanticValidator {
         for (SpecAst.InputDeclaration field : useCase.input()) {
             validateDeclaredType(
                     languageVersion, field.type(), field.where(), symbols, diagnostics);
+            validateOptionality(field.type(), field.required(), field.where(), diagnostics);
         }
         validateInput(useCase, target.orElseThrow().fields(), diagnostics);
         validateRules(useCase, diagnostics);

@@ -68,6 +68,22 @@ public sealed interface ApplicationFieldType {
         }
     }
 
+    /** A value that may be absent. */
+    record Optionality(ApplicationFieldType element) implements ApplicationFieldType {
+        public Optionality {
+            Objects.requireNonNull(element, "element");
+        }
+
+        @Override
+        public String syntax() {
+            return "Optional<" + element.syntax() + ">";
+        }
+    }
+
+    static ApplicationFieldType optional(ApplicationFieldType element) {
+        return new Optionality(element);
+    }
+
     static ApplicationFieldType list(ApplicationFieldType element) {
         return new Container(element);
     }
