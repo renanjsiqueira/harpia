@@ -40,6 +40,11 @@ public final class JavaTypeMapper {
         if (type instanceof ApplicationFieldType.ValueType declared) {
             return JavaTypeRef.of(domainPackage + "." + declared.name());
         }
+        if (type instanceof ApplicationFieldType.Reference reference) {
+            // A reference is the identity of the row it points at. Mapping it to the entity class
+            // would import a fetch strategy, a cascade and a lifetime that nothing declared.
+            return map(reference.idType());
+        }
         if (type instanceof ApplicationFieldType.Optionality optional) {
             return JavaTypeRef.parameterized(
                     "java.util.Optional", map(optional.element(), domainPackage));

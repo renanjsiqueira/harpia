@@ -31,6 +31,15 @@ public final class SpringValidationMapper {
             }
             return List.copyOf(annotations);
         }
+        if (field.reference().isPresent()) {
+            // A reference is an identity: whether it must be present is all this layer can say.
+            // Whether the row exists is the foreign key's job, at the moment of the write.
+            if (field.required() && !field.generated()) {
+                annotations.add(
+                        JavaAnnotationModel.marker("jakarta.validation.constraints.NotNull"));
+            }
+            return List.copyOf(annotations);
+        }
         if (field.enumTypeName().isPresent()) {
             // A declared type constrains itself: the values it admits are the only ones that
             // parse. What remains to say is whether it may be absent.

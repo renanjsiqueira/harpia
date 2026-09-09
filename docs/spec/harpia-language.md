@@ -265,6 +265,27 @@ vazia é o mesmo que uma coleção ausente.
 Fora do recorte: `List<Entity>` é relacionamento (`DOM-012`); `List<Value>` e `List<List<...>>` são
 recusados. Coleção como parâmetro ou retorno de Logic é `LOGIC-006`.
 
+### 7.0.2 Reference
+
+Na V1, `Reference<Entidade>` declara que o campo aponta para outra entidade:
+
+```markdown
+- buyer: Reference<Customer> required
+```
+
+É um **tipo**, não um relacionamento. Ele diz qual entidade é a alvo e qual linha, e não diz nada
+sobre carregá-la, cascatear até ela ou possuir seu ciclo de vida — isso é `DOM-012`.
+
+| | Resultado |
+|---|---|
+| coluna | `<campo>_id`, com o tipo do id do alvo |
+| migração | `FOREIGN KEY (<campo>_id) REFERENCES <alvo> (id)` |
+| campo JPA | o escalar do id (`UUID`), sem `@ManyToOne` nem `@JoinColumn` |
+
+O alvo precisa ser uma entidade declarada: uma referência aponta para algo que tem identidade.
+Integridade referencial é a única promessa que ela faz, e por isso o esquema a declara enquanto o
+mapeamento não importa estratégia de fetch nenhuma.
+
 ### 7.0.1 Optional
 
 Na V1, `Optional<T>` declara que o valor pode não estar lá:

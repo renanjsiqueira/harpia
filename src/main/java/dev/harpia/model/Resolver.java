@@ -163,6 +163,10 @@ public final class Resolver {
         if (element.isPresent()) {
             return FieldType.list(fieldType(element.orElseThrow(), declared));
         }
+        Optional<String> reference = FieldLineParser.referenceOf(syntax);
+        if (reference.isPresent()) {
+            return FieldType.reference(reference.orElseThrow());
+        }
         Optional<String> optional = FieldLineParser.optionalOf(syntax);
         if (optional.isPresent()) {
             return FieldType.optional(fieldType(optional.orElseThrow(), declared));

@@ -23,11 +23,42 @@ public final class JavaSampleValues {
     private JavaSampleValues() {
     }
 
+    private static String jsonOf(ApplicationScalarType type) {
+        return switch (type) {
+            case STRING, TEXT -> "\\\"value\\\"";
+            case EMAIL -> "\\\"value@example.com\\\"";
+            case INT, LONG -> "1";
+            case DECIMAL -> "1.00";
+            case BOOLEAN -> "true";
+            case UUID -> "\\\"" + UUID_VALUE + "\\\"";
+            case DATE -> "\\\"" + DATE_VALUE + "\\\"";
+            case DATE_TIME -> "\\\"" + DATE_TIME_VALUE + "\\\"";
+        };
+    }
+
+    /** A sample of a bare scalar, with no field to take a name from. */
+    private static String sampleOf(ApplicationScalarType type) {
+        return switch (type) {
+            case STRING, TEXT -> "\"value\"";
+            case EMAIL -> "\"value@example.com\"";
+            case INT -> "1";
+            case LONG -> "1L";
+            case DECIMAL -> "new BigDecimal(\"1.00\")";
+            case BOOLEAN -> "true";
+            case UUID -> "UUID.fromString(\"" + UUID_VALUE + "\")";
+            case DATE -> "LocalDate.parse(\"" + DATE_VALUE + "\")";
+            case DATE_TIME -> "OffsetDateTime.parse(\"" + DATE_TIME_VALUE + "\")";
+        };
+    }
+
     /** The value as a Java expression. */
     public static String java(ApplicationField field) {
         Objects.requireNonNull(field, "field");
         if (field.optionalType().isPresent()) {
             return "Optional.of(" + java(present(field)) + ")";
+        }
+        if (field.reference().isPresent()) {
+            return sampleOf(field.reference().orElseThrow().idType());
         }
         Optional<String> declared = field.enumTypeName();
         if (declared.isPresent()) {
@@ -70,6 +101,9 @@ public final class JavaSampleValues {
                     .map(component -> "\\\"" + component.name() + "\\\":" + json(component))
                     .reduce((left, right) -> left + "," + right)
                     .orElse("") + "}";
+        }
+        if (field.reference().isPresent()) {
+            return jsonOf(field.reference().orElseThrow().idType());
         }
         if (field.enumTypeName().isPresent()) {
             return "\\\"" + enumSample(field) + "\\\"";
@@ -127,9 +161,12 @@ public final class JavaSampleValues {
         // Building a value's sample means naming its components' types too.
         field.valueType().ifPresent(value -> value.components()
                 .forEach(component -> imports.addAll(requiredImports(component, domainPackage))));
+        field.reference().ifPresent(reference ->
+                requiredImport(reference.idType()).ifPresent(imports::add));
         if (field.declaredType().isEmpty()
                 && field.elementType().isEmpty()
-                && field.optionalType().isEmpty()) {
+                && field.optionalType().isEmpty()
+                && field.reference().isEmpty()) {
             requiredImport(field.scalarType()).ifPresent(imports::add);
         }
         return java.util.List.copyOf(imports);

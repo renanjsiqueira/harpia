@@ -58,7 +58,9 @@ public final class ApplicationModelBuilder {
                                         .toList(),
                                 source.where()))
                         .toList(),
-                business.entities().stream().map(ApplicationModelBuilder::entity).toList(),
+                business.entities().stream()
+                        .map(source -> entity(source, identities(business)))
+                        .toList(),
                 business.logics().stream().map(ApplicationModelBuilder::logic).toList(),
                 business.scenarios().stream().map(ApplicationModelBuilder::scenario).toList(),
                 capabilities);
@@ -91,9 +93,26 @@ public final class ApplicationModelBuilder {
                 source.where());
     }
 
-    private static ApplicationEntity entity(EntityModel source) {
+    /**
+     * The scalar each entity is identified by.
+     *
+     * <p>A reference stores the identity of what it points at, so it has to be told what shape that
+     * identity has. Only the whole project knows.
+     */
+    private static Map<String, ApplicationScalarType> identities(
+            dev.harpia.model.ProjectModel business) {
+        Map<String, ApplicationScalarType> identities = new LinkedHashMap<>();
+        for (EntityModel entity : business.entities()) {
+            entity.idField().type().scalarKind().ifPresent(scalar ->
+                    identities.put(entity.name(), ApplicationScalarType.valueOf(scalar.name())));
+        }
+        return Map.copyOf(identities);
+    }
+
+    private static ApplicationEntity entity(
+            EntityModel source, Map<String, ApplicationScalarType> identities) {
         List<ApplicationField> fields = source.fields().stream()
-                .map(ApplicationModelBuilder::field)
+                .map(field -> field(field, identities))
                 .toList();
         Map<String, ApplicationField> fieldsByName = new LinkedHashMap<>();
         fields.forEach(field -> fieldsByName.put(field.name(), field));
@@ -134,6 +153,16 @@ public final class ApplicationModelBuilder {
     }
 
     private static ApplicationFieldType fieldType(dev.harpia.model.FieldType type) {
+        return fieldType(type, Map.of());
+    }
+
+    private static ApplicationFieldType fieldType(
+            dev.harpia.model.FieldType type, Map<String, ApplicationScalarType> identities) {
+        if (type instanceof dev.harpia.model.FieldType.Reference reference) {
+            return ApplicationFieldType.reference(
+                    reference.entity(),
+                    identities.getOrDefault(reference.entity(), ApplicationScalarType.UUID));
+        }
         return type.scalarKind()
                 .<ApplicationFieldType>map(scalar ->
                         ApplicationFieldType.scalar(ApplicationScalarType.valueOf(scalar.name())))
@@ -141,10 +170,18 @@ public final class ApplicationModelBuilder {
     }
 
     private static ApplicationField field(FieldModel source) {
-        ApplicationFieldType type = fieldType(source.type());
+        return field(source, Map.of());
+    }
+
+    private static ApplicationField field(
+            FieldModel source, Map<String, ApplicationScalarType> identities) {
+        ApplicationFieldType type = fieldType(source.type(), identities);
         return new ApplicationField(
                 source.name(),
-                SqlNaming.identifier(source.name()),
+                // A reference stores an identity, and the column says so.
+                type instanceof ApplicationFieldType.Reference
+                        ? SqlNaming.identifier(source.name()) + "_id"
+                        : SqlNaming.identifier(source.name()),
                 type,
                 source.required(),
                 source.unique(),

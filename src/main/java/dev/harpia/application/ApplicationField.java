@@ -67,6 +67,13 @@ public record ApplicationField(
                 : Optional.empty();
     }
 
+    /** The entity this field points at, when it points at one. */
+    public Optional<ApplicationFieldType.Reference> reference() {
+        return present() instanceof ApplicationFieldType.Reference declared
+                ? Optional.of(declared)
+                : Optional.empty();
+    }
+
     /** The type this field may be absent of, when absence is declared. */
     public Optional<ApplicationFieldType> optionalType() {
         return type instanceof ApplicationFieldType.Optionality optional

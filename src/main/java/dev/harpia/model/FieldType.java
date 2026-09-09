@@ -75,6 +75,27 @@ public sealed interface FieldType {
         }
     }
 
+    /**
+     * A pointer to another entity's identity.
+     *
+     * <p>It is a type, not a relationship: it holds which entity is meant and which row, and says
+     * nothing about loading it, cascading to it or owning its lifetime. Those are `DOM-012`.
+     */
+    record Reference(String entity) implements FieldType {
+        public Reference {
+            Objects.requireNonNull(entity, "entity");
+        }
+
+        @Override
+        public String syntax() {
+            return "Reference<" + entity + ">";
+        }
+    }
+
+    static FieldType reference(String entity) {
+        return new Reference(entity);
+    }
+
     static FieldType optional(FieldType element) {
         return new Optionality(element);
     }

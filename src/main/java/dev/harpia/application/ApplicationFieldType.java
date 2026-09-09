@@ -80,6 +80,24 @@ public sealed interface ApplicationFieldType {
         }
     }
 
+    /** A pointer to another entity's identity, carrying which entity and which id type. */
+    record Reference(String entity, ApplicationScalarType idType)
+            implements ApplicationFieldType {
+        public Reference {
+            Objects.requireNonNull(entity, "entity");
+            Objects.requireNonNull(idType, "idType");
+        }
+
+        @Override
+        public String syntax() {
+            return "Reference<" + entity + ">";
+        }
+    }
+
+    static ApplicationFieldType reference(String entity, ApplicationScalarType idType) {
+        return new Reference(entity, idType);
+    }
+
     static ApplicationFieldType optional(ApplicationFieldType element) {
         return new Optionality(element);
     }

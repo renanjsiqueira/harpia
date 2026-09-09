@@ -4,6 +4,7 @@ import dev.harpia.application.ApplicationEntity;
 import dev.harpia.application.ApplicationField;
 import dev.harpia.target.javaspring.mapping.SqlConstraintNames;
 import dev.harpia.application.ApplicationProject;
+import dev.harpia.application.SqlNaming;
 import dev.harpia.target.javaspring.PostgresTypes;
 import dev.harpia.target.javaspring.model.SqlMigrationModel;
 import java.util.ArrayList;
@@ -54,9 +55,12 @@ public final class JavaSpringMigrationTransformer {
     }
 
     private static String columnType(ApplicationField field) {
-        return field.enumTypeName().isPresent()
-                ? "varchar(64)"
-                : PostgresTypes.column(field.scalarType());
+        if (field.enumTypeName().isPresent()) {
+            return "varchar(64)";
+        }
+        return field.reference()
+                .map(reference -> PostgresTypes.column(reference.idType()))
+                .orElseGet(() -> PostgresTypes.column(field.scalarType()));
     }
 
     private static SqlMigrationModel.Table table(ApplicationEntity entity) {
@@ -86,6 +90,13 @@ public final class JavaSpringMigrationTransformer {
         constraints.add("CONSTRAINT "
                 + SqlConstraintNames.primaryKey(entity.tableName())
                 + " PRIMARY KEY (" + entity.idField().columnName() + ")");
+        // Referential integrity is the one thing a reference does promise, so the schema states it.
+        for (ApplicationField field : entity.fields()) {
+            field.reference().ifPresent(reference -> constraints.add("CONSTRAINT "
+                    + SqlConstraintNames.foreignKey(entity.tableName(), field.columnName())
+                    + " FOREIGN KEY (" + field.columnName() + ") REFERENCES "
+                    + SqlNaming.identifier(reference.entity()) + " (id)"));
+        }
         entity.fields().stream()
                 .filter(ApplicationField::unique)
                 .map(ApplicationField::columnName)

@@ -49,7 +49,12 @@ public final class SpringPersistenceMapper {
         }
         // A declared type is stored by name, so its column carries a length rather than one of
         // the scalar shapes Postgres has a type for.
-        if (field.enumTypeName().isPresent()) {
+        if (field.reference().isPresent()) {
+            // The identity's own shape decides the column; the foreign key lives in the migration.
+            PostgresTypes.columnAttributes(field.reference().orElseThrow().idType())
+                    .map(SpringPersistenceMapper::attribute)
+                    .ifPresent(attributes::add);
+        } else if (field.enumTypeName().isPresent()) {
             attributes.add(new Attribute("length", "64"));
         } else {
             PostgresTypes.columnAttributes(field.scalarType())

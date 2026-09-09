@@ -145,6 +145,26 @@ public final class SemanticValidator {
             SourceRef where,
             SymbolTable symbols,
             DiagnosticCollector diagnostics) {
+        Optional<String> reference = FieldLineParser.referenceOf(type);
+        if (reference.isPresent()) {
+            if (languageVersion == LanguageVersion.V0) {
+                diagnostics.error(
+                        ErrorCodes.SYNTAX_UNKNOWN_TYPE,
+                        "Reference needs harpia.languageVersion 1",
+                        where,
+                        "set harpia.languageVersion to 1");
+                return;
+            }
+            // A reference points at an identity, and only an entity has one.
+            if (symbols.entity(reference.orElseThrow()).isEmpty()) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_UNKNOWN_TYPE,
+                        "'" + type + "' does not name a declared entity; a reference points at "
+                                + "something with an identity",
+                        where);
+            }
+            return;
+        }
         Optional<String> optional = FieldLineParser.optionalOf(type);
         if (optional.isPresent()) {
             if (languageVersion == LanguageVersion.V0) {
