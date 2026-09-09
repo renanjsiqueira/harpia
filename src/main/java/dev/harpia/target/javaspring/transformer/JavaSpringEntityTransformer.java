@@ -43,6 +43,32 @@ public final class JavaSpringEntityTransformer {
             explicitImports.addAll(persistence.additionalImports(entity, field));
             String domain = context.layout().packageName(JavaLayout.DOMAIN);
             JavaTypeRef type = JavaTypeMapper.map(field.type(), domain);
+            field.elementType().ifPresent(element -> {
+                // A collection cannot live in a column of the owner's row, so it gets a table of
+                // its own, keyed back to the owner. The names match what the migration created.
+                String table = entity.tableName() + "_" + field.columnName();
+                explicitImports.add(new JavaImportModel("jakarta.persistence.CollectionTable"));
+                explicitImports.add(new JavaImportModel("jakarta.persistence.JoinColumn"));
+                explicitImports.add(new JavaImportModel("jakarta.persistence.Column"));
+                annotations.add(JavaAnnotationModel.marker(
+                        "jakarta.persistence.ElementCollection"));
+                annotations.add(JavaAnnotationModel.of(
+                        "jakarta.persistence.CollectionTable",
+                        new JavaAnnotationModel.Attribute("name", "\"" + table + "\""),
+                        new JavaAnnotationModel.Attribute(
+                                "joinColumns",
+                                "@JoinColumn(name = \"" + entity.tableName() + "_id\")")));
+                annotations.add(JavaAnnotationModel.of(
+                        "jakarta.persistence.Column",
+                        new JavaAnnotationModel.Attribute(
+                                "name", "\"" + field.columnName() + "\"")));
+                if (element instanceof dev.harpia.application.ApplicationFieldType.EnumType) {
+                    explicitImports.add(new JavaImportModel("jakarta.persistence.EnumType"));
+                    annotations.add(JavaAnnotationModel.of(
+                            "jakarta.persistence.Enumerated",
+                            new JavaAnnotationModel.Attribute("value", "EnumType.STRING")));
+                }
+            });
             field.valueType().ifPresent(value -> {
                 annotations.add(JavaAnnotationModel.marker("jakarta.persistence.Embedded"));
                 // Hibernate would default each component to its own bare column name, which two

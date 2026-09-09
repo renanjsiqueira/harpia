@@ -114,11 +114,20 @@ public final class FieldLineParser {
     }
 
     public static boolean knownType(String type) {
-        return TYPES.contains(type) || NOMINAL.matcher(type).matches();
+        return elementOf(type).map(FieldLineParser::knownType)
+                .orElseGet(() -> TYPES.contains(type) || NOMINAL.matcher(type).matches());
+    }
+
+    /** The element type of a collection, when the syntax names one. */
+    public static Optional<String> elementOf(String type) {
+        Matcher matcher = LIST.matcher(type);
+        return matcher.matches() ? Optional.of(matcher.group(1)) : Optional.empty();
     }
 
     /** A declared type is referenced by its PascalCase name. */
     private static final Pattern NOMINAL = Pattern.compile("[A-Z][A-Za-z0-9]*");
+    /** A collection names its element type, which may itself be declared. */
+    private static final Pattern LIST = Pattern.compile("List<([^<>]+)>");
 
     private static void unknownType(
             String raw,

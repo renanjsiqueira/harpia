@@ -30,6 +30,9 @@ public final class JavaSampleValues {
         if (declared.isPresent()) {
             return declared.orElseThrow() + "." + enumSample(field);
         }
+        if (field.elementType().isPresent()) {
+            return "List.of(" + element(field) + ")";
+        }
         if (field.valueType().isPresent()) {
             ApplicationFieldType.ValueType value = field.valueType().orElseThrow();
             return "new " + value.name() + "("
@@ -55,6 +58,9 @@ public final class JavaSampleValues {
     /** The same value as a JSON literal, for a request body. */
     public static String json(ApplicationField field) {
         Objects.requireNonNull(field, "field");
+        if (field.elementType().isPresent()) {
+            return "[" + json(sample(field)) + "]";
+        }
         if (field.valueType().isPresent()) {
             ApplicationFieldType.ValueType value = field.valueType().orElseThrow();
             return "{" + value.components().stream()
@@ -107,10 +113,14 @@ public final class JavaSampleValues {
         Objects.requireNonNull(domainPackage, "domainPackage");
         java.util.List<String> imports = new java.util.ArrayList<>();
         field.declaredType().ifPresent(name -> imports.add(domainPackage + "." + name));
+        field.elementType().ifPresent(element -> {
+            imports.add("java.util.List");
+            imports.addAll(requiredImports(sample(field), domainPackage));
+        });
         // Building a value's sample means naming its components' types too.
         field.valueType().ifPresent(value -> value.components()
                 .forEach(component -> imports.addAll(requiredImports(component, domainPackage))));
-        if (field.declaredType().isEmpty()) {
+        if (field.declaredType().isEmpty() && field.elementType().isEmpty()) {
             requiredImport(field.scalarType()).ifPresent(imports::add);
         }
         return java.util.List.copyOf(imports);
@@ -125,6 +135,23 @@ public final class JavaSampleValues {
             case DATE_TIME -> Optional.of("java.time.OffsetDateTime");
             default -> Optional.empty();
         };
+    }
+
+    /** One element of a collection, standing in as a field of the element's own type. */
+    private static ApplicationField sample(ApplicationField field) {
+        return new ApplicationField(
+                field.name(),
+                field.columnName(),
+                field.elementType().orElseThrow(),
+                true,
+                false,
+                false,
+                java.util.Optional.empty(),
+                field.where());
+    }
+
+    private static String element(ApplicationField field) {
+        return java(sample(field));
     }
 
     /** The sample constant of a declared enum, which the field itself cannot know. */

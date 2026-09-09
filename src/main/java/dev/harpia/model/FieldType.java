@@ -51,6 +51,22 @@ public sealed interface FieldType {
         VALUE
     }
 
+    /** A homogeneous collection of one element type. */
+    record Container(FieldType element) implements FieldType {
+        public Container {
+            Objects.requireNonNull(element, "element");
+        }
+
+        @Override
+        public String syntax() {
+            return "List<" + element.syntax() + ">";
+        }
+    }
+
+    static FieldType list(FieldType element) {
+        return new Container(element);
+    }
+
     static FieldType scalar(TypeRef kind) {
         return new Scalar(kind);
     }

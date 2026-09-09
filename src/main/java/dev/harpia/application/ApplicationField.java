@@ -27,9 +27,17 @@ public record ApplicationField(
                 "field '" + name + "' is " + type.syntax() + ", not a scalar"));
     }
 
-    /** The name of the declared type this field holds, whichever kind it is. */
+    /**
+     * The name of the declared type this field holds.
+     *
+     * <p>A container is neither a scalar nor a declaration: it is built from an element type, and
+     * asking it for a name would produce {@code List<Thing>}, which names nothing.
+     */
     public Optional<String> declaredType() {
-        return type.scalarKind().isPresent() ? Optional.empty() : Optional.of(type.syntax());
+        return type instanceof ApplicationFieldType.EnumType
+                        || type instanceof ApplicationFieldType.ValueType
+                ? Optional.of(type.syntax())
+                : Optional.empty();
     }
 
     /** The declared enum this field holds, when it holds one. */
@@ -43,6 +51,13 @@ public record ApplicationField(
     public Optional<ApplicationFieldType.ValueType> valueType() {
         return type instanceof ApplicationFieldType.ValueType declared
                 ? Optional.of(declared)
+                : Optional.empty();
+    }
+
+    /** The element type this field collects, when it is a collection. */
+    public Optional<ApplicationFieldType> elementType() {
+        return type instanceof ApplicationFieldType.Container container
+                ? Optional.of(container.element())
                 : Optional.empty();
     }
 

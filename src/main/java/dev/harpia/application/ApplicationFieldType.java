@@ -56,6 +56,22 @@ public sealed interface ApplicationFieldType {
         return new ValueType(name, components);
     }
 
+    /** A homogeneous collection of one element type. */
+    record Container(ApplicationFieldType element) implements ApplicationFieldType {
+        public Container {
+            Objects.requireNonNull(element, "element");
+        }
+
+        @Override
+        public String syntax() {
+            return "List<" + element.syntax() + ">";
+        }
+    }
+
+    static ApplicationFieldType list(ApplicationFieldType element) {
+        return new Container(element);
+    }
+
     static ApplicationFieldType scalar(ApplicationScalarType kind) {
         return new Scalar(kind);
     }

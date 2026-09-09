@@ -246,6 +246,25 @@ O status deve estar entre 200 e 299. O valor retornado pelo flow deve ter a mesm
 `return nothing` exige `nothing`; uma variável `E` exige `E`; e uma variável `List<E>` exige
 `List<E>`. Status 204 exige `nothing` e `nothing` exige status 204.
 
+## 7.0 Coleções
+
+Na V1, um campo pode ser `List<T>`, onde `T` é um escalar ou um `Enum` declarado:
+
+```markdown
+- tags: List<String> required
+- channels: List<Channel>
+```
+
+Uma coleção tem tantas linhas por dono quantos elementos tiver, então **não cabe na linha do dono**.
+Esse único fato decide o mapeamento inteiro: ela ganha tabela própria, `<tabela>_<campo>`, ligada ao
+dono por chave estrangeira, e a entidade que a declara não tem coluna para ela.
+
+`required` numa coleção significa **não-vazia**: uma coleção que precisa existir mas pode estar
+vazia é o mesmo que uma coleção ausente.
+
+Fora do recorte: `List<Entity>` é relacionamento (`DOM-012`); `List<Value>` e `List<List<...>>` são
+recusados. Coleção como parâmetro ou retorno de Logic é `LOGIC-006`.
+
 ## 7.1 Enum
 
 Na V1, `## Enum <Nome>` declara um conjunto fechado de valores que o projeto nomeia:

@@ -115,6 +115,9 @@ public final class ApplicationModelBuilder {
     }
 
     private static ApplicationFieldType nominal(dev.harpia.model.FieldType type) {
+        if (type instanceof dev.harpia.model.FieldType.Container container) {
+            return ApplicationFieldType.list(fieldType(container.element()));
+        }
         dev.harpia.model.FieldType.Nominal declared =
                 (dev.harpia.model.FieldType.Nominal) type;
         return switch (declared.kind()) {
@@ -127,11 +130,15 @@ public final class ApplicationModelBuilder {
         };
     }
 
-    private static ApplicationField field(FieldModel source) {
-        ApplicationFieldType type = source.type().scalarKind()
+    private static ApplicationFieldType fieldType(dev.harpia.model.FieldType type) {
+        return type.scalarKind()
                 .<ApplicationFieldType>map(scalar ->
                         ApplicationFieldType.scalar(ApplicationScalarType.valueOf(scalar.name())))
-                .orElseGet(() -> nominal(source.type()));
+                .orElseGet(() -> nominal(type));
+    }
+
+    private static ApplicationField field(FieldModel source) {
+        ApplicationFieldType type = fieldType(source.type());
         return new ApplicationField(
                 source.name(),
                 SqlNaming.identifier(source.name()),

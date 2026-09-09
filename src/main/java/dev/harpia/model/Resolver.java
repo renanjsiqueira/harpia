@@ -159,6 +159,10 @@ public final class Resolver {
      * here is only the shape of the reference.
      */
     private static FieldType fieldType(String syntax, Declared declared) {
+        Optional<String> element = FieldLineParser.elementOf(syntax);
+        if (element.isPresent()) {
+            return FieldType.list(fieldType(element.orElseThrow(), declared));
+        }
         if (FieldLineParser.isScalar(syntax)) {
             return FieldType.scalar(TypeRef.fromSyntax(syntax));
         }

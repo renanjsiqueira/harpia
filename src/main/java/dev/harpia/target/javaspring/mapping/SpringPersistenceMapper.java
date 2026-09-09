@@ -20,9 +20,9 @@ public final class SpringPersistenceMapper {
                         new Attribute("name", quote(entity.tableName()))));
     }
 
-    /** A value is embedded, so the owner declares no column for the field itself. */
+    /** A value is embedded and a collection has its own table, so neither owns a column here. */
     public boolean ownsColumn(ApplicationField field) {
-        return field.valueType().isEmpty();
+        return field.valueType().isEmpty() && field.elementType().isEmpty();
     }
 
     public List<JavaAnnotationModel> fieldAnnotations(

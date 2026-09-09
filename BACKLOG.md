@@ -199,8 +199,8 @@ Visão operacional dos itens P0 ainda abertos; os registros canônicos permanece
 - [ ] `TYPE-019` **Secret** — `TODO` · `P1` · `M` · Area: `Security`
 - [x] `TYPE-020` **Enum nominal** — `DONE` na V1; `## Enum <Nome>` declara um conjunto fechado de valores, entra na symbol table, é referenciável como tipo de campo e gera enum Java, coluna e constraint. O tipo de campo passou a ser álgebra selada (`FieldType`/`ApplicationFieldType`), então todo mapeamento precisa responder pelo nominal em vez de tratá-lo como texto · `P1` · `L` · Area: `Domain`
   - Evidence: [`EnumDeclarationParser`](src/main/java/dev/harpia/parse/EnumDeclarationParser.java), [`FieldType`](src/main/java/dev/harpia/model/FieldType.java), [`ApplicationFieldType`](src/main/java/dev/harpia/application/ApplicationFieldType.java), [`JavaSpringEnumTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringEnumTransformer.java), [`DeclaredEnumTest`](src/test/java/dev/harpia/validate/DeclaredEnumTest.java).
-- [ ] `TYPE-021` **List&lt;T&gt; geral** — `PARTIAL`; listas de Entity existem em output/Flow, não como tipo de primeira classe · `P1` · `L` · Area: `Language Core`
-  - Evidence: [`OutputModel`](src/main/java/dev/harpia/model/OutputModel.java), [`FlowModel`](src/main/java/dev/harpia/model/FlowModel.java).
+- [x] `TYPE-021` **List&lt;T&gt; geral** — `DONE` na V1 como tipo de campo; `List<Escalar>` e `List<Enum>` viram `@ElementCollection` com tabela própria ligada ao dono, e `required` significa não-vazia. `List<Entity>` continua relacionamento (`DOM-012`) e coleção de valor ou de coleção é recusada. Como parâmetro/retorno de Logic é `LOGIC-006` · `P1` · `L` · Area: `Language Core`
+  - Evidence: [`FieldType`](src/main/java/dev/harpia/model/FieldType.java), [`JavaSpringEntityTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringEntityTransformer.java), [`JavaSpringMigrationTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringMigrationTransformer.java), [`ListFieldTest`](src/test/java/dev/harpia/validate/ListFieldTest.java).
 - [ ] `TYPE-022` **Optional&lt;T&gt; explícito** — `TODO`; opcionalidade de campo hoje é ausência de `required` · `P1` · `M` · Area: `Language Core`
 - [ ] `TYPE-023` **Reference&lt;T&gt;** — `TODO`; a álgebra de tipo de campo e o primeiro nominal já existem · `P1` · `L` · Area: `Domain`
   - Depends on: `CORE-009`, `TYPE-020` (pronto).
@@ -1410,7 +1410,7 @@ Concluídos desta lista: HTTP binding com base URL e os quatro mappings (`BIND-0
 `RULE-001`, `TYPE-020`, `TYPE-024`, `CORE-016`, `CMD-004`, `API-009` e `DET-003`.
 
 1. **Layout do código custom** (`CUSTOM-003`) — a garantia de propriedade está provada; falta decidir onde a implementação vive para compilar com a interface gerada.
-2. **Containers no type system** (`TYPE-021` `List<T>`, `TYPE-022` `Optional<T>`, `TYPE-025` `Page<T>`) — a álgebra de tipo de campo já é selada; containers são a extensão natural.
+2. **Containers restantes** (`TYPE-022` `Optional<T>`, `TYPE-025` `Page<T>`) — `List<T>` abriu o caminho; `Optional<T>` torna a opcionalidade explícita em vez de ser a ausência de `required`.
 3. **`Reference<T>` e relacionamentos** (`TYPE-023`, `DOM-012`) — primeiro caso em que um campo aponta para outra entidade.
 4. **MCP M1 read-only/STDIO** (`MCP-001`, `MCP-002`, `MCP-007`–`MCP-012`) — prova o fluxo agent-native sobre o mesmo core e é o único desbloqueio de `MCP-020`, o último P0 aberto.
 5. **Flow `fail`, `call` e `require`** (`FLOW-013`, `FLOW-014`, `FLOW-012`) — `fail` fecha `CMD-004`, cujo tipo já é gerado e mapeado.

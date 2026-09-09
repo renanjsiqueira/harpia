@@ -14,14 +14,43 @@ import java.util.Optional;
 public final class JavaSpringMigrationTransformer {
 
     public SqlMigrationModel transform(ApplicationProject application) {
-        List<SqlMigrationModel.Table> tables = application.entities().stream()
-                .map(JavaSpringMigrationTransformer::table)
-                .toList();
+        List<SqlMigrationModel.Table> tables = new ArrayList<>();
+        for (ApplicationEntity entity : application.entities()) {
+            tables.add(table(entity));
+            // A collection has as many rows per owner as it has elements, so it cannot share the
+            // owner's row. It gets its own table, keyed back to the owner.
+            for (ApplicationField field : entity.fields()) {
+                field.elementType().ifPresent(element ->
+                        tables.add(collectionTable(entity, field, element)));
+            }
+        }
         return new SqlMigrationModel(
                 tables,
                 application.entities().isEmpty()
                         ? Optional.empty()
                         : Optional.of(application.entities().getFirst().where()));
+    }
+
+    private static SqlMigrationModel.Table collectionTable(
+            ApplicationEntity entity,
+            ApplicationField field,
+            dev.harpia.application.ApplicationFieldType element) {
+        String owner = entity.tableName() + "_id";
+        String elementColumn = element instanceof
+                dev.harpia.application.ApplicationFieldType.EnumType
+                ? "varchar(64)"
+                : PostgresTypes.column(element.scalarKind().orElseThrow());
+        return new SqlMigrationModel.Table(
+                entity.tableName() + "_" + field.columnName(),
+                List.of(
+                        owner + " " + PostgresTypes.column(entity.idField().scalarType())
+                                + " NOT NULL",
+                        field.columnName() + " " + elementColumn + " NOT NULL"),
+                List.of("CONSTRAINT "
+                        + SqlConstraintNames.foreignKey(
+                                entity.tableName() + "_" + field.columnName(), owner)
+                        + " FOREIGN KEY (" + owner + ") REFERENCES "
+                        + entity.tableName() + " (" + entity.idField().columnName() + ")"));
     }
 
     private static String columnType(ApplicationField field) {
@@ -36,6 +65,10 @@ public final class JavaSpringMigrationTransformer {
             boolean identifier = field.equals(entity.idField());
             // A value has no column of its own: it is stored as the columns it groups, prefixed by
             // the field that holds it, so two values in one table cannot collide.
+            // A collection lives in its own table, added beside this one.
+            if (field.elementType().isPresent()) {
+                continue;
+            }
             if (field.valueType().isPresent()) {
                 for (ApplicationField component : field.valueType().orElseThrow().components()) {
                     columns.add(field.columnName() + "_" + component.columnName()

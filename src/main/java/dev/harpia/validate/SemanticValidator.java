@@ -15,6 +15,7 @@ import dev.harpia.parse.FieldLineParser;
 import dev.harpia.parse.ModuleAst;
 import dev.harpia.parse.ProjectAst;
 import dev.harpia.parse.SpecAst;
+import dev.harpia.parse.UnsupportedFeatureDetector;
 import dev.harpia.symbol.Symbol;
 import dev.harpia.symbol.SymbolTable;
 import java.util.HashSet;
@@ -58,7 +59,9 @@ public final class SemanticValidator {
             if (module.declaresEntity()) {
                 entities.put(module.entity().name(), validateEntity(module, diagnostics));
                 for (SpecAst.FieldDeclaration field : module.entity().fields()) {
-                    validateDeclaredType(field.type(), field.where(), symbols, diagnostics);
+                    validateDeclaredType(
+                            project.languageVersion(), field.type(), field.where(), symbols,
+                            diagnostics);
                 }
             }
         }
@@ -136,7 +139,41 @@ public final class SemanticValidator {
      * declaration in the project.
      */
     private static void validateDeclaredType(
-            String type, SourceRef where, SymbolTable symbols, DiagnosticCollector diagnostics) {
+            LanguageVersion languageVersion,
+            String type,
+            SourceRef where,
+            SymbolTable symbols,
+            DiagnosticCollector diagnostics) {
+        Optional<String> element = FieldLineParser.elementOf(type);
+        if (element.isPresent()) {
+            if (languageVersion == LanguageVersion.V0) {
+                diagnostics.error(
+                        ErrorCodes.SYNTAX_UNKNOWN_TYPE,
+                        "collections need harpia.languageVersion 1",
+                        where,
+                        "set harpia.languageVersion to 1");
+                return;
+            }
+            if (symbols.entity(element.orElseThrow()).isPresent()) {
+                // A collection of entities is a relationship, which needs a foreign key and a
+                // lifecycle Harpia has not specified yet.
+                UnsupportedFeatureDetector.reportRelationship(diagnostics, where);
+                return;
+            }
+            // A collection is stored as rows of its element, so a value or another collection
+            // would need a shape the element table does not have. Those are DOM-014 and TYPE-025.
+            String inner = element.orElseThrow();
+            if (symbols.valueType(inner).isPresent() || FieldLineParser.elementOf(inner).isPresent()) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_UNKNOWN_TYPE,
+                        "'" + type + "' is not supported; a collection holds a scalar or a "
+                                + "declared enum",
+                        where);
+                return;
+            }
+            validateDeclaredType(languageVersion, inner, where, symbols, diagnostics);
+            return;
+        }
         if (FieldLineParser.isScalar(type)
                 || symbols.enumType(type).isPresent()
                 || symbols.valueType(type).isPresent()) {
@@ -188,7 +225,8 @@ public final class SemanticValidator {
         }
         targeted.add(target.orElseThrow().name());
         for (SpecAst.InputDeclaration field : useCase.input()) {
-            validateDeclaredType(field.type(), field.where(), symbols, diagnostics);
+            validateDeclaredType(
+                    languageVersion, field.type(), field.where(), symbols, diagnostics);
         }
         validateInput(useCase, target.orElseThrow().fields(), diagnostics);
         validateRules(useCase, diagnostics);

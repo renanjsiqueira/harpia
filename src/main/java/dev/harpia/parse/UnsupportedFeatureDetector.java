@@ -14,8 +14,15 @@ public final class UnsupportedFeatureDetector {
     private UnsupportedFeatureDetector() {
     }
 
+    /**
+     * Whether the line uses the explicit relationship arrow.
+     *
+     * <p>A {@code List<...>} is no longer refused here: whether its element is a scalar, a declared
+     * enum or an entity is a question only the symbol table can answer, so a collection of entities
+     * is refused during semantic validation instead.
+     */
     public static boolean relationship(String fieldLine) {
-        return fieldLine.contains("->") || fieldLine.matches("(?s).*:\\s*List<[^>]+>.*");
+        return fieldLine.contains("->");
     }
 
     public static void reportRelationship(DiagnosticCollector diagnostics, SourceRef where) {

@@ -19,6 +19,12 @@ public final class SqlConstraintNames {
         return "pk_" + tableName;
     }
 
+    public static String foreignKey(String tableName, String columnName) {
+        Objects.requireNonNull(tableName, "tableName");
+        Objects.requireNonNull(columnName, "columnName");
+        return "fk_" + tableName + "_" + columnName;
+    }
+
     public static String unique(String tableName, String columnName) {
         Objects.requireNonNull(tableName, "tableName");
         Objects.requireNonNull(columnName, "columnName");

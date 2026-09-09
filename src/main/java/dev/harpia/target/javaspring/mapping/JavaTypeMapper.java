@@ -40,6 +40,10 @@ public final class JavaTypeMapper {
         if (type instanceof ApplicationFieldType.ValueType declared) {
             return JavaTypeRef.of(domainPackage + "." + declared.name());
         }
+        if (type instanceof ApplicationFieldType.Container container) {
+            return JavaTypeRef.parameterized(
+                    "java.util.List", map(container.element(), domainPackage));
+        }
         return map(type.scalarKind().orElseThrow());
     }
 
