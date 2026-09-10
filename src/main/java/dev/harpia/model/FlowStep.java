@@ -68,13 +68,24 @@ public sealed interface FlowStep
 
     /** Lists every entity whose fields all match the given input values. */
     record ListBy(
-            String variable, String entity, java.util.List<String> fields, SourceRef where)
-            implements FlowStep {
+            String variable,
+            String entity,
+            java.util.List<String> fields,
+            java.util.List<SortOrder> sort,
+            SourceRef where) implements FlowStep {
         public ListBy {
             Objects.requireNonNull(variable, "variable");
             Objects.requireNonNull(entity, "entity");
             fields = java.util.List.copyOf(fields);
+            sort = java.util.List.copyOf(sort);
             Objects.requireNonNull(where, "where");
+        }
+    }
+
+    /** One ordering step: a field and whether it descends. */
+    record SortOrder(String field, boolean descending) {
+        public SortOrder {
+            Objects.requireNonNull(field, "field");
         }
     }
 
@@ -85,10 +96,15 @@ public sealed interface FlowStep
         }
     }
 
-    record ListAll(String variable, String entity, SourceRef where) implements FlowStep {
+    record ListAll(
+            String variable,
+            String entity,
+            java.util.List<SortOrder> sort,
+            SourceRef where) implements FlowStep {
         public ListAll {
             Objects.requireNonNull(variable, "variable");
             Objects.requireNonNull(entity, "entity");
+            sort = java.util.List.copyOf(sort);
             Objects.requireNonNull(where, "where");
         }
     }

@@ -130,6 +130,35 @@ public final class JavaSpringServiceTestTransformer {
                 Optional.empty());
     }
 
+    /**
+     * The order the listing is expected to ask for.
+     *
+     * <p>A declared sort refines the stable one rather than replacing it, so the id stays last —
+     * and the assertion has to say the same thing the service does.
+     */
+    private static String expectedSort(
+            ApplicationEntity entity, ApplicationOperation operation) {
+        List<ApplicationOperation.FlowInstruction.SortOrder> orders = operation.flow().stream()
+                .filter(candidate -> candidate.command() == FlowCommand.LIST_ALL
+                        || candidate.command() == FlowCommand.LIST_BY)
+                .findFirst()
+                .map(ApplicationOperation.FlowInstruction::sort)
+                .orElse(List.of());
+        if (orders.isEmpty()) {
+            return "Sort.by(\"" + entity.idField().name() + "\")";
+        }
+        StringBuilder expected = new StringBuilder("Sort.by(");
+        for (ApplicationOperation.FlowInstruction.SortOrder order : orders) {
+            expected.append("Sort.Order.")
+                    .append(order.descending() ? "desc" : "asc")
+                    .append("(\"").append(order.field()).append("\"), ");
+        }
+        return expected.append("Sort.Order.asc(\"")
+                .append(entity.idField().name())
+                .append("\"))")
+                .toString();
+    }
+
     private static Optional<ApplicationOperation.FlowInstruction> instruction(
             ApplicationOperation operation, FlowCommand command) {
         return operation.flow().stream()
@@ -254,8 +283,8 @@ public final class JavaSpringServiceTestTransformer {
             statements.add(CAPTOR + "<Sort> order = " + CAPTOR + ".forClass(Sort.class);");
             statements.add(MOCKITO + ".verify(repository).findAll(order.capture());");
             statements.add(ASSERTIONS + ".assertThat(order.getValue())"
-                    + ".as(\"Harpia requires a stable order\").isEqualTo(Sort.by(\""
-                    + entity.idField().name() + "\"));");
+                    + ".as(\"Harpia requires a stable order\").isEqualTo("
+                    + expectedSort(entity, operation) + ");");
         } else if (loads
                 && operation.result().kind() == ApplicationOperation.ResultKind.ENTITY
                 && !updates) {

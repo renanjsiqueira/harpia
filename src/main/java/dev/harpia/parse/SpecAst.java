@@ -165,16 +165,37 @@ public final class SpecAst {
 
     public record UpdateFrom(String variable, SourceRef where) implements FlowStatement {}
 
-    public record ListAll(String variable, String entity, SourceRef where) implements FlowStatement {}
+    /** One ordering step: a field and whether it descends. */
+    public record SortOrder(String field, boolean descending) {
+        public SortOrder {
+            Objects.requireNonNull(field, "field");
+        }
+    }
+
+    public record ListAll(
+            String variable, String entity, List<SortOrder> sort, SourceRef where)
+            implements FlowStatement {
+        public ListAll {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(entity, "entity");
+            sort = List.copyOf(sort);
+            Objects.requireNonNull(where, "where");
+        }
+    }
 
     /** Lists every entity whose fields all match the given input values. */
     public record ListBy(
-            String variable, String entity, List<String> fields, SourceRef where)
+            String variable,
+            String entity,
+            List<String> fields,
+            List<SortOrder> sort,
+            SourceRef where)
             implements FlowStatement {
         public ListBy {
             Objects.requireNonNull(variable, "variable");
             Objects.requireNonNull(entity, "entity");
             fields = List.copyOf(fields);
+            sort = List.copyOf(sort);
             Objects.requireNonNull(where, "where");
         }
     }

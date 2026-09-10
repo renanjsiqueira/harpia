@@ -271,6 +271,12 @@ public final class Resolver {
         };
     }
 
+    private static List<FlowStep.SortOrder> sortOrders(List<SpecAst.SortOrder> source) {
+        return source.stream()
+                .map(order -> new FlowStep.SortOrder(order.field(), order.descending()))
+                .toList();
+    }
+
     private static FlowStep flowStep(
             SpecAst.FlowStatement statement,
             LinkedHashMap<String, FlowModel.ValueType> variables,
@@ -300,13 +306,18 @@ public final class Resolver {
         if (statement instanceof SpecAst.ListAll value) {
             variables.put(value.variable(), new FlowModel.ValueType(
                     FlowModel.Kind.LIST, value.entity()));
-            return new FlowStep.ListAll(value.variable(), value.entity(), value.where());
+            return new FlowStep.ListAll(
+                    value.variable(), value.entity(), sortOrders(value.sort()), value.where());
         }
         if (statement instanceof SpecAst.ListBy value) {
             variables.put(value.variable(), new FlowModel.ValueType(
                     FlowModel.Kind.LIST, value.entity()));
             return new FlowStep.ListBy(
-                    value.variable(), value.entity(), value.fields(), value.where());
+                    value.variable(),
+                    value.entity(),
+                    value.fields(),
+                    sortOrders(value.sort()),
+                    value.where());
         }
         if (statement instanceof SpecAst.Save value) {
             return new FlowStep.Save(value.variable(), value.where());

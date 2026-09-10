@@ -281,6 +281,13 @@ public final class ApplicationModelBuilder {
         return Kind.READ;
     }
 
+    private static java.util.List<FlowInstruction.SortOrder> sortOrders(
+            java.util.List<FlowStep.SortOrder> source) {
+        return source.stream()
+                .map(order -> new FlowInstruction.SortOrder(order.field(), order.descending()))
+                .toList();
+    }
+
     private static FlowInstruction instruction(FlowStep source) {
         if (source instanceof FlowStep.ValidateInput value) {
             return new FlowInstruction(
@@ -291,6 +298,7 @@ public final class ApplicationModelBuilder {
                     FlowCommand.FAIL,
                     Optional.empty(),
                     Optional.empty(),
+                    java.util.List.of(),
                     java.util.List.of(),
                     Optional.of(new FlowInstruction.Guard(
                             value.error(), value.text(), value.condition())),
@@ -316,6 +324,7 @@ public final class ApplicationModelBuilder {
                     Optional.of(value.variable()),
                     Optional.of(value.entity()),
                     java.util.List.of(value.field()),
+                    java.util.List.of(),
                     Optional.empty(),
                     value.where());
         }
@@ -325,6 +334,7 @@ public final class ApplicationModelBuilder {
                     Optional.of(value.variable()),
                     Optional.of(value.entity()),
                     value.fields(),
+                    sortOrders(value.sort()),
                     Optional.empty(),
                     value.where());
         }
@@ -340,6 +350,9 @@ public final class ApplicationModelBuilder {
                     FlowCommand.LIST_ALL,
                     Optional.of(value.variable()),
                     Optional.of(value.entity()),
+                    java.util.List.of(),
+                    sortOrders(value.sort()),
+                    Optional.empty(),
                     value.where());
         }
         if (source instanceof FlowStep.Save value) {

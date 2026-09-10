@@ -70,6 +70,13 @@ final class ApplicationIrRenderer {
                         .append(instruction.fields().isEmpty()
                                 ? ""
                                 : " by " + String.join(" and ", instruction.fields()))
+                        .append(instruction.sort().isEmpty()
+                                ? ""
+                                : " sorted by " + instruction.sort().stream()
+                                        .map(order -> order.field()
+                                                + (order.descending() ? " desc" : " asc"))
+                                        .reduce((left, right) -> left + " and " + right)
+                                        .orElse(""))
                         .append(instruction.guard()
                                 .map(guard -> " " + guard.error() + " when " + guard.text())
                                 .orElse(""))

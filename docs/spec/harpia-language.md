@@ -463,6 +463,27 @@ ordem em que voltam.
 
 Fora do recorte: operadores além de igualdade, filtro opcional e combinação com `or`.
 
+## 8.5 sorted by
+
+Na V1, uma listagem pode declarar a ordem em que devolve os registros:
+
+```flow
+tickets = list Ticket sorted by priority desc and title
+tickets = list Ticket by status sorted by priority desc
+```
+
+- vale para `list` com e sem filtro;
+- direção omitida é ascendente;
+- cada campo precisa existir na entidade.
+
+**O id permanece como desempate final.** Ordenar por um campo que muitos registros compartilham
+deixaria os empates na ordem que o banco preferisse, e Harpia promete os mesmos bytes para a mesma
+entrada. Então a ordem declarada **refina** a ordem estável em vez de substituí-la:
+
+```java
+Sort.by(Sort.Order.desc("priority"), Sort.Order.asc("title"), Sort.Order.asc("id"))
+```
+
 ## 8.2 fail
 
 Na V1, o Flow pode levantar um erro de domínio declarado:

@@ -330,6 +330,26 @@ public final class SemanticValidator {
                 for (String field : list.fields()) {
                     searchable(target, inputs, field, false, list.where(), diagnostics);
                 }
+                sortable(target, list.sort(), list.where(), diagnostics);
+            } else if (statement instanceof SpecAst.ListAll list) {
+                sortable(target, list.sort(), list.where(), diagnostics);
+            }
+        }
+    }
+
+    /** An ordering names a field the entity stores, which is the only thing a row can be ordered by. */
+    private static void sortable(
+            Entity target,
+            java.util.List<SpecAst.SortOrder> orders,
+            SourceRef where,
+            DiagnosticCollector diagnostics) {
+        for (SpecAst.SortOrder order : orders) {
+            if (!target.fields().containsKey(order.field())) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_INPUT_FIELD_UNKNOWN,
+                        "cannot sort '" + target.name() + "' by '" + order.field()
+                                + "'; the entity has no such field",
+                        where);
             }
         }
     }

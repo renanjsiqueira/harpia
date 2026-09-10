@@ -167,8 +167,16 @@ public record ApplicationOperation(
             Optional<String> variable,
             Optional<String> entity,
             List<String> fields,
+            List<SortOrder> sort,
             Optional<Guard> guard,
             SourceRef where) {
+
+        /** One ordering step: a field and whether it descends. */
+        public record SortOrder(String field, boolean descending) {
+            public SortOrder {
+                Objects.requireNonNull(field, "field");
+            }
+        }
 
         /** The declared error a {@code fail} raises and the typed condition that raises it. */
         public record Guard(
@@ -186,7 +194,7 @@ public record ApplicationOperation(
                 Optional<String> variable,
                 Optional<String> entity,
                 SourceRef where) {
-            this(command, variable, entity, List.of(), Optional.empty(), where);
+            this(command, variable, entity, List.of(), List.of(), Optional.empty(), where);
         }
 
         public FlowInstruction {
@@ -194,6 +202,7 @@ public record ApplicationOperation(
             Objects.requireNonNull(variable, "variable");
             Objects.requireNonNull(entity, "entity");
             fields = List.copyOf(fields);
+            sort = List.copyOf(sort);
             Objects.requireNonNull(guard, "guard");
             Objects.requireNonNull(where, "where");
             boolean valid = switch (command) {

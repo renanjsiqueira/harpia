@@ -232,7 +232,7 @@ public final class JavaSpringServiceTransformer {
                             .collect(java.util.stream.Collectors.joining(", "));
                     statements.add("List<" + entityName + "> " + variable + " = "
                             + REPOSITORY_FIELD + "." + finderName(instruction) + "("
-                            + arguments + ", Sort.by(\"" + entity.idField().name() + "\"));");
+                            + arguments + ", " + sort(entity, instruction) + ");");
                 }
                 case UPDATE_FROM ->
                         copyInput(statements, instruction.variable().orElseThrow(), operation);
@@ -240,8 +240,7 @@ public final class JavaSpringServiceTransformer {
                     explicitImports.add("org.springframework.data.domain.Sort");
                     String variable = instruction.variable().orElseThrow();
                     statements.add("List<" + entityName + "> " + variable + " = "
-                            + REPOSITORY_FIELD + ".findAll(Sort.by(\""
-                            + entity.idField().name() + "\"));");
+                            + REPOSITORY_FIELD + ".findAll(" + sort(entity, instruction) + ");");
                 }
                 case SAVE -> {
                     String variable = instruction.variable().orElseThrow();
@@ -274,6 +273,30 @@ public final class JavaSpringServiceTransformer {
             }
         }
         return statements;
+    }
+
+    /**
+     * The order a listing returns rows in.
+     *
+     * <p>A declared sort by a field many rows share leaves ties in whatever order the database
+     * felt like, and Harpia promises the same bytes for the same input. The id goes last as the
+     * tiebreaker, so a declared order refines the stable one instead of replacing it.
+     */
+    private static String sort(
+            ApplicationEntity entity, ApplicationOperation.FlowInstruction instruction) {
+        if (instruction.sort().isEmpty()) {
+            return "Sort.by(\"" + entity.idField().name() + "\")";
+        }
+        StringBuilder orders = new StringBuilder("Sort.by(");
+        for (ApplicationOperation.FlowInstruction.SortOrder order : instruction.sort()) {
+            orders.append("Sort.Order.")
+                    .append(order.descending() ? "desc" : "asc")
+                    .append("(\"").append(order.field()).append("\"), ");
+        }
+        return orders.append("Sort.Order.asc(\"")
+                .append(entity.idField().name())
+                .append("\"))")
+                .toString();
     }
 
     /** The derived finder name Spring Data reads: the name is the query. */

@@ -32,10 +32,13 @@ public final class FlowLineParser {
     private static final Pattern FIND = Pattern.compile(
             "^" + VARIABLE + " +\\= +find +" + ENTITY + " +by +([a-z][A-Za-z0-9]*)$");
     private static final Pattern UPDATE = Pattern.compile("^update +" + VARIABLE + " +from +input$");
-    private static final Pattern LIST = Pattern.compile("^" + VARIABLE + " +\\= +list +" + ENTITY + "$");
+    private static final String SORT = "(?: +sorted +by +([a-z][A-Za-z0-9]*(?: +(?:asc|desc))?"
+            + "(?: +and +[a-z][A-Za-z0-9]*(?: +(?:asc|desc))?)*))?";
+    private static final Pattern LIST =
+            Pattern.compile("^" + VARIABLE + " +\\= +list +" + ENTITY + SORT + "$");
     private static final Pattern LIST_BY = Pattern.compile(
             "^" + VARIABLE + " +\\= +list +" + ENTITY
-                    + " +by +([a-z][A-Za-z0-9]*(?: +and +[a-z][A-Za-z0-9]*)*)$");
+                    + " +by +([a-z][A-Za-z0-9]*(?: +and +[a-z][A-Za-z0-9]*)*)" + SORT + "$");
     private static final Pattern SAVE = Pattern.compile("^save +" + VARIABLE + "$");
     private static final Pattern DELETE = Pattern.compile("^delete +" + VARIABLE + "$");
     private static final Pattern RETURN = Pattern.compile("^return +(nothing|[a-z][A-Za-z0-9]*)$");
@@ -43,6 +46,20 @@ public final class FlowLineParser {
             "^fail +([a-z]+(?: [a-z]+)*?) +when +(\\S.*)$");
 
     private FlowLineParser() {
+    }
+
+    /** {@code sorted by priority desc and name} in declaration order; ascending when unsaid. */
+    private static List<SpecAst.SortOrder> sortOrders(String clause) {
+        if (clause == null) {
+            return List.of();
+        }
+        List<SpecAst.SortOrder> orders = new java.util.ArrayList<>();
+        for (String term : clause.split(" +and +")) {
+            String[] parts = term.strip().split(" +");
+            orders.add(new SpecAst.SortOrder(
+                    parts[0], parts.length > 1 && parts[1].equals("desc")));
+        }
+        return List.copyOf(orders);
     }
 
     public static Optional<FlowStatement> parse(
@@ -70,7 +87,8 @@ public final class FlowLineParser {
         }
         matcher = LIST.matcher(line);
         if (matcher.matches()) {
-            return Optional.of(new ListAll(matcher.group(1), matcher.group(2), where));
+            return Optional.of(new ListAll(
+                    matcher.group(1), matcher.group(2), sortOrders(matcher.group(3)), where));
         }
         matcher = LIST_BY.matcher(line);
         if (matcher.matches()) {
@@ -78,6 +96,7 @@ public final class FlowLineParser {
                     matcher.group(1),
                     matcher.group(2),
                     List.of(matcher.group(3).split(" +and +")),
+                    sortOrders(matcher.group(4)),
                     where));
         }
         matcher = SAVE.matcher(line);
