@@ -364,8 +364,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `FLOW-003` **`create Entity from input`** — `DONE` end-to-end · `P0` · `M` · Area: `API`
   - Evidence: [`FlowLineParser`](src/main/java/dev/harpia/parse/FlowLineParser.java), [`ApplicationLayerTransformerTest`](src/test/java/dev/harpia/target/javaspring/transformer/ApplicationLayerTransformerTest.java).
 
-- [ ] `FLOW-004` **`find`** — `PARTIAL`; somente `load Entity by id` e `list Entity` existem · `P0` · `L` · Area: `Persistence`
-  - Evidence: [`FlowLineParser`](src/main/java/dev/harpia/parse/FlowLineParser.java), [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java).
+- [x] `FLOW-004` **`find`** — `DONE` na V1 para busca por campo único; `x = find Entity by campo` gera finder derivado no repositório e `orElseThrow(NotFound)` no serviço. O campo precisa ser `unique` (`HRP2128`) e existir no input, senão a busca teria mais de uma resposta para uma variável só. Busca por campo não-único é `QUERY-003` · `P0` · `L` · Area: `Persistence`
+  - Evidence: [`FlowLineParser`](src/main/java/dev/harpia/parse/FlowLineParser.java), [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java), [`JavaSpringRepositoryTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringRepositoryTransformer.java), [`FindByTest`](src/test/java/dev/harpia/validate/FindByTest.java).
 
 - [x] `FLOW-005` **`load Entity by id`** — `DONE` end-to-end · `P0` · `M` · Area: `Persistence`
   - Evidence: [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`GeneratedTestTransformerTest`](src/test/java/dev/harpia/target/javaspring/transformer/GeneratedTestTransformerTest.java).
@@ -810,7 +810,7 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 Em ordem de dependência e valor para a Reference Application:
 
 1. `DOM-012` e `PERSIST-009`: relationships end-to-end sobre a referência tipada de `TYPE-023`.
-2. `FLOW-004`, `QUERY-003`–`QUERY-005`: find, filtros, sorting e paginação básica.
+2. `QUERY-003`–`QUERY-005`: filtros, sorting e paginação sobre o `find` de `FLOW-004`.
 3. `FLOW-011`–`FLOW-014`, `FLOW-019`, `FLOW-020`: mutação, precondition/failure, calls e controle.
 4. `INTEG-001`–`INTEG-004`, `INTEG-010`, `RELY-001`: FraudService HTTP tipado.
 5. `EVENT-001`, `EVENT-003`, `EVENT-005`, `EVENT-007`, `FLOW-015`: Event local e emit.
@@ -1946,7 +1946,7 @@ avançada, semantic diff, zero-downtime migration, marketplace ou plugin ecosyst
 ## Top 10 Core V1 Next Tasks
 
 1. Fechar `TYPE-023` → `DOM-012` → `PERSIST-009` para relationships reais.
-2. Implementar `FLOW-004` e `QUERY-003`–`QUERY-005` para SearchOrders.
+2. Implementar `QUERY-003`–`QUERY-005` para SearchOrders.
 3. Implementar `FLOW-011`–`FLOW-013` para mutação e erros/preconditions explícitos.
 4. Implementar `FLOW-014`, `INTEG-001`–`INTEG-004` e `RELY-001` para FraudService.
 5. Implementar `FLOW-019`/`FLOW-020` somente no recorte exigido pela Reference Application.

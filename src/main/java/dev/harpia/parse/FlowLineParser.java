@@ -6,6 +6,7 @@ import dev.harpia.diag.SourceRef;
 import dev.harpia.parse.SpecAst.CreateFrom;
 import dev.harpia.parse.SpecAst.Delete;
 import dev.harpia.parse.SpecAst.Fail;
+import dev.harpia.parse.SpecAst.FindBy;
 import dev.harpia.parse.SpecAst.FlowStatement;
 import dev.harpia.parse.SpecAst.ListAll;
 import dev.harpia.parse.SpecAst.LoadById;
@@ -26,6 +27,8 @@ public final class FlowLineParser {
             "^" + VARIABLE + " +\\= +create +" + ENTITY + " +from +input$");
     private static final Pattern LOAD = Pattern.compile(
             "^" + VARIABLE + " +\\= +load +" + ENTITY + " +by +id$");
+    private static final Pattern FIND = Pattern.compile(
+            "^" + VARIABLE + " +\\= +find +" + ENTITY + " +by +([a-z][A-Za-z0-9]*)$");
     private static final Pattern UPDATE = Pattern.compile("^update +" + VARIABLE + " +from +input$");
     private static final Pattern LIST = Pattern.compile("^" + VARIABLE + " +\\= +list +" + ENTITY + "$");
     private static final Pattern SAVE = Pattern.compile("^save +" + VARIABLE + "$");
@@ -50,6 +53,11 @@ public final class FlowLineParser {
         matcher = LOAD.matcher(line);
         if (matcher.matches()) {
             return Optional.of(new LoadById(matcher.group(1), matcher.group(2), where));
+        }
+        matcher = FIND.matcher(line);
+        if (matcher.matches()) {
+            return Optional.of(new FindBy(
+                    matcher.group(1), matcher.group(2), matcher.group(3), where));
         }
         matcher = UPDATE.matcher(line);
         if (matcher.matches()) {

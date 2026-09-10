@@ -288,6 +288,12 @@ public final class Resolver {
                     FlowModel.Kind.ENTITY, value.entity()));
             return new FlowStep.LoadById(value.variable(), value.entity(), value.where());
         }
+        if (statement instanceof SpecAst.FindBy value) {
+            variables.put(value.variable(), new FlowModel.ValueType(
+                    FlowModel.Kind.ENTITY, value.entity()));
+            return new FlowStep.FindBy(
+                    value.variable(), value.entity(), value.field(), value.where());
+        }
         if (statement instanceof SpecAst.UpdateFrom value) {
             return new FlowStep.UpdateFrom(value.variable(), value.where());
         }

@@ -166,6 +166,7 @@ public record ApplicationOperation(
             FlowCommand command,
             Optional<String> variable,
             Optional<String> entity,
+            Optional<String> field,
             Optional<Guard> guard,
             SourceRef where) {
 
@@ -185,18 +186,20 @@ public record ApplicationOperation(
                 Optional<String> variable,
                 Optional<String> entity,
                 SourceRef where) {
-            this(command, variable, entity, Optional.empty(), where);
+            this(command, variable, entity, Optional.empty(), Optional.empty(), where);
         }
 
         public FlowInstruction {
             Objects.requireNonNull(command, "command");
             Objects.requireNonNull(variable, "variable");
             Objects.requireNonNull(entity, "entity");
+            Objects.requireNonNull(field, "field");
             Objects.requireNonNull(guard, "guard");
             Objects.requireNonNull(where, "where");
             boolean valid = switch (command) {
                 case VALIDATE_INPUT -> variable.isEmpty() && entity.isEmpty();
                 case FAIL -> guard.isPresent() && variable.isEmpty() && entity.isEmpty();
+                case FIND_BY -> variable.isPresent() && entity.isPresent() && field.isPresent();
                 case CREATE_FROM, LOAD_BY_ID, LIST_ALL -> variable.isPresent() && entity.isPresent();
                 case UPDATE_FROM, SAVE, DELETE -> variable.isPresent() && entity.isEmpty();
                 case RETURN -> entity.isEmpty();
@@ -210,6 +213,7 @@ public record ApplicationOperation(
     public enum FlowCommand {
         VALIDATE_INPUT,
         FAIL,
+        FIND_BY,
         CREATE_FROM,
         LOAD_BY_ID,
         UPDATE_FROM,

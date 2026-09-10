@@ -214,6 +214,17 @@ public final class JavaSpringServiceTransformer {
                     statements.add("        .orElseThrow(() -> new NotFoundException(\""
                             + entityName + "\", " + ID_PARAMETER + "));");
                 }
+                case FIND_BY -> {
+                    explicitImports.add(names.notFoundException());
+                    String variable = instruction.variable().orElseThrow();
+                    String field = instruction.field().orElseThrow();
+                    String finder = "findBy" + JavaLayout.accessor("", field);
+                    String argument = REQUEST_PARAMETER + "." + field + "()";
+                    statements.add(entityName + " " + variable + " = " + REPOSITORY_FIELD
+                            + "." + finder + "(" + argument + ")");
+                    statements.add("        .orElseThrow(() -> new NotFoundException(\""
+                            + entityName + "\", " + argument + "));");
+                }
                 case UPDATE_FROM ->
                         copyInput(statements, instruction.variable().orElseThrow(), operation);
                 case LIST_ALL -> {

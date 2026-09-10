@@ -418,6 +418,26 @@ analisador — uma regra não pode discordar de uma computação sobre o que um 
 Regra é a parte da validação de input que nenhuma anotação de campo consegue expressar, porque
 relaciona dois valores. O que um campo diz sobre si mesmo continua em `### Input`.
 
+## 8.3 find
+
+Na V1, o Flow pode buscar um registro por um campo que não é o id:
+
+```flow
+account = find Account by email
+return account
+```
+
+- o campo precisa ser `unique` na entidade (`HRP2128`). `load ... by id` sempre responde no máximo
+  um registro porque um id é único; um `find` precisa merecer a mesma promessa, senão o flow
+  atribuiria uma pergunta de muitas respostas a uma variável só;
+- o campo precisa existir no `### Input` da operação, que é de onde vem o valor buscado;
+- não encontrar é a mesma falha que um `load ... by id` reporta: `not found`.
+
+O target gera um finder derivado no repositório (`Optional<Account> findByEmail(String email)`) —
+Spring Data lê o nome do método, então o nome **é** a consulta.
+
+Busca por campo não-único, com filtros e mais de um resultado, é `QUERY-003`.
+
 ## 8.2 fail
 
 Na V1, o Flow pode levantar um erro de domínio declarado:

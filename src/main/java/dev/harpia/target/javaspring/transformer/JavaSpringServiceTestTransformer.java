@@ -130,6 +130,14 @@ public final class JavaSpringServiceTestTransformer {
                 Optional.empty());
     }
 
+    /** The field a {@code find} in this operation searches by, when there is one. */
+    private static Optional<String> finder(ApplicationOperation operation) {
+        return operation.flow().stream()
+                .filter(instruction -> instruction.command() == FlowCommand.FIND_BY)
+                .findFirst()
+                .flatMap(ApplicationOperation.FlowInstruction::field);
+    }
+
     private JavaMethodModel happyPath(
             Names names,
             ApplicationEntity entity,
@@ -137,6 +145,7 @@ public final class JavaSpringServiceTestTransformer {
             TreeSet<String> imports) {
         String entityName = entity.typeName();
         boolean loads = has(operation, FlowCommand.LOAD_BY_ID);
+        Optional<String> finds = finder(operation);
         boolean lists = has(operation, FlowCommand.LIST_ALL);
         boolean creates = has(operation, FlowCommand.CREATE_FROM);
         boolean updates = has(operation, FlowCommand.UPDATE_FROM);
@@ -144,13 +153,18 @@ public final class JavaSpringServiceTestTransformer {
         boolean deletes = has(operation, FlowCommand.DELETE);
 
         List<String> statements = new ArrayList<>();
-        if (loads || lists) {
+        if (loads || lists || finds.isPresent()) {
             statements.add(entityName + " entity = sampleEntity();");
         }
         if (loads) {
             statements.add(MOCKITO + ".when(repository.findById(ID))"
                     + ".thenReturn(Optional.of(entity));");
         }
+        // A find searches by the field the flow named, so the stub has to answer that call and
+        // not the one an id lookup would have made.
+        finds.ifPresent(field -> statements.add(MOCKITO + ".when(repository.findBy"
+                + JavaLayout.accessor("", field) + "(" + MATCHERS + ".any()))"
+                + ".thenReturn(Optional.of(entity));"));
         if (lists) {
             imports.add("java.util.List");
             imports.add("org.springframework.data.domain.Sort");
@@ -231,7 +245,11 @@ public final class JavaSpringServiceTestTransformer {
     private JavaMethodModel missing(
             Names names, ApplicationEntity entity, ApplicationOperation operation) {
         List<String> statements = new ArrayList<>();
-        statements.add(MOCKITO + ".when(repository.findById(ID)).thenReturn(Optional.empty());");
+        Optional<String> finds = finder(operation);
+        statements.add(finds
+                .map(field -> MOCKITO + ".when(repository.findBy" + JavaLayout.accessor("", field)
+                        + "(" + MATCHERS + ".any())).thenReturn(Optional.empty());")
+                .orElse(MOCKITO + ".when(repository.findById(ID)).thenReturn(Optional.empty());"));
         statements.add("");
         String request = null;
         if (operation.requestTypeName().isPresent()) {

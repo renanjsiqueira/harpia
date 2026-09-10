@@ -124,7 +124,7 @@ public final class SpecAst {
     }
 
     public sealed interface FlowStatement
-            permits ValidateInput, CreateFrom, LoadById, UpdateFrom, ListAll, Save, Delete,
+            permits ValidateInput, CreateFrom, LoadById, FindBy, UpdateFrom, ListAll, Save, Delete,
                     Fail, Return {
         SourceRef where();
     }
@@ -151,6 +151,17 @@ public final class SpecAst {
     public record CreateFrom(String variable, String entity, SourceRef where) implements FlowStatement {}
 
     public record LoadById(String variable, String entity, SourceRef where) implements FlowStatement {}
+
+    /** Finds the single entity whose unique field holds the given input value. */
+    public record FindBy(String variable, String entity, String field, SourceRef where)
+            implements FlowStatement {
+        public FindBy {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(entity, "entity");
+            Objects.requireNonNull(field, "field");
+            Objects.requireNonNull(where, "where");
+        }
+    }
 
     public record UpdateFrom(String variable, SourceRef where) implements FlowStatement {}
 

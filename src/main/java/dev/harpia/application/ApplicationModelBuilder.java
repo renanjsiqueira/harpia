@@ -291,6 +291,7 @@ public final class ApplicationModelBuilder {
                     FlowCommand.FAIL,
                     Optional.empty(),
                     Optional.empty(),
+                    Optional.empty(),
                     Optional.of(new FlowInstruction.Guard(
                             value.error(), value.text(), value.condition())),
                     value.where());
@@ -307,6 +308,15 @@ public final class ApplicationModelBuilder {
                     FlowCommand.LOAD_BY_ID,
                     Optional.of(value.variable()),
                     Optional.of(value.entity()),
+                    value.where());
+        }
+        if (source instanceof FlowStep.FindBy value) {
+            return new FlowInstruction(
+                    FlowCommand.FIND_BY,
+                    Optional.of(value.variable()),
+                    Optional.of(value.entity()),
+                    Optional.of(value.field()),
+                    Optional.empty(),
                     value.where());
         }
         if (source instanceof FlowStep.UpdateFrom value) {

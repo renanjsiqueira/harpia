@@ -295,6 +295,7 @@ public final class SemanticValidator {
         validateInput(useCase, target.orElseThrow().fields(), diagnostics);
         validateRules(useCase, diagnostics);
         validateFailures(useCase, diagnostics);
+        validateFinds(useCase, target.orElseThrow(), diagnostics);
         validateFlow(target.orElseThrow(), useCase, diagnostics);
     }
 
@@ -308,6 +309,48 @@ public final class SemanticValidator {
      * <p>The condition itself is typed by {@link LogicAnalyzer}, which owns what an expression
      * means. What is checked here is only that the declaration has something to constrain.
      */
+    /**
+     * A {@code find} names a field that can identify a single record.
+     *
+     * <p>Finding "the" entity by a field many rows can share is a question with more than one
+     * answer, and the flow assigns it to one variable. Uniqueness is what makes the singular true,
+     * so it is required rather than hoped for.
+     */
+    private static void validateFinds(
+            SpecAst.UseCaseDeclaration useCase, Entity target, DiagnosticCollector diagnostics) {
+        Set<String> inputs = useCase.input().stream()
+                .map(SpecAst.InputDeclaration::name)
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        for (SpecAst.FlowStatement statement : useCase.flow()) {
+            if (!(statement instanceof SpecAst.FindBy find)) {
+                continue;
+            }
+            SpecAst.FieldDeclaration field = target.fields().get(find.field());
+            if (field == null) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_INPUT_FIELD_UNKNOWN,
+                        "entity '" + target.name() + "' has no field '" + find.field() + "'",
+                        find.where());
+                continue;
+            }
+            if (!field.unique()) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FIND_NOT_UNIQUE,
+                        "'find " + find.entity() + " by " + find.field()
+                                + "' needs '" + find.field() + "' to be unique; "
+                                + "otherwise more than one record can answer",
+                        find.where());
+            }
+            if (!inputs.contains(find.field())) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_INPUT_FIELD_UNKNOWN,
+                        "'find " + find.entity() + " by " + find.field()
+                                + "' has no input '" + find.field() + "' to search with",
+                        find.where());
+            }
+        }
+    }
+
     /**
      * A {@code fail} raises an error the operation declared.
      *
@@ -433,6 +476,9 @@ public final class SemanticValidator {
         if (statement instanceof SpecAst.LoadById value) {
             return Optional.of(new Reference(value.entity(), value.where()));
         }
+        if (statement instanceof SpecAst.FindBy value) {
+            return Optional.of(new Reference(value.entity(), value.where()));
+        }
         if (statement instanceof SpecAst.ListAll value) {
             return Optional.of(new Reference(value.entity(), value.where()));
         }
@@ -550,6 +596,8 @@ public final class SemanticValidator {
                 define(variables, value.variable(), ValueType.entity(value.entity()), value.where(), diagnostics);
                 createsOrUpdates = true;
             } else if (statement instanceof SpecAst.LoadById value) {
+                define(variables, value.variable(), ValueType.entity(value.entity()), value.where(), diagnostics);
+            } else if (statement instanceof SpecAst.FindBy value) {
                 define(variables, value.variable(), ValueType.entity(value.entity()), value.where(), diagnostics);
             } else if (statement instanceof SpecAst.ListAll value) {
                 define(variables, value.variable(), ValueType.list(value.entity()), value.where(), diagnostics);

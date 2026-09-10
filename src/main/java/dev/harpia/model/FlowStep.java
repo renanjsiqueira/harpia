@@ -8,6 +8,7 @@ public sealed interface FlowStep
         permits FlowStep.ValidateInput,
                 FlowStep.CreateFrom,
                 FlowStep.LoadById,
+                FlowStep.FindBy,
                 FlowStep.UpdateFrom,
                 FlowStep.ListAll,
                 FlowStep.Save,
@@ -49,6 +50,17 @@ public sealed interface FlowStep
         public LoadById {
             Objects.requireNonNull(variable, "variable");
             Objects.requireNonNull(entity, "entity");
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
+    /** Finds the single entity whose unique field holds the given input value. */
+    record FindBy(String variable, String entity, String field, SourceRef where)
+            implements FlowStep {
+        public FindBy {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(entity, "entity");
+            Objects.requireNonNull(field, "field");
             Objects.requireNonNull(where, "where");
         }
     }
