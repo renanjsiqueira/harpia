@@ -457,6 +457,26 @@ reports in the same shape, without the command's own extra field.
 Each entry names the capability, who supplies it — `<target>` when the target implements it itself
 rather than choosing a provider — and every declaration that required it, with its location.
 
+### Java API
+
+`HarpiaCompiler` is usable directly, without the CLI:
+
+```java
+CompileResult result = new HarpiaCompiler().compile(new CompileRequest(projectRoot));
+result.diagnostics().forEach(System.out::println);
+result.tree().ifPresent(tree -> tree.files().forEach(...));
+```
+
+Everything in this compiler is typed, but being typed is not the same as being promised: most of it
+is free to change with the next slice. `HarpiaContract` names the part that is not — the types a
+harness, an editor plugin or an agent actually touches — and `HarpiaContract.VERSION` is the same
+number the CLI prints as `contract`. The Java API and the JSON output are one promise seen twice.
+
+That surface is pinned by a golden file, so widening or narrowing it is a decision rather than an
+accident. Diagnostic codes have their own ledger: a new code is additive and breaks nobody, while a
+renamed constant or a reused number would point existing tooling at another refusal, so those are
+refused.
+
 Run `./bin/harpia targets` rather than assuming target support. Unsupported targets fail before
 generation and never fall back to Java/Spring.
 

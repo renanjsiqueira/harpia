@@ -21,8 +21,12 @@ import java.util.Optional;
  */
 final class JsonReport {
 
-    /** Raised only when this file changes shape in a way that breaks an existing consumer. */
-    static final int CONTRACT = 1;
+    /**
+     * The Java API and this output are one promise seen twice, so they carry one number.
+     *
+     * @see dev.harpia.HarpiaContract
+     */
+    static final int CONTRACT = dev.harpia.HarpiaContract.VERSION;
 
     private JsonReport() {
     }

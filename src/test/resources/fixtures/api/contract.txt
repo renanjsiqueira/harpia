@@ -1,0 +1,216 @@
+dev.harpia.HarpiaContract
+  public static List types()
+  public static final int VERSION
+dev.harpia.HarpiaCompiler
+  new HarpiaCompiler()
+  new HarpiaCompiler(TargetRegistry)
+  public CompileResult compile(CompileRequest)
+dev.harpia.CompileRequest
+  new CompileRequest(Path)
+  new CompileRequest(Path, CompileRequest$Mode)
+  public CompileRequest$Mode mode()
+  public Path projectRoot()
+  public final String toString()
+  public final boolean equals(Object)
+  public final int hashCode()
+dev.harpia.CompileRequest$Mode
+  public static CompileRequest$Mode valueOf(String)
+  public static CompileRequest$Mode[] values()
+  public static final CompileRequest$Mode BUILD
+  public static final CompileRequest$Mode VALIDATE
+dev.harpia.CompileResult
+  new CompileResult(Optional, CompileResult$Stages, List)
+  new CompileResult(Optional, List)
+  new CompileResult(Optional, Optional, CompileResult$Stages, List)
+  public CompileResult$Stages stages()
+  public List diagnostics()
+  public Optional outputDirectory()
+  public Optional tree()
+  public boolean hasErrors()
+  public final String toString()
+  public final boolean equals(Object)
+  public final int hashCode()
+dev.harpia.CompileResult$Stages
+  new CompileResult$Stages(ProjectAst, Optional, Optional, Optional)
+  public CompileResult$Stages withApplication(ApplicationProject)
+  public CompileResult$Stages withBusiness(ProjectModel)
+  public CompileResult$Stages withSymbols(SymbolTable)
+  public Optional application()
+  public Optional business()
+  public Optional symbols()
+  public ProjectAst syntax()
+  public final String toString()
+  public final boolean equals(Object)
+  public final int hashCode()
+  public static CompileResult$Stages none()
+  public static CompileResult$Stages parsed(ProjectAst)
+dev.harpia.LanguageVersion
+  public String toString()
+  public int number()
+  public static LanguageVersion valueOf(String)
+  public static LanguageVersion[] values()
+  public static Optional from(int)
+  public static String supportedNumbers()
+  public static final LanguageVersion CURRENT
+  public static final LanguageVersion V0
+  public static final LanguageVersion V1
+dev.harpia.diag.Diagnostic
+  new Diagnostic(Severity, String, String, Optional, List, Optional)
+  new Diagnostic(Severity, String, String, Optional, Optional)
+  public Diagnostic relatedTo(String, SourceRef)
+  public Diagnostic withHint(String)
+  public List related()
+  public Optional hint()
+  public Optional where()
+  public Severity severity()
+  public String code()
+  public String message()
+  public boolean isError()
+  public final String toString()
+  public final boolean equals(Object)
+  public final int hashCode()
+  public static Diagnostic error(String, String)
+  public static Diagnostic error(String, String, SourceRef)
+  public static Diagnostic error(String, String, SourceRef, String)
+  public static Diagnostic warning(String, String)
+  public static Diagnostic warning(String, String, SourceRef)
+  public static Diagnostic warning(String, String, SourceRef, String)
+dev.harpia.diag.Severity
+  public String label()
+  public static Severity valueOf(String)
+  public static Severity[] values()
+  public static final Severity ERROR
+  public static final Severity WARNING
+dev.harpia.diag.SourceRef
+  new SourceRef(String, int, int)
+  new SourceRef(String, int, int, Optional)
+  public Optional end()
+  public SourceRef endingAt(int, int)
+  public SourceRef start()
+  public String describe()
+  public String file()
+  public boolean hasPosition()
+  public final String toString()
+  public final boolean equals(Object)
+  public final int hashCode()
+  public int column()
+  public int line()
+  public static SourceRef file(String)
+  public static SourceRef of(String, int, int)
+  public static SourceRef span(String, int, int, int, int)
+dev.harpia.diag.SourceRef$Position
+  new SourceRef$Position(int, int)
+  public final String toString()
+  public final boolean equals(Object)
+  public final int hashCode()
+  public int column()
+  public int line()
+dev.harpia.diag.RelatedLocation
+  new RelatedLocation(String, SourceRef)
+  public SourceRef where()
+  public String message()
+  public final String toString()
+  public final boolean equals(Object)
+  public final int hashCode()
+  public int compareTo(RelatedLocation)
+dev.harpia.diag.ErrorCodes
+dev.harpia.emit.GeneratedTree
+  new GeneratedTree()
+  public List generatedFiles()
+  public SortedMap files()
+  public int size()
+  public void put(GeneratedFile)
+  public void put(String, String)
+dev.harpia.emit.GeneratedFile
+  new GeneratedFile(String, String, GeneratedFileType, Optional)
+  new GeneratedFile(String, String, GeneratedFileType, Optional, List)
+  public GeneratedFileType type()
+  public List sourceMappings()
+  public Optional source()
+  public String content()
+  public String relativePath()
+  public final String toString()
+  public final boolean equals(Object)
+  public final int hashCode()
+  public int compareTo(GeneratedFile)
+  public static GeneratedFile other(String, String)
+dev.harpia.emit.OutputWriter
+  public static Optional sync(Path, String, GeneratedTree, boolean, boolean, DiagnosticCollector)
+  public static final String MANIFEST
+dev.harpia.emit.WriteReport
+  new WriteReport(List, List, List, List, List, List)
+  public List created()
+  public List deleted()
+  public List stale()
+  public List unchanged()
+  public List unknown()
+  public List updated()
+  public boolean idempotent()
+  public final String toString()
+  public final boolean equals(Object)
+  public final int hashCode()
+  public int written()
+dev.harpia.inspect.Inspector
+  public static Optional render(CompileResult, Stage)
+dev.harpia.inspect.Stage
+  public String description()
+  public String id()
+  public static Optional find(String)
+  public static Stage valueOf(String)
+  public static Stage[] values()
+  public static String ids()
+  public static final Stage APPLICATION_IR
+  public static final Stage AST
+  public static final Stage BUSINESS_IR
+  public static final Stage SYMBOLS
+dev.harpia.capability.Capability
+  public String id()
+  public static Capability valueOf(String)
+  public static Capability[] values()
+  public static final Capability CUSTOM
+  public static final Capability EVENTS
+  public static final Capability HTTP
+  public static final Capability PERSISTENCE
+dev.harpia.target.TargetCatalog
+  public static List all()
+  public static List info()
+  public static List planned()
+  public static List supported()
+  public static Optional find(TargetId)
+  public static final TargetId JAVA_SPRING
+dev.harpia.target.TargetDescriptor
+  new TargetDescriptor(TargetId, String, String, String, TargetStatus, String, int, Set)
+  new TargetDescriptor(TargetId, String, String, String, TargetStatus, String, int, Set, String, String, int)
+  public Set capabilities()
+  public Set orderedCapabilities()
+  public String displayName()
+  public String framework()
+  public String language()
+  public String languageRequirement()
+  public String targetVersion()
+  public String templateSet()
+  public TargetId id()
+  public TargetStatus status()
+  public boolean supports(Capability)
+  public boolean supportsLanguageVersion(int)
+  public final String toString()
+  public final boolean equals(Object)
+  public final int hashCode()
+  public int minimumLanguageVersion()
+  public int templateVersion()
+  public static TargetDescriptor planned(String, String, String, String)
+dev.harpia.target.TargetId
+  new TargetId(String)
+  public String toString()
+  public String value()
+  public final boolean equals(Object)
+  public final int hashCode()
+  public int compareTo(TargetId)
+  public static TargetId of(String)
+dev.harpia.target.TargetStatus
+  public boolean canGenerate()
+  public static TargetStatus valueOf(String)
+  public static TargetStatus[] values()
+  public static final TargetStatus EXPERIMENTAL
+  public static final TargetStatus NOT_SUPPORTED
+  public static final TargetStatus SUPPORTED
