@@ -46,6 +46,7 @@ class ResolverTest {
                 List.of(),
                 List.of(),
                 java.util.Map.of(),
+                java.util.Map.of(),
                 java.util.Map.of());
 
         assertThat(diagnostics.diagnostics()).isEmpty();

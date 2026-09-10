@@ -418,6 +418,37 @@ analisador — uma regra não pode discordar de uma computação sobre o que um 
 Regra é a parte da validação de input que nenhuma anotação de campo consegue expressar, porque
 relaciona dois valores. O que um campo diz sobre si mesmo continua em `### Input`.
 
+## 8.2 fail
+
+Na V1, o Flow pode levantar um erro de domínio declarado:
+
+```markdown
+### Flow
+
+```flow
+validate input
+fail insufficient balance when amount > balance
+payment = create Payment from input
+save payment
+return payment
+```
+
+### Errors
+
+- insufficient balance -> 422
+```
+
+- a guarda é obrigatória. Um `fail` incondicional encerraria toda execução da operação, então a
+  condição é o que faz dele uma instrução e não um beco sem saída;
+- a condição é booleana sobre o input, tipada pelo mesmo analisador de `### Rules` e
+  `## Invariants`;
+- o erro precisa estar declarado em `### Errors` da própria operação (`HRP2127`). O status vive lá,
+  e levantar um erro não declarado deixaria o compilador escolhendo um status que ninguém escreveu;
+- o erro é levantado exatamente onde o flow o posiciona.
+
+A diferença para `### Rules`: uma rule diz que o input é inválido e responde o status de
+`invalid input`. Um `fail` nomeia **qual** erro de negócio ocorreu e responde o status daquele erro.
+
 ## 9. Errors
 
 Cada item diretamente sob `### Errors` declara uma condição e seu status:

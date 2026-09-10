@@ -286,6 +286,15 @@ public final class ApplicationModelBuilder {
             return new FlowInstruction(
                     FlowCommand.VALIDATE_INPUT, Optional.empty(), Optional.empty(), value.where());
         }
+        if (source instanceof FlowStep.Fail value) {
+            return new FlowInstruction(
+                    FlowCommand.FAIL,
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(new FlowInstruction.Guard(
+                            value.error(), value.text(), value.condition())),
+                    value.where());
+        }
         if (source instanceof FlowStep.CreateFrom value) {
             return new FlowInstruction(
                     FlowCommand.CREATE_FROM,

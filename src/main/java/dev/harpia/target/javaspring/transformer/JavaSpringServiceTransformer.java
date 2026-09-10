@@ -184,6 +184,23 @@ public final class JavaSpringServiceTransformer {
                         statements.add("}");
                     }
                 }
+                case FAIL -> {
+                    ApplicationOperation.FlowInstruction.Guard guard =
+                            instruction.guard().orElseThrow();
+                    String exception = dev.harpia.model.Naming.errorSymbol(guard.error())
+                            + "Exception";
+                    explicitImports.add(names.errorPackage() + "." + exception);
+                    JavaLogicWriter.Result condition = JavaLogicWriter.condition(
+                            guard.condition(),
+                            operation.methodName(),
+                            field -> REQUEST_PARAMETER + "." + field + "()");
+                    explicitImports.addAll(condition.imports());
+                    statements.add("if (" + condition.body() + ") {");
+                    statements.add("    throw new " + exception + "(\""
+                            + guard.text().replace("\\", "\\\\").replace("\"", "\\\"")
+                            + "\");");
+                    statements.add("}");
+                }
                 case CREATE_FROM -> {
                     String variable = instruction.variable().orElseThrow();
                     statements.add(entityName + " " + variable + " = new " + entityName + "();");

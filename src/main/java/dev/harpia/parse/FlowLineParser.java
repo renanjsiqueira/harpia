@@ -5,6 +5,7 @@ import dev.harpia.diag.ErrorCodes;
 import dev.harpia.diag.SourceRef;
 import dev.harpia.parse.SpecAst.CreateFrom;
 import dev.harpia.parse.SpecAst.Delete;
+import dev.harpia.parse.SpecAst.Fail;
 import dev.harpia.parse.SpecAst.FlowStatement;
 import dev.harpia.parse.SpecAst.ListAll;
 import dev.harpia.parse.SpecAst.LoadById;
@@ -30,6 +31,8 @@ public final class FlowLineParser {
     private static final Pattern SAVE = Pattern.compile("^save +" + VARIABLE + "$");
     private static final Pattern DELETE = Pattern.compile("^delete +" + VARIABLE + "$");
     private static final Pattern RETURN = Pattern.compile("^return +(nothing|[a-z][A-Za-z0-9]*)$");
+    private static final Pattern FAIL = Pattern.compile(
+            "^fail +([a-z]+(?: [a-z]+)*?) +when +(\\S.*)$");
 
     private FlowLineParser() {
     }
@@ -63,6 +66,15 @@ public final class FlowLineParser {
         matcher = DELETE.matcher(line);
         if (matcher.matches()) {
             return Optional.of(new Delete(matcher.group(1), where));
+        }
+        matcher = FAIL.matcher(line);
+        if (matcher.matches()) {
+            String error = matcher.group(1);
+            String condition = matcher.group(2).strip();
+            Optional<LogicAst.Expression> parsed =
+                    LogicLexer.tokenize(condition, where, diagnostics)
+                            .flatMap(tokens -> LogicExpressionParser.parse(tokens, diagnostics));
+            return parsed.map(expression -> new Fail(error, condition, expression, where));
         }
         matcher = RETURN.matcher(line);
         if (matcher.matches()) {

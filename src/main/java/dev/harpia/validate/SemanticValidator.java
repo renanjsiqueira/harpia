@@ -294,6 +294,7 @@ public final class SemanticValidator {
         }
         validateInput(useCase, target.orElseThrow().fields(), diagnostics);
         validateRules(useCase, diagnostics);
+        validateFailures(useCase, diagnostics);
         validateFlow(target.orElseThrow(), useCase, diagnostics);
     }
 
@@ -307,6 +308,29 @@ public final class SemanticValidator {
      * <p>The condition itself is typed by {@link LogicAnalyzer}, which owns what an expression
      * means. What is checked here is only that the declaration has something to constrain.
      */
+    /**
+     * A {@code fail} raises an error the operation declared.
+     *
+     * <p>The status a domain error answers with lives in {@code ### Errors}. Raising one that was
+     * never declared would leave the compiler choosing a status nobody wrote down.
+     */
+    private static void validateFailures(
+            SpecAst.UseCaseDeclaration useCase, DiagnosticCollector diagnostics) {
+        Set<String> declared = useCase.errors().stream()
+                .filter(error -> error.kind() == SpecAst.ErrorKind.DOMAIN)
+                .map(error -> error.name().orElseThrow())
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        for (SpecAst.FlowStatement statement : useCase.flow()) {
+            if (statement instanceof SpecAst.Fail fail && !declared.contains(fail.error())) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FAIL_UNDECLARED,
+                        "flow raises '" + fail.error() + "', which operation '" + useCase.title()
+                                + "' does not declare in '### Errors'",
+                        fail.where());
+            }
+        }
+    }
+
     private static void validateRules(
             SpecAst.UseCaseDeclaration useCase, DiagnosticCollector diagnostics) {
         if (useCase.rules().isEmpty()) {

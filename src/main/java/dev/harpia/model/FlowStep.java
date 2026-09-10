@@ -12,12 +12,27 @@ public sealed interface FlowStep
                 FlowStep.ListAll,
                 FlowStep.Save,
                 FlowStep.Delete,
+                FlowStep.Fail,
                 FlowStep.Return {
 
     SourceRef where();
 
     record ValidateInput(SourceRef where) implements FlowStep {
         public ValidateInput {
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
+    /** Raises the named domain error when the typed condition holds. */
+    record Fail(
+            String error,
+            String text,
+            dev.harpia.logic.TypedExpression condition,
+            SourceRef where) implements FlowStep {
+        public Fail {
+            Objects.requireNonNull(error, "error");
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(condition, "condition");
             Objects.requireNonNull(where, "where");
         }
     }

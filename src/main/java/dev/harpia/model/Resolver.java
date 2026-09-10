@@ -24,7 +24,8 @@ public final class Resolver {
             List<LogicModel> logics,
             List<ScenarioModel> scenarios,
             Map<String, List<RuleModel>> rules,
-            Map<String, List<RuleModel>> invariants) {
+            Map<String, List<RuleModel>> invariants,
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards) {
         Objects.requireNonNull(syntax, "syntax");
         Objects.requireNonNull(bindings, "bindings");
         Objects.requireNonNull(logics, "logics");
@@ -99,7 +100,8 @@ public final class Resolver {
                                 bindings,
                                 rules,
                                 declared,
-                                invariants))
+                                invariants,
+                                guards))
                         .toList(),
                 logics,
                 scenarios);
@@ -127,7 +129,8 @@ public final class Resolver {
             BindingModel bindings,
             Map<String, List<RuleModel>> rules,
             Declared declared,
-            Map<String, List<RuleModel>> invariants) {
+            Map<String, List<RuleModel>> invariants,
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards) {
         SpecAst.EntityDeclaration declaration = module.entity();
         List<FieldModel> fields = declaration.fields().stream()
                 .map(field -> field(field, declared))
@@ -141,7 +144,7 @@ public final class Resolver {
                         "Resolver requires semantic validation before resolving "
                                 + declaration.name()));
         List<UseCaseModel> useCases = operations.stream()
-                .map(useCase -> useCase(useCase, fields, bindings, rules, declared))
+                .map(useCase -> useCase(useCase, fields, bindings, rules, declared, guards))
                 .toList();
         return new EntityModel(
                 declaration.name(),
@@ -202,7 +205,8 @@ public final class Resolver {
             List<FieldModel> entityFields,
             BindingModel bindings,
             Map<String, List<RuleModel>> rules,
-            Declared declared) {
+            Declared declared,
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards) {
         Map<String, FieldModel> fieldsByName = new LinkedHashMap<>();
         entityFields.forEach(field -> fieldsByName.putIfAbsent(field.name(), field));
 
@@ -221,7 +225,7 @@ public final class Resolver {
 
         LinkedHashMap<String, FlowModel.ValueType> variables = new LinkedHashMap<>();
         List<FlowStep> steps = useCase.flow().stream()
-                .map(statement -> flowStep(statement, variables))
+                .map(statement -> flowStep(statement, variables, guards))
                 .toList();
 
         OutputModel.Shape shape = new OutputModel.Shape(
@@ -269,7 +273,8 @@ public final class Resolver {
 
     private static FlowStep flowStep(
             SpecAst.FlowStatement statement,
-            LinkedHashMap<String, FlowModel.ValueType> variables) {
+            LinkedHashMap<String, FlowModel.ValueType> variables,
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards) {
         if (statement instanceof SpecAst.ValidateInput value) {
             return new FlowStep.ValidateInput(value.where());
         }
@@ -296,6 +301,13 @@ public final class Resolver {
         }
         if (statement instanceof SpecAst.Delete value) {
             return new FlowStep.Delete(value.variable(), value.where());
+        }
+        if (statement instanceof SpecAst.Fail value) {
+            return new FlowStep.Fail(
+                    value.error(),
+                    value.text(),
+                    guards.get(value.where()),
+                    value.where());
         }
         if (statement instanceof SpecAst.Return value) {
             return new FlowStep.Return(value.variable(), value.where());

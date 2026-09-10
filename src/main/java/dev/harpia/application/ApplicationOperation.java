@@ -166,15 +166,37 @@ public record ApplicationOperation(
             FlowCommand command,
             Optional<String> variable,
             Optional<String> entity,
+            Optional<Guard> guard,
             SourceRef where) {
+
+        /** The declared error a {@code fail} raises and the typed condition that raises it. */
+        public record Guard(
+                String error, String text, dev.harpia.logic.TypedExpression condition) {
+            public Guard {
+                Objects.requireNonNull(error, "error");
+                Objects.requireNonNull(text, "text");
+                Objects.requireNonNull(condition, "condition");
+            }
+        }
+
+        /** Every instruction but {@code fail}, which is the only one that carries a guard. */
+        public FlowInstruction(
+                FlowCommand command,
+                Optional<String> variable,
+                Optional<String> entity,
+                SourceRef where) {
+            this(command, variable, entity, Optional.empty(), where);
+        }
 
         public FlowInstruction {
             Objects.requireNonNull(command, "command");
             Objects.requireNonNull(variable, "variable");
             Objects.requireNonNull(entity, "entity");
+            Objects.requireNonNull(guard, "guard");
             Objects.requireNonNull(where, "where");
             boolean valid = switch (command) {
                 case VALIDATE_INPUT -> variable.isEmpty() && entity.isEmpty();
+                case FAIL -> guard.isPresent() && variable.isEmpty() && entity.isEmpty();
                 case CREATE_FROM, LOAD_BY_ID, LIST_ALL -> variable.isPresent() && entity.isPresent();
                 case UPDATE_FROM, SAVE, DELETE -> variable.isPresent() && entity.isEmpty();
                 case RETURN -> entity.isEmpty();
@@ -187,6 +209,7 @@ public record ApplicationOperation(
 
     public enum FlowCommand {
         VALIDATE_INPUT,
+        FAIL,
         CREATE_FROM,
         LOAD_BY_ID,
         UPDATE_FROM,

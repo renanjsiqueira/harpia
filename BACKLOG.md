@@ -391,8 +391,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [ ] `FLOW-012` **`require`** — `TODO` · `P0` · `M` · Area: `API`
   - Depends on: `RULE-001`.
 
-- [ ] `FLOW-013` **`fail` com erro tipado** — `TODO`; o tipo já existe e é mapeado, falta a instrução que o levanta · `P0` · `M` · Area: `API`
-  - Depends on: `CMD-004` (pronto).
+- [x] `FLOW-013` **`fail` com erro tipado** — `DONE` na V1; `fail <erro> when <condição>` levanta um erro de domínio declarado em `### Errors`, com a condição tipada contra o input pelo mesmo analisador de Rules e Invariants. Um `fail` sem guarda não é comando de flow, e levantar erro não declarado é `HRP2127` · `P0` · `M` · Area: `API`
+  - Evidence: [`FlowLineParser`](src/main/java/dev/harpia/parse/FlowLineParser.java), [`LogicAnalyzer`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`FailInstructionTest`](src/test/java/dev/harpia/validate/FailInstructionTest.java).
 
 - [ ] `FLOW-014` **`call` Logic/Command/Integration** — `TODO` · `P0` · `L` · Area: `API`
   - Depends on: `CORE-009`, `CMD-001`, `INTEG-001`.
@@ -414,7 +414,7 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `CMD-003` **Output tipado de operação V0** — `DONE` para Entity/List/ nothing · `P0` · `M` · Area: `API`
   - Evidence: [`OutputModel`](src/main/java/dev/harpia/model/OutputModel.java), [`JavaSpringControllerTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringControllerTransformer.java).
 
-- [x] `CMD-004` **Errors tipados gerais** — `DONE` para a declaração do tipo; além das três condições detectadas, um erro de domínio nomeado (`insufficient balance -> 422`) vira símbolo canônico, tipo gerado e mapeamento de status, com um status por erro no projeto inteiro. O gatilho é `FLOW-013` (`fail`), que depende deste · `P0` · `L` · Area: `API`
+- [x] `CMD-004` **Errors tipados gerais** — `DONE` para a declaração do tipo; além das três condições detectadas, um erro de domínio nomeado (`insufficient balance -> 422`) vira símbolo canônico, tipo gerado e mapeamento de status, com um status por erro no projeto inteiro. O gatilho é `FLOW-013` (`fail`), pronto · `P0` · `L` · Area: `API`
   - Evidence: [`ErrorLineParser`](src/main/java/dev/harpia/parse/ErrorLineParser.java), [`Naming`](src/main/java/dev/harpia/model/Naming.java), [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java), [`JavaSpringErrorTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringErrorTransformer.java), [`DomainErrorTest`](src/test/java/dev/harpia/validate/DomainErrorTest.java).
 
 - [x] `CMD-006` **Flow de mutação CRUD V0** — `DONE` · `P0` · `L` · Area: `API`

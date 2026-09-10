@@ -51,7 +51,11 @@ public final class LogicSpecs {
                             project, SymbolTable.declare(project, diagnostics), diagnostics);
                 })
                 .orElse(new LogicAnalyzer.Result(
-                        List.of(), List.of(), java.util.Map.of(), java.util.Map.of()));
+                        List.of(),
+                        List.of(),
+                        java.util.Map.of(),
+                        java.util.Map.of(),
+                        java.util.Map.of()));
         return new Analysis(
                 parsed, analysis.logics(), analysis.scenarios(), diagnostics.diagnostics());
     }

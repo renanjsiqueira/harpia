@@ -76,7 +76,8 @@ public final class LogicAnalyzer {
                 List.copyOf(models),
                 ScenarioAnalyzer.analyze(project, symbols, diagnostics),
                 rules(project, symbols, diagnostics),
-                invariants(project, symbols, diagnostics));
+                invariants(project, symbols, diagnostics),
+                guards(project, symbols, diagnostics));
     }
 
     /**
@@ -86,6 +87,60 @@ public final class LogicAnalyzer {
      * over what the entity is allowed to be, so its scope is the entity's own fields and it holds
      * whichever operation ran.
      */
+    /**
+     * The typed guard of every {@code fail} in the project, by operation and source position.
+     *
+     * <p>A guard is a boolean condition over the operation's input, which is the same thing a rule
+     * is. Typing it through the same analysis keeps one definition of what an expression means.
+     */
+    public static Map<SourceRef, TypedExpression> guards(
+            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+        Map<SourceRef, TypedExpression> typed = new LinkedHashMap<>();
+        for (ModuleAst module : project.modules()) {
+            for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
+                if (useCase.flow().stream().noneMatch(SpecAst.Fail.class::isInstance)) {
+                    continue;
+                }
+                List<LogicModel.Parameter> scope = scopeOf(useCase.input());
+                for (SpecAst.FlowStatement statement : useCase.flow()) {
+                    if (!(statement instanceof SpecAst.Fail fail)) {
+                        continue;
+                    }
+                    analyzeExpression(
+                            "guard '" + fail.text() + "'",
+                            scope,
+                            LogicType.BOOLEAN,
+                            fail.condition(),
+                            symbols,
+                            fail.where(),
+                            diagnostics)
+                            .ifPresent(expression -> typed.put(fail.where(), expression));
+                }
+            }
+        }
+        return Map.copyOf(typed);
+    }
+
+    /**
+     * The input values an expression may name.
+     *
+     * <p>Only scalars for now: the expression algebra has no member access, so a nominal-typed
+     * input has nothing an expression could ask of it. Leaving it out means naming it reports an
+     * unknown value, which is true.
+     */
+    private static List<LogicModel.Parameter> scopeOf(
+            List<SpecAst.InputDeclaration> input) {
+        List<LogicModel.Parameter> scope = new ArrayList<>();
+        for (SpecAst.InputDeclaration field : input) {
+            if (!dev.harpia.parse.FieldLineParser.isScalar(field.type())) {
+                continue;
+            }
+            scope.add(new LogicModel.Parameter(
+                    field.name(), LogicType.of(field.type()), field.where()));
+        }
+        return List.copyOf(scope);
+    }
+
     private static Map<String, List<RuleModel>> invariants(
             ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
         Map<String, List<RuleModel>> byEntity = new LinkedHashMap<>();
@@ -136,10 +191,7 @@ public final class LogicAnalyzer {
                 if (useCase.rules().isEmpty() || useCase.input().isEmpty()) {
                     continue;
                 }
-                List<LogicModel.Parameter> scope = useCase.input().stream()
-                        .map(field -> new LogicModel.Parameter(
-                                field.name(), LogicType.of(field.type()), field.where()))
-                        .toList();
+                List<LogicModel.Parameter> scope = scopeOf(useCase.input());
                 List<RuleModel> typed = new ArrayList<>();
                 for (SpecAst.RuleDeclaration rule : useCase.rules()) {
                     analyzeExpression(
@@ -164,10 +216,12 @@ public final class LogicAnalyzer {
             List<LogicModel> logics,
             List<ScenarioModel> scenarios,
             Map<String, List<RuleModel>> rules,
-            Map<String, List<RuleModel>> invariants) {
+            Map<String, List<RuleModel>> invariants,
+            Map<SourceRef, TypedExpression> guards) {
         public Result {
             rules = Map.copyOf(rules);
             invariants = Map.copyOf(invariants);
+            guards = Map.copyOf(guards);
             logics = List.copyOf(logics);
             scenarios = List.copyOf(scenarios);
         }

@@ -66,7 +66,11 @@ final class ApplicationIrRenderer {
                 operation.rules().forEach(rule -> out.append("      Rule ")
                         .append(rule.text()).append('\n'));
                 operation.flow().forEach(instruction -> out.append("      Instruction ")
-                        .append(instruction.command()).append('\n'));
+                        .append(instruction.command())
+                        .append(instruction.guard()
+                                .map(guard -> " " + guard.error() + " when " + guard.text())
+                                .orElse(""))
+                        .append('\n'));
                 operation.failures().forEach(failure -> out.append("      Failure ")
                         .append(failure.condition())
                         .append(failure.name().map(name -> " '" + name + "'").orElse(""))

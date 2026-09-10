@@ -124,11 +124,29 @@ public final class SpecAst {
     }
 
     public sealed interface FlowStatement
-            permits ValidateInput, CreateFrom, LoadById, UpdateFrom, ListAll, Save, Delete, Return {
+            permits ValidateInput, CreateFrom, LoadById, UpdateFrom, ListAll, Save, Delete,
+                    Fail, Return {
         SourceRef where();
     }
 
     public record ValidateInput(SourceRef where) implements FlowStatement {}
+
+    /**
+     * Raises a declared domain error when a condition holds.
+     *
+     * <p>The guard is not decoration: a {@code fail} that always fired would end every run of the
+     * operation, so the condition is what makes it an instruction rather than a dead end.
+     */
+    public record Fail(
+            String error, String text, LogicAst.Expression condition, SourceRef where)
+            implements FlowStatement {
+        public Fail {
+            Objects.requireNonNull(error, "error");
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(condition, "condition");
+            Objects.requireNonNull(where, "where");
+        }
+    }
 
     public record CreateFrom(String variable, String entity, SourceRef where) implements FlowStatement {}
 
