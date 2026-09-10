@@ -55,7 +55,8 @@ final class ApplicationIrRenderer {
                 }
                 out.append(field.required() ? " required" : "")
                         .append(field.unique() ? " unique" : "")
-                        .append(field.generated() ? " generated" : "").append('\n');
+                        .append(field.generated() ? " generated" : "")
+                        .append(field.indexed() ? " indexed" : "").append('\n');
             }
             entity.invariants().forEach(invariant -> out.append("    Invariant ")
                     .append(invariant.text()).append('\n'));

@@ -220,6 +220,7 @@ public final class JavaSampleValues {
                 true,
                 field.unique(),
                 field.generated(),
+                field.indexed(),
                 field.defaultValue(),
                 field.where());
     }
@@ -231,6 +232,7 @@ public final class JavaSampleValues {
                 field.columnName(),
                 field.elementType().orElseThrow(),
                 true,
+                false,
                 false,
                 false,
                 java.util.Optional.empty(),

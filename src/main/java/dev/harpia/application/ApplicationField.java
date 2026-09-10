@@ -12,6 +12,7 @@ public record ApplicationField(
         boolean required,
         boolean unique,
         boolean generated,
+        boolean indexed,
         Optional<String> defaultValue,
         SourceRef where) {
 

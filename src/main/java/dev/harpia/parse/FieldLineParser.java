@@ -44,6 +44,7 @@ public final class FieldLineParser {
         boolean unique = false;
         boolean generated = false;
         boolean owned = false;
+        boolean indexed = false;
         String defaultValue = null;
         Set<String> seen = new HashSet<>();
         String modifiers = matcher.group(3);
@@ -62,7 +63,8 @@ public final class FieldLineParser {
                 } else if (modifier.equals("required")
                         || modifier.equals("unique")
                         || modifier.equals("generated")
-                        || modifier.equals("owned")) {
+                        || modifier.equals("owned")
+                        || modifier.equals("indexed")) {
                     if (!seen.add(modifier)) {
                         invalid(raw, where, diagnostics, "duplicate field modifier '" + modifier + "'");
                         return Optional.empty();
@@ -71,6 +73,7 @@ public final class FieldLineParser {
                     unique |= modifier.equals("unique");
                     generated |= modifier.equals("generated");
                     owned |= modifier.equals("owned");
+                    indexed |= modifier.equals("indexed");
                     remainder = separator < 0 ? "" : remainder.substring(separator).stripLeading();
                 } else {
                     invalid(raw, where, diagnostics, "unknown field modifier '" + modifier + "'");
@@ -78,8 +81,15 @@ public final class FieldLineParser {
                 }
             }
         }
+        // A unique column already has an index behind its constraint, so asking for another
+        // would create a second structure that serves the first one's purpose.
+        if (unique && indexed) {
+            invalid(raw, where, diagnostics,
+                    "'unique' already indexes the column; 'indexed' adds nothing");
+            return Optional.empty();
+        }
         return Optional.of(new FieldDeclaration(
-                matcher.group(1), type, required, unique, generated, owned,
+                matcher.group(1), type, required, unique, generated, owned, indexed,
                 Optional.ofNullable(defaultValue), where));
     }
 

@@ -9,6 +9,7 @@ import java.util.Optional;
 public record SqlMigrationModel(
         List<Table> tables,
         List<ForeignKey> foreignKeys,
+        List<Index> indexes,
         Optional<SourceRef> source) {
 
     public SqlMigrationModel {
@@ -17,7 +18,20 @@ public record SqlMigrationModel(
                 .sorted(java.util.Comparator.comparing(ForeignKey::table)
                         .thenComparing(ForeignKey::column))
                 .toList();
+        indexes = indexes.stream()
+                .sorted(java.util.Comparator.comparing(Index::table)
+                        .thenComparing(Index::column))
+                .toList();
         Objects.requireNonNull(source, "source");
+    }
+
+    /** A non-unique index, which a query uses and a constraint does not create. */
+    public record Index(String name, String table, String column) {
+        public Index {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(table, "table");
+            Objects.requireNonNull(column, "column");
+        }
     }
 
     public record Table(String name, List<String> columns, List<String> constraints) {

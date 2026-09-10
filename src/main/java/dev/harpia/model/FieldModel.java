@@ -10,6 +10,7 @@ public record FieldModel(
         boolean required,
         boolean unique,
         boolean generated,
+        boolean indexed,
         Optional<Literal> defaultValue,
         SourceRef where) {
     public FieldModel {

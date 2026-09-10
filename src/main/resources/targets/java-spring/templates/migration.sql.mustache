@@ -15,3 +15,7 @@ CREATE TABLE {{tableName}} (
 ALTER TABLE {{table}}
     ADD CONSTRAINT {{name}} FOREIGN KEY ({{column}}) REFERENCES {{targetTable}} ({{targetColumn}});
 {{/foreignKeys}}
+{{#indexes}}
+
+CREATE INDEX {{name}} ON {{table}} ({{column}});
+{{/indexes}}

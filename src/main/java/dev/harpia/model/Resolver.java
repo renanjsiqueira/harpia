@@ -248,6 +248,7 @@ public final class Resolver {
                 field.required(),
                 field.unique(),
                 field.generated(),
+                field.indexed(),
                 field.defaultValue().map(Literal::new),
                 field.where());
     }
@@ -272,6 +273,8 @@ public final class Resolver {
                     fieldType(declaration.type(), declared),
                     declaration.required(),
                     entityField != null && entityField.unique(),
+                    false,
+                    // An index is a fact about storage, and an input is not stored.
                     false,
                     entityField == null ? Optional.empty() : entityField.defaultValue(),
                     declaration.where()));

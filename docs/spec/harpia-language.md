@@ -122,6 +122,7 @@ field-item = bullet, sp, field-name, ":", sp, type, { sp, field-modifier } ;
 field-modifier = "required"
                | "unique"
                | "generated"
+               | "indexed"
                | "default", sp, literal ;
 
 literal = boolean-literal | integer-literal | decimal-literal
@@ -141,6 +142,12 @@ consome o restante da linha como um único literal. Literais são:
 
 Um default de tipo incompatível gera `HRP2004`. `required` e `default` podem coexistir; o default é
 usado quando o campo não foi enviado, enquanto valor `null` continua inválido.
+
+`indexed` pede um índice não único para a coluna, e é a única forma de obter um: o compilador não
+adivinha índices a partir dos filtros de um `find` ou de um `list ... where`. `unique` já é indexado
+pela própria constraint, então `unique indexed` é recusado como `HRP1004` — o segundo modificador
+criaria uma estrutura para o trabalho que a primeira já faz. Um índice é um fato sobre
+armazenamento; `indexed` não aparece em `### Input` nem muda o contrato exposto.
 
 Toda entidade possui exatamente este campo:
 
@@ -182,7 +189,8 @@ input-item = bullet, sp, field-name, ":", sp, type, [ sp, "required" ] ;
 ```
 
 O campo deve existir em `## Data` e repetir exatamente seu tipo. `id` e campos `generated` não podem
-ser input. `unique` e `default` são propriedades do dado e não são repetidos no input.
+ser input. `unique`, `indexed` e `default` são propriedades do dado e não são
+repetidos no input.
 
 Ausência de `### Input` representa input vazio. `validate input` é permitido somente quando a seção
 existe e possui ao menos um campo.

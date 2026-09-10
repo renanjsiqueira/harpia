@@ -55,9 +55,21 @@ public final class JavaSpringMigrationTransformer {
                 });
             }
         }
+        List<SqlMigrationModel.Index> indexes = new ArrayList<>();
+        for (ApplicationEntity entity : application.entities()) {
+            for (ApplicationField field : entity.fields()) {
+                if (field.indexed()) {
+                    indexes.add(new SqlMigrationModel.Index(
+                            SqlConstraintNames.index(entity.tableName(), field.columnName()),
+                            entity.tableName(),
+                            field.columnName()));
+                }
+            }
+        }
         return new SqlMigrationModel(
                 tables,
                 foreignKeys,
+                indexes,
                 application.entities().isEmpty()
                         ? Optional.empty()
                         : Optional.of(application.entities().getFirst().where()));

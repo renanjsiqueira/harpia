@@ -48,6 +48,12 @@ public final class MigrationEmitter implements Emitter {
         view.put("foreignKeys", migration.foreignKeys().stream()
                 .map(MigrationEmitter::foreignKeyView)
                 .toList());
+        view.put("indexes", migration.indexes().stream()
+                .map(index -> Map.<String, Object>of(
+                        "name", index.name(),
+                        "table", index.table(),
+                        "column", index.column()))
+                .toList());
         output.put(new GeneratedFile(
                 PATH,
                 OutputNormalizer.normalize(templates.render("migration.sql.mustache", view)),

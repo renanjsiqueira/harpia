@@ -224,6 +224,7 @@ public final class ApplicationModelBuilder {
                 source.required(),
                 source.unique(),
                 source.generated(),
+                source.indexed(),
                 source.defaultValue().map(value -> value.source()),
                 source.where());
     }

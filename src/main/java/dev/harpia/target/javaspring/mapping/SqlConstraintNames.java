@@ -25,6 +25,13 @@ public final class SqlConstraintNames {
         return "fk_" + tableName + "_" + columnName;
     }
 
+    /** An index is not a constraint, so its name says so: nothing is being enforced. */
+    public static String index(String tableName, String columnName) {
+        Objects.requireNonNull(tableName, "tableName");
+        Objects.requireNonNull(columnName, "columnName");
+        return "ix_" + tableName + "_" + columnName;
+    }
+
     public static String unique(String tableName, String columnName) {
         Objects.requireNonNull(tableName, "tableName");
         Objects.requireNonNull(columnName, "columnName");

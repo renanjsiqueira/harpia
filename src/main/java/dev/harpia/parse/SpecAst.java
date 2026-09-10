@@ -94,6 +94,7 @@ public final class SpecAst {
             boolean unique,
             boolean generated,
             boolean owned,
+            boolean indexed,
             Optional<String> defaultValue,
             SourceRef where) {
         public FieldDeclaration {
