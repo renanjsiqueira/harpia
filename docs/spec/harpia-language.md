@@ -438,6 +438,31 @@ Spring Data lê o nome do método, então o nome **é** a consulta.
 
 Busca por campo não-único, com filtros e mais de um resultado, é `QUERY-003`.
 
+## 8.4 list ... by
+
+Na V1, o Flow pode listar só os registros que casam com um valor:
+
+```flow
+tickets = list Ticket by status and owner
+return tickets
+```
+
+É a contrapartida de `find` (§8.3):
+
+| | Responde | Campo |
+|---|---|---|
+| `find Entity by campo` | no máximo um | precisa ser `unique` |
+| `list Entity by campo` | muitos | não precisa ser único |
+
+Muitos registros compartilharem um valor é exatamente o que uma lista filtrada pede, então a
+exigência de unicidade não se aplica aqui. Cada campo precisa existir na entidade e no `### Input`.
+
+O target gera um finder derivado multi-campo (`findByStatusAndOwner(...)`) e mantém a **mesma ordem
+estável por id** que uma listagem sem filtro já tem — filtrar muda quais registros voltam, não a
+ordem em que voltam.
+
+Fora do recorte: operadores além de igualdade, filtro opcional e combinação com `or`.
+
 ## 8.2 fail
 
 Na V1, o Flow pode levantar um erro de domínio declarado:

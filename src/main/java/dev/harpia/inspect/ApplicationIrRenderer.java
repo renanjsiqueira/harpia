@@ -67,7 +67,9 @@ final class ApplicationIrRenderer {
                         .append(rule.text()).append('\n'));
                 operation.flow().forEach(instruction -> out.append("      Instruction ")
                         .append(instruction.command())
-                        .append(instruction.field().map(field -> " by " + field).orElse(""))
+                        .append(instruction.fields().isEmpty()
+                                ? ""
+                                : " by " + String.join(" and ", instruction.fields()))
                         .append(instruction.guard()
                                 .map(guard -> " " + guard.error() + " when " + guard.text())
                                 .orElse(""))

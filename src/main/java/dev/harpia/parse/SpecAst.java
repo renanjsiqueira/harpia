@@ -124,8 +124,8 @@ public final class SpecAst {
     }
 
     public sealed interface FlowStatement
-            permits ValidateInput, CreateFrom, LoadById, FindBy, UpdateFrom, ListAll, Save, Delete,
-                    Fail, Return {
+            permits ValidateInput, CreateFrom, LoadById, FindBy, UpdateFrom, ListAll, ListBy,
+                    Save, Delete, Fail, Return {
         SourceRef where();
     }
 
@@ -166,6 +166,18 @@ public final class SpecAst {
     public record UpdateFrom(String variable, SourceRef where) implements FlowStatement {}
 
     public record ListAll(String variable, String entity, SourceRef where) implements FlowStatement {}
+
+    /** Lists every entity whose fields all match the given input values. */
+    public record ListBy(
+            String variable, String entity, List<String> fields, SourceRef where)
+            implements FlowStatement {
+        public ListBy {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(entity, "entity");
+            fields = List.copyOf(fields);
+            Objects.requireNonNull(where, "where");
+        }
+    }
 
     public record Save(String variable, SourceRef where) implements FlowStatement {}
 

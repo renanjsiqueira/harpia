@@ -130,12 +130,31 @@ public final class JavaSpringServiceTestTransformer {
                 Optional.empty());
     }
 
+    private static Optional<ApplicationOperation.FlowInstruction> instruction(
+            ApplicationOperation operation, FlowCommand command) {
+        return operation.flow().stream()
+                .filter(candidate -> candidate.command() == command)
+                .findFirst();
+    }
+
+    /** The derived finder name Spring Data reads, which the stub has to answer. */
+    private static String finderName(ApplicationOperation.FlowInstruction instruction) {
+        StringBuilder name = new StringBuilder("findBy");
+        for (int index = 0; index < instruction.fields().size(); index++) {
+            if (index > 0) {
+                name.append("And");
+            }
+            name.append(JavaLayout.accessor("", instruction.fields().get(index)));
+        }
+        return name.toString();
+    }
+
     /** The field a {@code find} in this operation searches by, when there is one. */
     private static Optional<String> finder(ApplicationOperation operation) {
         return operation.flow().stream()
                 .filter(instruction -> instruction.command() == FlowCommand.FIND_BY)
                 .findFirst()
-                .flatMap(ApplicationOperation.FlowInstruction::field);
+                .map(instruction -> instruction.fields().getFirst());
     }
 
     private JavaMethodModel happyPath(
@@ -147,13 +166,15 @@ public final class JavaSpringServiceTestTransformer {
         boolean loads = has(operation, FlowCommand.LOAD_BY_ID);
         Optional<String> finds = finder(operation);
         boolean lists = has(operation, FlowCommand.LIST_ALL);
+        Optional<ApplicationOperation.FlowInstruction> filters = instruction(
+                operation, FlowCommand.LIST_BY);
         boolean creates = has(operation, FlowCommand.CREATE_FROM);
         boolean updates = has(operation, FlowCommand.UPDATE_FROM);
         boolean saves = has(operation, FlowCommand.SAVE);
         boolean deletes = has(operation, FlowCommand.DELETE);
 
         List<String> statements = new ArrayList<>();
-        if (loads || lists || finds.isPresent()) {
+        if (loads || lists || finds.isPresent() || filters.isPresent()) {
             statements.add(entityName + " entity = sampleEntity();");
         }
         if (loads) {
@@ -172,6 +193,18 @@ public final class JavaSpringServiceTestTransformer {
                     + ".any(Sort.class)))");
             statements.add("        .thenReturn(List.of(entity));");
         }
+        // A filtered list calls the derived finder, and every argument it takes has to be matched.
+        filters.ifPresent(instruction -> {
+            imports.add("java.util.List");
+            imports.add("org.springframework.data.domain.Sort");
+            String matchers = java.util.stream.Stream.concat(
+                            instruction.fields().stream().map(field -> MATCHERS + ".any()"),
+                            java.util.stream.Stream.of(MATCHERS + ".any(Sort.class)"))
+                    .collect(java.util.stream.Collectors.joining(", "));
+            statements.add(MOCKITO + ".when(repository." + finderName(instruction)
+                    + "(" + matchers + "))");
+            statements.add("        .thenReturn(List.of(entity));");
+        });
         if (saves) {
             statements.add(MOCKITO + ".when(repository.save(" + MATCHERS + ".any("
                     + entityName + ".class)))");

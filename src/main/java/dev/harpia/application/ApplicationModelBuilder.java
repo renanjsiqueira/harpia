@@ -291,7 +291,7 @@ public final class ApplicationModelBuilder {
                     FlowCommand.FAIL,
                     Optional.empty(),
                     Optional.empty(),
-                    Optional.empty(),
+                    java.util.List.of(),
                     Optional.of(new FlowInstruction.Guard(
                             value.error(), value.text(), value.condition())),
                     value.where());
@@ -315,7 +315,16 @@ public final class ApplicationModelBuilder {
                     FlowCommand.FIND_BY,
                     Optional.of(value.variable()),
                     Optional.of(value.entity()),
-                    Optional.of(value.field()),
+                    java.util.List.of(value.field()),
+                    Optional.empty(),
+                    value.where());
+        }
+        if (source instanceof FlowStep.ListBy value) {
+            return new FlowInstruction(
+                    FlowCommand.LIST_BY,
+                    Optional.of(value.variable()),
+                    Optional.of(value.entity()),
+                    value.fields(),
                     Optional.empty(),
                     value.where());
         }

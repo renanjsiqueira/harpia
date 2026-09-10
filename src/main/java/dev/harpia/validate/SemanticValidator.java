@@ -322,32 +322,47 @@ public final class SemanticValidator {
                 .map(SpecAst.InputDeclaration::name)
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
         for (SpecAst.FlowStatement statement : useCase.flow()) {
-            if (!(statement instanceof SpecAst.FindBy find)) {
-                continue;
+            if (statement instanceof SpecAst.FindBy find) {
+                // A find assigns to one variable, so uniqueness is what makes the singular true.
+                searchable(target, inputs, find.field(), true, find.where(), diagnostics);
+            } else if (statement instanceof SpecAst.ListBy list) {
+                // A list holds many, so a shared value is exactly what it is asking for.
+                for (String field : list.fields()) {
+                    searchable(target, inputs, field, false, list.where(), diagnostics);
+                }
             }
-            SpecAst.FieldDeclaration field = target.fields().get(find.field());
-            if (field == null) {
-                diagnostics.error(
-                        ErrorCodes.SEMANTIC_INPUT_FIELD_UNKNOWN,
-                        "entity '" + target.name() + "' has no field '" + find.field() + "'",
-                        find.where());
-                continue;
-            }
-            if (!field.unique()) {
-                diagnostics.error(
-                        ErrorCodes.SEMANTIC_FIND_NOT_UNIQUE,
-                        "'find " + find.entity() + " by " + find.field()
-                                + "' needs '" + find.field() + "' to be unique; "
-                                + "otherwise more than one record can answer",
-                        find.where());
-            }
-            if (!inputs.contains(find.field())) {
-                diagnostics.error(
-                        ErrorCodes.SEMANTIC_INPUT_FIELD_UNKNOWN,
-                        "'find " + find.entity() + " by " + find.field()
-                                + "' has no input '" + find.field() + "' to search with",
-                        find.where());
-            }
+        }
+    }
+
+    private static void searchable(
+            Entity target,
+            Set<String> inputs,
+            String fieldName,
+            boolean single,
+            SourceRef where,
+            DiagnosticCollector diagnostics) {
+        SpecAst.FieldDeclaration field = target.fields().get(fieldName);
+        if (field == null) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_INPUT_FIELD_UNKNOWN,
+                    "entity '" + target.name() + "' has no field '" + fieldName + "'",
+                    where);
+            return;
+        }
+        if (single && !field.unique()) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_FIND_NOT_UNIQUE,
+                    "'find " + target.name() + " by " + fieldName
+                            + "' needs '" + fieldName + "' to be unique; "
+                            + "otherwise more than one record can answer",
+                    where);
+        }
+        if (!inputs.contains(fieldName)) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_INPUT_FIELD_UNKNOWN,
+                    "searching '" + target.name() + "' by '" + fieldName
+                            + "' has no input '" + fieldName + "' to search with",
+                    where);
         }
     }
 
@@ -482,6 +497,9 @@ public final class SemanticValidator {
         if (statement instanceof SpecAst.ListAll value) {
             return Optional.of(new Reference(value.entity(), value.where()));
         }
+        if (statement instanceof SpecAst.ListBy value) {
+            return Optional.of(new Reference(value.entity(), value.where()));
+        }
         return Optional.empty();
     }
 
@@ -600,6 +618,8 @@ public final class SemanticValidator {
             } else if (statement instanceof SpecAst.FindBy value) {
                 define(variables, value.variable(), ValueType.entity(value.entity()), value.where(), diagnostics);
             } else if (statement instanceof SpecAst.ListAll value) {
+                define(variables, value.variable(), ValueType.list(value.entity()), value.where(), diagnostics);
+            } else if (statement instanceof SpecAst.ListBy value) {
                 define(variables, value.variable(), ValueType.list(value.entity()), value.where(), diagnostics);
             } else if (statement instanceof SpecAst.UpdateFrom value) {
                 requireEntityVariable(variables, value.variable(), value.where(), diagnostics);

@@ -217,13 +217,22 @@ public final class JavaSpringServiceTransformer {
                 case FIND_BY -> {
                     explicitImports.add(names.notFoundException());
                     String variable = instruction.variable().orElseThrow();
-                    String field = instruction.field().orElseThrow();
-                    String finder = "findBy" + JavaLayout.accessor("", field);
+                    String field = instruction.fields().getFirst();
                     String argument = REQUEST_PARAMETER + "." + field + "()";
                     statements.add(entityName + " " + variable + " = " + REPOSITORY_FIELD
-                            + "." + finder + "(" + argument + ")");
+                            + "." + finderName(instruction) + "(" + argument + ")");
                     statements.add("        .orElseThrow(() -> new NotFoundException(\""
                             + entityName + "\", " + argument + "));");
+                }
+                case LIST_BY -> {
+                    explicitImports.add("org.springframework.data.domain.Sort");
+                    String variable = instruction.variable().orElseThrow();
+                    String arguments = instruction.fields().stream()
+                            .map(field -> REQUEST_PARAMETER + "." + field + "()")
+                            .collect(java.util.stream.Collectors.joining(", "));
+                    statements.add("List<" + entityName + "> " + variable + " = "
+                            + REPOSITORY_FIELD + "." + finderName(instruction) + "("
+                            + arguments + ", Sort.by(\"" + entity.idField().name() + "\"));");
                 }
                 case UPDATE_FROM ->
                         copyInput(statements, instruction.variable().orElseThrow(), operation);
@@ -265,6 +274,18 @@ public final class JavaSpringServiceTransformer {
             }
         }
         return statements;
+    }
+
+    /** The derived finder name Spring Data reads: the name is the query. */
+    private static String finderName(ApplicationOperation.FlowInstruction instruction) {
+        StringBuilder name = new StringBuilder("findBy");
+        for (int index = 0; index < instruction.fields().size(); index++) {
+            if (index > 0) {
+                name.append("And");
+            }
+            name.append(JavaLayout.accessor("", instruction.fields().get(index)));
+        }
+        return name.toString();
     }
 
     private static void copyInput(

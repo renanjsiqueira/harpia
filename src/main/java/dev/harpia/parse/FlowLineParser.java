@@ -9,11 +9,13 @@ import dev.harpia.parse.SpecAst.Fail;
 import dev.harpia.parse.SpecAst.FindBy;
 import dev.harpia.parse.SpecAst.FlowStatement;
 import dev.harpia.parse.SpecAst.ListAll;
+import dev.harpia.parse.SpecAst.ListBy;
 import dev.harpia.parse.SpecAst.LoadById;
 import dev.harpia.parse.SpecAst.Return;
 import dev.harpia.parse.SpecAst.Save;
 import dev.harpia.parse.SpecAst.UpdateFrom;
 import dev.harpia.parse.SpecAst.ValidateInput;
+import java.util.List;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -31,6 +33,9 @@ public final class FlowLineParser {
             "^" + VARIABLE + " +\\= +find +" + ENTITY + " +by +([a-z][A-Za-z0-9]*)$");
     private static final Pattern UPDATE = Pattern.compile("^update +" + VARIABLE + " +from +input$");
     private static final Pattern LIST = Pattern.compile("^" + VARIABLE + " +\\= +list +" + ENTITY + "$");
+    private static final Pattern LIST_BY = Pattern.compile(
+            "^" + VARIABLE + " +\\= +list +" + ENTITY
+                    + " +by +([a-z][A-Za-z0-9]*(?: +and +[a-z][A-Za-z0-9]*)*)$");
     private static final Pattern SAVE = Pattern.compile("^save +" + VARIABLE + "$");
     private static final Pattern DELETE = Pattern.compile("^delete +" + VARIABLE + "$");
     private static final Pattern RETURN = Pattern.compile("^return +(nothing|[a-z][A-Za-z0-9]*)$");
@@ -66,6 +71,14 @@ public final class FlowLineParser {
         matcher = LIST.matcher(line);
         if (matcher.matches()) {
             return Optional.of(new ListAll(matcher.group(1), matcher.group(2), where));
+        }
+        matcher = LIST_BY.matcher(line);
+        if (matcher.matches()) {
+            return Optional.of(new ListBy(
+                    matcher.group(1),
+                    matcher.group(2),
+                    List.of(matcher.group(3).split(" +and +")),
+                    where));
         }
         matcher = SAVE.matcher(line);
         if (matcher.matches()) {

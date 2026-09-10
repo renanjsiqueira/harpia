@@ -302,6 +302,12 @@ public final class Resolver {
                     FlowModel.Kind.LIST, value.entity()));
             return new FlowStep.ListAll(value.variable(), value.entity(), value.where());
         }
+        if (statement instanceof SpecAst.ListBy value) {
+            variables.put(value.variable(), new FlowModel.ValueType(
+                    FlowModel.Kind.LIST, value.entity()));
+            return new FlowStep.ListBy(
+                    value.variable(), value.entity(), value.fields(), value.where());
+        }
         if (statement instanceof SpecAst.Save value) {
             return new FlowStep.Save(value.variable(), value.where());
         }

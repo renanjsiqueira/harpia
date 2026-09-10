@@ -166,7 +166,7 @@ public record ApplicationOperation(
             FlowCommand command,
             Optional<String> variable,
             Optional<String> entity,
-            Optional<String> field,
+            List<String> fields,
             Optional<Guard> guard,
             SourceRef where) {
 
@@ -186,20 +186,21 @@ public record ApplicationOperation(
                 Optional<String> variable,
                 Optional<String> entity,
                 SourceRef where) {
-            this(command, variable, entity, Optional.empty(), Optional.empty(), where);
+            this(command, variable, entity, List.of(), Optional.empty(), where);
         }
 
         public FlowInstruction {
             Objects.requireNonNull(command, "command");
             Objects.requireNonNull(variable, "variable");
             Objects.requireNonNull(entity, "entity");
-            Objects.requireNonNull(field, "field");
+            fields = List.copyOf(fields);
             Objects.requireNonNull(guard, "guard");
             Objects.requireNonNull(where, "where");
             boolean valid = switch (command) {
                 case VALIDATE_INPUT -> variable.isEmpty() && entity.isEmpty();
                 case FAIL -> guard.isPresent() && variable.isEmpty() && entity.isEmpty();
-                case FIND_BY -> variable.isPresent() && entity.isPresent() && field.isPresent();
+                case FIND_BY, LIST_BY ->
+                        variable.isPresent() && entity.isPresent() && !fields.isEmpty();
                 case CREATE_FROM, LOAD_BY_ID, LIST_ALL -> variable.isPresent() && entity.isPresent();
                 case UPDATE_FROM, SAVE, DELETE -> variable.isPresent() && entity.isEmpty();
                 case RETURN -> entity.isEmpty();
@@ -214,6 +215,7 @@ public record ApplicationOperation(
         VALIDATE_INPUT,
         FAIL,
         FIND_BY,
+        LIST_BY,
         CREATE_FROM,
         LOAD_BY_ID,
         UPDATE_FROM,

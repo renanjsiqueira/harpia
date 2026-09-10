@@ -32,25 +32,42 @@ public final class JavaSpringRepositoryTransformer {
         java.util.TreeMap<String, JavaMethodModel> byName = new java.util.TreeMap<>();
         for (ApplicationOperation operation : entity.operations()) {
             for (ApplicationOperation.FlowInstruction instruction : operation.flow()) {
-                if (instruction.command() != ApplicationOperation.FlowCommand.FIND_BY) {
+                boolean single =
+                        instruction.command() == ApplicationOperation.FlowCommand.FIND_BY;
+                boolean many = instruction.command() == ApplicationOperation.FlowCommand.LIST_BY;
+                if (!single && !many) {
                     continue;
                 }
-                String fieldName = instruction.field().orElseThrow();
-                ApplicationField field = entity.fields().stream()
-                        .filter(candidate -> candidate.name().equals(fieldName))
-                        .findFirst()
-                        .orElseThrow();
-                String method = "findBy" + JavaLayout.accessor("", fieldName);
-                byName.putIfAbsent(method, new JavaMethodModel(
-                        method,
-                        JavaTypeRef.parameterized(
-                                "java.util.Optional",
-                                JavaTypeRef.of(domain + "." + entity.typeName())),
+                StringBuilder method = new StringBuilder("findBy");
+                List<JavaParameterModel> parameters = new java.util.ArrayList<>();
+                for (String fieldName : instruction.fields()) {
+                    ApplicationField field = entity.fields().stream()
+                            .filter(candidate -> candidate.name().equals(fieldName))
+                            .findFirst()
+                            .orElseThrow();
+                    if (parameters.isEmpty()) {
+                        method.append(JavaLayout.accessor("", fieldName));
+                    } else {
+                        method.append("And").append(JavaLayout.accessor("", fieldName));
+                    }
+                    parameters.add(new JavaParameterModel(
+                            fieldName, JavaTypeMapper.stored(field.type(), domain)));
+                }
+                JavaTypeRef entityType = JavaTypeRef.of(domain + "." + entity.typeName());
+                if (many) {
+                    // A filtered list keeps the stable order an unfiltered one already has.
+                    parameters.add(new JavaParameterModel(
+                            "sort", JavaTypeRef.of("org.springframework.data.domain.Sort")));
+                }
+                byName.putIfAbsent(method.toString(), new JavaMethodModel(
+                        method.toString(),
+                        single
+                                ? JavaTypeRef.parameterized("java.util.Optional", entityType)
+                                : JavaTypeRef.parameterized("java.util.List", entityType),
                         JavaVisibility.PACKAGE_PRIVATE,
                         Set.of(JavaModifier.ABSTRACT),
                         List.of(),
-                        List.of(new JavaParameterModel(
-                                fieldName, JavaTypeMapper.stored(field.type(), domain))),
+                        List.copyOf(parameters),
                         List.of(),
                         Optional.of(instruction.where())));
             }

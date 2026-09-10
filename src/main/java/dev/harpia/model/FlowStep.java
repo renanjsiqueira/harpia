@@ -11,6 +11,7 @@ public sealed interface FlowStep
                 FlowStep.FindBy,
                 FlowStep.UpdateFrom,
                 FlowStep.ListAll,
+                FlowStep.ListBy,
                 FlowStep.Save,
                 FlowStep.Delete,
                 FlowStep.Fail,
@@ -61,6 +62,18 @@ public sealed interface FlowStep
             Objects.requireNonNull(variable, "variable");
             Objects.requireNonNull(entity, "entity");
             Objects.requireNonNull(field, "field");
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
+    /** Lists every entity whose fields all match the given input values. */
+    record ListBy(
+            String variable, String entity, java.util.List<String> fields, SourceRef where)
+            implements FlowStep {
+        public ListBy {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(entity, "entity");
+            fields = java.util.List.copyOf(fields);
             Objects.requireNonNull(where, "where");
         }
     }
