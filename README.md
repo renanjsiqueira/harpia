@@ -411,7 +411,9 @@ Spring, URLs, credentials, or persistence entities; bindings and providers suppl
 ```bash
 ./bin/harpia --help
 ./bin/harpia validate --dir <project>
+./bin/harpia validate --dir <project> --json
 ./bin/harpia build --dir <project>
+./bin/harpia build --dir <project> --json
 ./bin/harpia build --dir <project> --clean
 ./bin/harpia build --dir <project> --clean --force
 ./bin/harpia inspect --dir <project> --stage ast
@@ -429,6 +431,20 @@ generated directory idempotently.
 `--clean` removes stale files listed as Harpia-owned in `.harpia-manifest`; files outside the
 manifest are reported and not deleted. Keep hand-written code outside Harpia-managed paths while
 you intend to regenerate the project.
+
+`--json` puts one object on stdout and nothing else: no summary line, and no diagnostics on stderr
+to reassemble. It is for callers that act on the result rather than read it.
+
+```json
+{"contract":1,"command":"validate","ok":true,"exitCode":0,"diagnostics":[]}
+```
+
+`contract` is the shape of that object, so a consumer can refuse a version it does not know instead
+of guessing. Each diagnostic carries `severity`, `code`, `message`, and — when the compiler measured
+one — a `where` with `file`, `line`, `column` and an optional `endLine`/`endColumn`; a second
+location travels as `related` rather than as prose inside the message. `build` adds an `output`
+object with the directory and the `created`, `updated`, `unchanged`, `stale`, `deleted` and
+`unknown` file lists. A run that never compiled reports in the same shape, without `output`.
 
 Run `./bin/harpia targets` rather than assuming target support. Unsupported targets fail before
 generation and never fall back to Java/Spring.

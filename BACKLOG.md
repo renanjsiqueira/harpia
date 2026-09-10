@@ -804,7 +804,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [ ] `HARNESS-001` **Core Java API e resultados estruturados estáveis** — `PARTIAL`; `HarpiaCompiler`, `CompileResult`, stages, diagnostics e target DTOs já são tipados, mas ainda não formam um contrato externo versionado · `P0` · `M` · Area: `CLI/DX`
   - Evidence: [`HarpiaCompiler`](src/main/java/dev/harpia/HarpiaCompiler.java), [`CompileResult`](src/main/java/dev/harpia/CompileResult.java), [`TargetInfo`](src/main/java/dev/harpia/target/TargetInfo.java).
 
-- [ ] `HARNESS-002` **CLI JSON para validate/build/inspect/targets/capabilities** — `TODO` · `P0` · `L` · Area: `CLI/DX`
+- [ ] `HARNESS-002` **CLI JSON para validate/build/inspect/targets/capabilities** — `PARTIAL`; `validate --json` e `build --json` emitem um único objeto no stdout, sem linha de resumo e sem diagnostics no stderr para remontar. O envelope declara `contract`, `command`, `ok`, `exitCode` e `diagnostics`; cada diagnostic leva `severity`/`code`/`message`, o `where` com span opcional e `related` como dado, não como prosa dentro da mensagem; `build` acrescenta `output` com o diretório e as listas de arquivos. Faltam `inspect`, `targets` e `capabilities` · `P0` · `L` · Area: `CLI/DX`
+  - Evidence: [`CliJsonReportTest`](src/test/java/dev/harpia/cli/CliJsonReportTest.java), [`JsonReport`](src/main/java/dev/harpia/cli/JsonReport.java), [`Json`](src/main/java/dev/harpia/cli/Json.java).
   - Depends on: `HARNESS-001`, `CORE-017`, `TARGET-014`.
 
 - [ ] `HARNESS-003` **Handoff manifest `.harpia/handoff.json`** — `TODO`; deve declarar target, ownership, capabilities geradas e contratos custom ainda sem implementação · `P0` · `M` · Area: `Ownership`
