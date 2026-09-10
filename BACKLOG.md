@@ -540,11 +540,11 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 
 ## Integration, Events and Security
 
-- [x] `INTEG-001` **Integration e Operation como portas tipadas** — `DONE` para a fundação independente de transporte; `## Integration <Nome>` declara uma outbound port com uma ou mais `### Operation <Nome>`, entra pelo registry, possui namespace determinístico próprio e atravessa AST, SymbolTable, Business IR e Application IR. O contrato de valores é `INTEG-002` · `P0` · `XL` · Area: `Integration`
+- [x] `INTEG-001` **Integration e Operation como portas tipadas** — `DONE`; `## Integration <Nome>` declara uma outbound port com uma ou mais `### Operation <Nome>`, entra pelo registry, possui namespace determinístico próprio e atravessa AST, SymbolTable, Business IR e Application IR sem escolher transporte · `P0` · `XL` · Area: `Integration`
   - Evidence: [`IntegrationDeclarationParser`](src/main/java/dev/harpia/parse/IntegrationDeclarationParser.java), [`IntegrationAst`](src/main/java/dev/harpia/parse/IntegrationAst.java), [`SymbolTable`](src/main/java/dev/harpia/symbol/SymbolTable.java), [`IntegrationModel`](src/main/java/dev/harpia/model/IntegrationModel.java), [`ApplicationIntegration`](src/main/java/dev/harpia/application/ApplicationIntegration.java), [`IntegrationDeclarationTest`](src/test/java/dev/harpia/validate/IntegrationDeclarationTest.java).
 
-- [ ] `INTEG-002` **Typed Input/Output/Errors de integração** — `TODO` · `P0` · `L` · Area: `Integration`
-  - Depends on: `INTEG-001`, `CMD-004`.
+- [x] `INTEG-002` **Typed Input/Output/Errors de integração** — `DONE`; cada Operation exige `#### Output`, aceita `#### Input` tipado e variantes PascalCase em `#### Errors`. Escalares, Enum, Value, `List<T>` e `Optional<T>` atravessam AST, SymbolTable, Business IR e Application IR; Entity/`Reference<Entity>` são recusados para não vazar persistência pela porta. Binding, transporte e política de falha continuam separados · `P0` · `L` · Area: `Integration`
+  - Evidence: [`IntegrationOperationParser`](src/main/java/dev/harpia/parse/IntegrationOperationParser.java), [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java), [`IntegrationModel`](src/main/java/dev/harpia/model/IntegrationModel.java), [`ApplicationIntegration`](src/main/java/dev/harpia/application/ApplicationIntegration.java), [`IntegrationContractTest`](src/test/java/dev/harpia/validate/IntegrationContractTest.java).
 
 - [ ] `INTEG-003` **Flow call integration** — `TODO` · `P0` · `M` · Area: `Integration`
   - Depends on: `INTEG-001`, `FLOW-014`.
@@ -814,7 +814,7 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 Em ordem de dependência e valor para a Reference Application:
 
 1. `FLOW-014` e `FLOW-020`: calls e iteração controlada.
-2. `INTEG-002`–`INTEG-004`, `INTEG-010`, `RELY-001`: contrato e provider HTTP do FraudService.
+2. `INTEG-003`–`INTEG-004`, `INTEG-010`, `RELY-001`: chamada e provider HTTP do FraudService.
 3. `EVENT-001`, `EVENT-003`, `EVENT-005`, `EVENT-007`, `FLOW-015`: Event local e emit.
 4. `SEC-002`, `SEC-003`, `SEC-005`, `SEC-007`, `API-008`: authenticated/role/JWT.
 5. `CUSTOM-002`, `CUSTOM-003`: contract, DI e layout custom protegido.
@@ -1890,11 +1890,11 @@ deliberados não têm meta de 100%.
 
 | Horizon | Total | Done | Partial | Todo | Other | Completion |
 |---|---:|---:|---:|---:|---:|---:|
-| Core V1 | 213 | 173 | 15 | 25 | 0 | 84,7% |
+| Core V1 | 213 | 174 | 15 | 24 | 0 | 85,2% |
 | Next / Upstream | 183 | 1 | 12 | 168 | 2 | 3,8% |
 | Labs / Research | 134 | 0 | 1 | 69 | 64 | N/A |
 | Custom / Non-goals | 20 | 0 | 0 | 0 | 20 | N/A |
-| **Canonical total** | **550** | **174** | **28** | **262** | **86** | — |
+| **Canonical total** | **550** | **175** | **28** | **261** | **86** | — |
 
 `Other` reúne `RESEARCH`, `NOT_SUPPORTED`, `CUSTOM` e `WONT_DO`. Ele não mascara trabalho do Core:
 a seleção Core contém apenas itens implementáveis `DONE`, `PARTIAL` ou `TODO`.
@@ -1912,14 +1912,14 @@ a seleção Core contém apenas itens implementáveis `DONE`, `PARTIAL` ou `TODO
 
 ## Audit Snapshot
 
-Baseline auditada no ciclo que fecha `INTEG-001`:
+Baseline auditada no ciclo que fecha `INTEG-002`:
 
 | Métrica | Resultado |
 |---|---:|
-| Produção Java | 214 arquivos / 21.681 linhas |
-| Testes Java | 85 arquivos / 12.125 linhas |
+| Produção Java | 215 arquivos / 22.124 linhas |
+| Testes Java | 86 arquivos / 12.428 linhas |
 | Gate | `mvn -o clean test` — **BUILD SUCCESS** |
-| Testes executados | 437; 0 failures, 0 errors, 0 skipped |
+| Testes executados | 443; 0 failures, 0 errors, 0 skipped |
 
 # Core V1 Completion Criteria
 
@@ -1949,7 +1949,7 @@ avançada, semantic diff, zero-downtime migration, marketplace ou plugin ecosyst
 
 ## Top 10 Core V1 Next Tasks
 
-1. Implementar `INTEG-002`, `FLOW-014`, `INTEG-003`/`INTEG-004` e `RELY-001` para FraudService.
+1. Implementar `FLOW-014`, `INTEG-003`/`INTEG-004` e `RELY-001` para FraudService.
 2. Implementar `FLOW-020` somente no recorte de coleção exigido pela Reference Application.
 3. Implementar `EVENT-001`/`EVENT-003`/`EVENT-005`/`EVENT-007` e `FLOW-015`.
 4. Implementar `SEC-002`/`SEC-003`/`SEC-005`/`SEC-007` e fechar `API-008`.

@@ -54,7 +54,7 @@ final class SymbolRenderer {
         }
         if (symbol instanceof Symbol.Integration integration) {
             return " operations(" + integration.operations().stream()
-                    .map(dev.harpia.parse.IntegrationAst.Operation::name)
+                    .map(SymbolRenderer::integrationOperation)
                     .reduce((left, right) -> left + ", " + right)
                     .orElse("") + ")";
         }
@@ -62,5 +62,21 @@ final class SymbolRenderer {
             return " -> " + scenario.computation();
         }
         return "";
+    }
+
+    private static String integrationOperation(
+            dev.harpia.parse.IntegrationAst.Operation operation) {
+        String input = operation.input().stream()
+                .map(parameter -> parameter.name() + ": " + parameter.type()
+                        + (parameter.required() ? " required" : ""))
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("");
+        String errors = operation.errors().isEmpty()
+                ? ""
+                : " throws " + operation.errors().stream()
+                        .map(dev.harpia.parse.IntegrationAst.Failure::name)
+                        .reduce((left, right) -> left + "|" + right)
+                        .orElse("");
+        return operation.name() + "(" + input + ") -> " + operation.output().type() + errors;
     }
 }

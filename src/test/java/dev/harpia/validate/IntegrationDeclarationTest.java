@@ -31,7 +31,29 @@ class IntegrationDeclarationTest {
 
                 ### Operation CheckOrder
 
+                #### Input
+
+                - orderId: UUID required
+
+                #### Output
+
+                FraudResult
+
+                #### Errors
+
+                - RateLimited
+                - ServiceUnavailable
+
                 ### Operation CheckCustomer
+
+                #### Output
+
+                Boolean
+
+                ## Value FraudResult
+
+                - approved: Boolean required
+                - score: Decimal required
                 """);
 
         CompileResult result = compile();
@@ -39,15 +61,26 @@ class IntegrationDeclarationTest {
         assertThat(Inspector.render(result, Stage.AST).orElseThrow())
                 .contains("Integration FraudService")
                 .contains("Operation CheckOrder")
+                .contains("Input orderId: UUID required")
+                .contains("Output FraudResult")
+                .contains("Error RateLimited")
                 .contains("Operation CheckCustomer");
         assertThat(Inspector.render(result, Stage.SYMBOLS).orElseThrow())
                 .contains("Namespace integrations")
-                .contains("FraudService operations(CheckOrder, CheckCustomer)");
+                .contains("CheckOrder(orderId: UUID required) -> FraudResult")
+                .contains("throws RateLimited|ServiceUnavailable")
+                .contains("CheckCustomer() -> Boolean");
         assertThat(Inspector.render(result, Stage.BUSINESS_IR).orElseThrow())
                 .contains("Integration FraudService")
-                .contains("Port CheckOrder");
+                .contains("Port CheckOrder")
+                .contains("Input orderId: UUID required")
+                .contains("Output FraudResult")
+                .contains("Error ServiceUnavailable");
         assertThat(Inspector.render(result, Stage.APPLICATION_IR).orElseThrow())
                 .contains("OutboundPort FraudService")
+                .contains("Parameter orderId: UUID required")
+                .contains("Result FraudResult")
+                .contains("Failure RateLimited")
                 .contains("Operation CheckCustomer");
     }
 
@@ -58,6 +91,10 @@ class IntegrationDeclarationTest {
                 ## Integration FraudService
 
                 ### Operation CheckOrder
+
+                #### Output
+
+                nothing
 
                 ### Operation CheckOrder
                 """);
@@ -76,11 +113,19 @@ class IntegrationDeclarationTest {
                 ## Integration FraudService
 
                 ### Operation CheckOrder
+
+                #### Output
+
+                Boolean
                 """);
         integration("fraud-b", "Risk", """
                 ## Integration FraudService
 
                 ### Operation CheckCustomer
+
+                #### Output
+
+                Boolean
                 """);
 
         assertThat(compile().diagnostics())

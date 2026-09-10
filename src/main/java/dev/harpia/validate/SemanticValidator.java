@@ -12,6 +12,7 @@ import dev.harpia.model.LogicModel;
 import dev.harpia.model.Literals;
 import dev.harpia.model.Naming;
 import dev.harpia.parse.FieldLineParser;
+import dev.harpia.parse.IntegrationAst;
 import dev.harpia.parse.ModuleAst;
 import dev.harpia.parse.ProjectAst;
 import dev.harpia.parse.SpecAst;
@@ -68,6 +69,8 @@ public final class SemanticValidator {
                 }
             }
         }
+
+        validateIntegrations(project, symbols, diagnostics);
 
         Set<String> targeted = new java.util.LinkedHashSet<>();
         for (ModuleAst module : project.modules()) {
@@ -132,6 +135,79 @@ public final class SemanticValidator {
     /** The fields of one entity, plus where it was declared, for validating operations on it. */
     private record Entity(
             String name, String module, Map<String, SpecAst.FieldDeclaration> fields) {
+    }
+
+    /**
+     * Ports exchange values, never persistence objects.
+     *
+     * <p>A transport provider may later map those values to JSON, gRPC or something else. Keeping
+     * entities and identity-bearing references out of this contract is what makes that choice an
+     * adapter concern instead of a leak into the business model.
+     */
+    private static void validateIntegrations(
+            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+        for (ModuleAst module : project.modules()) {
+            for (IntegrationAst.Declaration integration : module.integrations()) {
+                for (IntegrationAst.Operation operation : integration.operations()) {
+                    Map<String, SpecAst.InputDeclaration> input = new LinkedHashMap<>();
+                    for (SpecAst.InputDeclaration parameter : operation.input()) {
+                        SpecAst.InputDeclaration first = input.putIfAbsent(
+                                parameter.name(), parameter);
+                        if (first != null) {
+                            diagnostics.error(
+                                    ErrorCodes.SEMANTIC_DUPLICATE_INTEGRATION_INPUT,
+                                    "integration operation '" + integration.name() + "."
+                                            + operation.name() + "' repeats input '"
+                                            + parameter.name() + "'",
+                                    parameter.where(),
+                                    "first declared here",
+                                    first.where());
+                        }
+                        validateIntegrationType(
+                                parameter.type(), parameter.where(), symbols, diagnostics);
+                        validateOptionality(
+                                parameter.type(), parameter.required(), parameter.where(),
+                                diagnostics);
+                    }
+                    if (!operation.output().returnsNothing()) {
+                        validateIntegrationType(
+                                operation.output().type(), operation.output().where(), symbols,
+                                diagnostics);
+                    }
+                }
+            }
+        }
+    }
+
+    private static void validateIntegrationType(
+            String type,
+            SourceRef where,
+            SymbolTable symbols,
+            DiagnosticCollector diagnostics) {
+        Optional<String> wrapped = FieldLineParser.optionalOf(type)
+                .or(() -> FieldLineParser.elementOf(type));
+        if (wrapped.isPresent()) {
+            validateIntegrationType(wrapped.orElseThrow(), where, symbols, diagnostics);
+            return;
+        }
+        if (FieldLineParser.isScalar(type)
+                || symbols.enumType(type).isPresent()
+                || symbols.valueType(type).isPresent()) {
+            return;
+        }
+        if (FieldLineParser.referenceOf(type).isPresent() || symbols.entity(type).isPresent()) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_INTEGRATION_TYPE,
+                    "integration contract type '" + type + "' carries persistence identity; "
+                            + "use a scalar, Enum or Value",
+                    where);
+            return;
+        }
+        diagnostics.error(
+                ErrorCodes.SEMANTIC_UNKNOWN_TYPE,
+                "unknown integration contract type '" + type
+                        + "'; no scalar, Enum or Value declaration provides it",
+                where);
     }
 
     /**

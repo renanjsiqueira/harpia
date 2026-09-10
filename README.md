@@ -348,7 +348,8 @@ The current language deliberately has a narrow, validated surface:
 - output forms: `Entity`, `List<Entity>`, and `nothing` with a 2xx status;
 - V1 entity relationships: `customer: Customer`, shared `items: List<Item>`, and dependent
   `items: List<Item> owned`; `Reference<Customer>` remains an identity-only foreign key;
-- V1 outbound ports: `## Integration FraudService` with named `### Operation CheckOrder` entries;
+- V1 typed outbound ports: `## Integration FraudService` with operation `Input`, `Output`, and
+  named `Errors`; transport details remain outside the semantic specification;
 - declared errors: invalid input (400), duplicate field (409), and not found (404).
 
 Flow V0 accepts these operation shapes:
@@ -375,6 +376,35 @@ fail insufficient balance when amount > balance
 Normal Markdown prose remains documentation. It never silently becomes executable behavior.
 Arbitrary Java, authentication, events, integrations, and unrecognized Flow sentences are rejected
 instead of guessed.
+
+A minimal transport-independent integration contract looks like this:
+
+````markdown
+## Integration FraudService
+
+### Operation CheckOrder
+
+#### Input
+
+- orderId: UUID required
+
+#### Output
+
+FraudResult
+
+#### Errors
+
+- RateLimited
+- ServiceUnavailable
+
+## Value FraudResult
+
+- approved: Boolean required
+- score: Decimal required
+````
+
+`Integration` exchanges scalar, `Enum`, and `Value` data. It deliberately does not name HTTP,
+Spring, URLs, credentials, or persistence entities; bindings and providers supply those details.
 
 ### CLI
 

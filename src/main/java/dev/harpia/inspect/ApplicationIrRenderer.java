@@ -104,8 +104,19 @@ final class ApplicationIrRenderer {
                 .append('\n'));
         project.integrations().forEach(integration -> {
             out.append("  OutboundPort ").append(integration.name()).append('\n');
-            integration.operations().forEach(operation -> out.append("    Operation ")
-                    .append(operation.name()).append('\n'));
+            integration.operations().forEach(operation -> {
+                out.append("    Operation ").append(operation.name()).append('\n');
+                operation.input().forEach(parameter -> out.append("      Parameter ")
+                        .append(parameter.name()).append(": ").append(parameter.type().syntax())
+                        .append(parameter.required() ? " required" : "").append('\n'));
+                out.append("      Result ")
+                        .append(operation.output().type()
+                                .map(dev.harpia.application.ApplicationFieldType::syntax)
+                                .orElse("nothing"))
+                        .append('\n');
+                operation.errors().forEach(error -> out.append("      Failure ")
+                        .append(error.name()).append('\n'));
+            });
         });
         return out.toString();
     }

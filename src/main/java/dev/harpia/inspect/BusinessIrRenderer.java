@@ -59,8 +59,19 @@ final class BusinessIrRenderer {
                 .append('\n'));
         project.integrations().forEach(integration -> {
             out.append("Integration ").append(integration.name()).append('\n');
-            integration.operations().forEach(operation -> out.append("  Port ")
-                    .append(operation.name()).append('\n'));
+            integration.operations().forEach(operation -> {
+                out.append("  Port ").append(operation.name()).append('\n');
+                operation.input().forEach(parameter -> out.append("    Input ")
+                        .append(parameter.name()).append(": ").append(parameter.type().syntax())
+                        .append(parameter.required() ? " required" : "").append('\n'));
+                out.append("    Output ")
+                        .append(operation.output().type()
+                                .map(dev.harpia.model.FieldType::syntax)
+                                .orElse("nothing"))
+                        .append('\n');
+                operation.errors().forEach(error -> out.append("    Error ")
+                        .append(error.name()).append('\n'));
+            });
         });
         return out.toString();
     }

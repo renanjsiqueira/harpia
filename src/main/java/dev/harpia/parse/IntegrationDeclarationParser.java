@@ -1,6 +1,5 @@
 package dev.harpia.parse;
 
-import dev.harpia.ast.BlockNode;
 import dev.harpia.diag.DiagnosticCollector;
 import dev.harpia.diag.ErrorCodes;
 import dev.harpia.parse.Sections.Section;
@@ -70,19 +69,13 @@ final class IntegrationDeclarationParser implements DeclarationParser {
                 valid = false;
                 continue;
             }
-            boolean contract = operation.content().stream()
-                    .anyMatch(block -> block.kind() == BlockNode.Kind.HEADING
-                            && block.headingLevel() >= 4);
-            if (contract) {
-                diagnostics.error(
-                        ErrorCodes.SYNTAX_DECLARATION_TOO_NEW,
-                        "typed integration operation contracts are implemented by INTEG-002",
-                        operation.heading().raw().where());
+            Optional<IntegrationAst.Operation> parsed = IntegrationOperationParser.parse(
+                    operationName, operation, diagnostics);
+            if (parsed.isEmpty()) {
                 valid = false;
                 continue;
             }
-            operations.add(new IntegrationAst.Operation(
-                    operationName, operation.heading().raw().where()));
+            operations.add(parsed.orElseThrow());
         }
         if (operations.isEmpty() && valid) {
             diagnostics.error(

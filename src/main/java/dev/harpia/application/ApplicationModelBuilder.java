@@ -63,7 +63,26 @@ public final class ApplicationModelBuilder {
                                 source.name(),
                                 source.operations().stream()
                                         .map(operation -> new ApplicationIntegration.Operation(
-                                                operation.name(), operation.where()))
+                                                operation.name(),
+                                                operation.input().stream()
+                                                        .map(parameter ->
+                                                                new ApplicationIntegration.Parameter(
+                                                                        parameter.name(),
+                                                                        fieldType(parameter.type()),
+                                                                        parameter.required(),
+                                                                        parameter.where()))
+                                                        .toList(),
+                                                new ApplicationIntegration.Result(
+                                                        operation.output().type()
+                                                                .map(ApplicationModelBuilder::fieldType),
+                                                        operation.output().where()),
+                                                operation.errors().stream()
+                                                        .map(failure ->
+                                                                new ApplicationIntegration.Failure(
+                                                                        failure.name(),
+                                                                        failure.where()))
+                                                        .toList(),
+                                                operation.where()))
                                         .toList(),
                                 source.where()))
                         .toList(),

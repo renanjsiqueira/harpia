@@ -142,6 +142,10 @@ public final class ErrorCodes {
     public static final String SEMANTIC_OWNED_RELATIONSHIP = "HRP2131";
     /** Two integrations share a name in the integration namespace. */
     public static final String SEMANTIC_DUPLICATE_INTEGRATION = "HRP2132";
+    /** An integration contract exposes an entity or identity-bearing reference as a value. */
+    public static final String SEMANTIC_INTEGRATION_TYPE = "HRP2133";
+    /** An integration operation declares the same input name more than once. */
+    public static final String SEMANTIC_DUPLICATE_INTEGRATION_INPUT = "HRP2134";
 
     // --- HRP22xx: external binding semantics -------------------------------------------------
     /** A binding references an operation that is not declared. */

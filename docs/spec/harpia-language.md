@@ -443,18 +443,50 @@ Análise externa usada no checkout.
 
 ### Operation CheckOrder
 
+#### Input
+
+- customerId: UUID required
+- orderId: UUID required
+- total: Decimal required
+
+#### Output
+
+FraudResult
+
+#### Errors
+
+- InvalidRequest
+- RateLimited
+- ServiceUnavailable
+
 ### Operation CheckCustomer
+
+#### Output
+
+Boolean
+
+## Value FraudResult
+
+- approved: Boolean required
+- score: Decimal required
 ```
 
 - o nome da Integration e de cada Operation é PascalCase;
 - uma Integration declara ao menos uma Operation e não pode repetir nomes localmente;
+- cada Operation declara exatamente um `#### Output`; `nothing` torna explícita a ausência de
+  retorno;
+- `#### Input`, quando presente, aceita campos escalares, Enum e Value, com `required` opcional;
+  os nomes dos campos não se repetem na operação;
+- o Output aceita o mesmo conjunto de tipos de valor, inclusive `List<T>` e `Optional<T>`;
+- `#### Errors` declara variantes PascalCase que o provider poderá mapear para falhas externas;
+  status HTTP, timeout e retry não pertencem a esta declaração;
+- Entity e `Reference<Entity>` não atravessam a porta (`HRP2133`): integrações trocam valores, não
+  objetos de persistência;
 - nomes de Integration são únicos no projeto e vivem no namespace `integrations`, separado de
   types, operações da aplicação e computations;
 - AST, SymbolTable, Business IR e Application IR preservam a fronteira como outbound port;
 - declarar a porta não escolhe transporte nem exige capability. O provider só é necessário quando
-  um Flow chama a operação;
-- input, output e errors tipados são adicionados por `INTEG-002`; até lá, subseções de contrato são
-  recusadas em vez de ignoradas.
+  um Flow chama a operação.
 
 `languageVersion: 0` recusa `## Integration` com `HRP1107`: nunca a interpreta como um caso de uso
 legado cujo título começaria com “Integration”.

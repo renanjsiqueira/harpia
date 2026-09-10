@@ -103,8 +103,8 @@ public final class Resolver {
                         .map(declaration -> new IntegrationModel(
                                 declaration.name(),
                                 declaration.operations().stream()
-                                        .map(operation -> new IntegrationModel.Operation(
-                                                operation.name(), operation.where()))
+                                        .map(operation -> integrationOperation(
+                                                operation, declared))
                                         .toList(),
                                 declaration.where()))
                         .toList(),
@@ -122,6 +122,29 @@ public final class Resolver {
                         .toList(),
                 logics,
                 scenarios);
+    }
+
+    private static IntegrationModel.Operation integrationOperation(
+            dev.harpia.parse.IntegrationAst.Operation operation, Declared declared) {
+        return new IntegrationModel.Operation(
+                operation.name(),
+                operation.input().stream()
+                        .map(parameter -> new IntegrationModel.Parameter(
+                                parameter.name(),
+                                fieldType(parameter.type(), declared),
+                                parameter.required(),
+                                parameter.where()))
+                        .toList(),
+                new IntegrationModel.Result(
+                        operation.output().returnsNothing()
+                                ? Optional.empty()
+                                : Optional.of(fieldType(operation.output().type(), declared)),
+                        operation.output().where()),
+                operation.errors().stream()
+                        .map(failure -> new IntegrationModel.Failure(
+                                failure.name(), failure.where()))
+                        .toList(),
+                operation.where());
     }
 
     /** The entity named by the flow, when it names one. */

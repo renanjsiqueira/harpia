@@ -130,6 +130,37 @@ deste draft ainda são propostas.
 
 O comportamento transacional default precisa aparecer em `harpia inspect --stage application-ir`.
 
+## 4.1 Integration tipada
+
+Status: **implementado** em `languageVersion: 1`. `Integration` declara uma outbound port sem
+escolher protocolo, framework ou provider. Cada `Operation` possui um contrato de valores:
+
+```markdown
+## Integration FraudService
+
+### Operation CheckOrder
+
+#### Input
+
+- orderId: UUID required
+- total: Decimal required
+
+#### Output
+
+FraudResult
+
+#### Errors
+
+- RateLimited
+- ServiceUnavailable
+```
+
+`Output` é obrigatório e aceita `nothing`, escalar, Enum, Value e os wrappers `List<T>` e
+`Optional<T>`. `Input` usa os mesmos tipos e `Errors` contém variantes PascalCase. Entity e
+`Reference<Entity>` são recusados: identidade de persistência não faz parte de um contrato externo.
+Detalhes como HTTP, path, status remoto, autenticação, timeout e retry pertencem aos bindings e
+providers posteriores.
+
 ## 5. Próximo slice proposto: Command + Event
 
 Forma canônica proposta:

@@ -46,8 +46,15 @@ final class AstRenderer {
             for (dev.harpia.parse.IntegrationAst.Declaration integration
                     : module.integrations()) {
                 out.append("  Integration ").append(integration.name()).append('\n');
-                integration.operations().forEach(operation -> out.append("    Operation ")
-                        .append(operation.name()).append('\n'));
+                integration.operations().forEach(operation -> {
+                    out.append("    Operation ").append(operation.name()).append('\n');
+                    operation.input().forEach(parameter -> out.append("      Input ")
+                            .append(parameter.name()).append(": ").append(parameter.type())
+                            .append(parameter.required() ? " required" : "").append('\n'));
+                    out.append("      Output ").append(operation.output().type()).append('\n');
+                    operation.errors().forEach(error -> out.append("      Error ")
+                            .append(error.name()).append('\n'));
+                });
             }
             for (LogicAst.Declaration logic : module.logics()) {
                 out.append("  Logic ").append(logic.name()).append('\n');
