@@ -66,7 +66,58 @@ class FlowConditionalTest {
                 .contains("purchase.setStatus(\"STANDARD\");");
         assertThat(files.get(SERVICE).indexOf("if (request.premium())"))
                 .isLessThan(files.get(SERVICE).indexOf("repository.save(purchase)"));
+        assertThat(indentOf(files.get(SERVICE), "purchase.setStatus(\"PRIORITY\");"))
+                .as("a branch body sits deeper than the branch that opens it")
+                .isGreaterThan(indentOf(files.get(SERVICE), "if (request.premium())"));
+        assertThat(indentOf(files.get(SERVICE), "purchase.setStatus(\"STANDARD\");"))
+                .isGreaterThan(indentOf(files.get(SERVICE), "} else {"));
         GeneratedJava.compiles(files, classes);
+    }
+
+    @Test
+    void anIfWithoutAnElseGeneratesOnlyTheOneBranch(@TempDir Path classes) throws IOException {
+        project(1, "Command PrioritizeOrder", """
+                validate input
+                purchase = create Purchase from input
+                if premium
+                    set purchase.status = "PRIORITY"
+                save purchase
+                return purchase
+                """);
+
+        SortedMap<String, String> files = compile().tree().orElseThrow().files();
+        assertThat(files.get(SERVICE))
+                .as("an absent else is no branch at all, not an empty one")
+                .contains("if (request.premium()) {")
+                .doesNotContain("} else {");
+        GeneratedJava.compiles(files, classes);
+    }
+
+    @Test
+    void anElseWithoutAnIfIsRefused() throws IOException {
+        project(1, "Command PrioritizeOrder", """
+                validate input
+                purchase = create Purchase from input
+                else
+                    set purchase.status = "PRIORITY"
+                save purchase
+                return purchase
+                """);
+
+        assertThat(compile().diagnostics())
+                .filteredOn(diagnostic -> diagnostic.code().equals(ErrorCodes.SYNTAX_FLOW_COMMAND))
+                .isNotEmpty()
+                .anySatisfy(diagnostic ->
+                        assertThat(diagnostic.message()).contains("'else' has no matching 'if'"));
+    }
+
+    /** How far the line containing this text is indented. */
+    private static int indentOf(String source, String text) {
+        String line = source.lines()
+                .filter(candidate -> candidate.contains(text))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no line contains: " + text));
+        return line.length() - line.stripLeading().length();
     }
 
     @Test
