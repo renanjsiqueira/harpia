@@ -138,6 +138,8 @@ public final class ErrorCodes {
     public static final String SEMANTIC_PAGED_WITHOUT_INPUT = "HRP2129";
     /** A branch attempts to define a flow variable or return from a nested scope. */
     public static final String SEMANTIC_FLOW_BRANCH_SCOPE = "HRP2130";
+    /** A path parameter names nothing the operation can fill it with. */
+    public static final String SEMANTIC_PATH_PARAM_INPUT = "HRP2131";
     /** The owned modifier is attached to something that is not an entity relationship. */
     public static final String SEMANTIC_OWNED_RELATIONSHIP = "HRP2131";
     /** Two integrations share a name in the integration namespace. */

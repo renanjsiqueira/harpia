@@ -460,8 +460,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 
 - [ ] `API-003` **PATCH** — `TODO` · `P0` · `M` · Area: `API`
 
-- [ ] `API-004` **Path params gerais** — `PARTIAL`; somente `{id}` no último segmento · `P0` · `M` · Area: `API`
-  - Evidence: [`EndpointParser`](src/main/java/dev/harpia/parse/EndpointParser.java), [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java).
+- [x] `API-004` **Path params gerais** — `DONE` na V1; um path aceita `{nome}` em qualquer segmento e em qualquer quantidade. Num endpoint inline o nome **é** o mapeamento: `{tenant}` é preenchido pelo input `tenant`, e um parâmetro sem input correspondente é `HRP2131`. `{id}` mantém o significado de sempre — o registro que o flow carrega · `P0` · `M` · Area: `API`
+  - Evidence: [`EndpointParser`](src/main/java/dev/harpia/parse/EndpointParser.java), [`BindingResolver`](src/main/java/dev/harpia/binding/BindingResolver.java), [`BindingValidator`](src/main/java/dev/harpia/binding/BindingValidator.java), [`PathParameterTest`](src/test/java/dev/harpia/binding/PathParameterTest.java).
 
 - [ ] `API-005` **Query params e headers** — `TODO` · `P0` · `L` · Area: `API`
   - Depends on: `BIND-002`.

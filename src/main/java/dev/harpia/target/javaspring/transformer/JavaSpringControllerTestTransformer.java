@@ -289,7 +289,15 @@ public final class JavaSpringControllerTestTransformer {
         ApplicationOperation.Endpoint endpoint = operation.endpoint().orElseThrow();
         String method = endpoint.method().name().toLowerCase(java.util.Locale.ROOT);
         String path = "\"" + endpoint.effectivePath() + "\"";
-        String uriVariables = endpoint.hasIdPathVariable() ? ", ID" : "";
+        // A path expands one value per parameter, in the order the parameters appear.
+        StringBuilder uriVariables = new StringBuilder();
+        for (ApplicationOperation.RequestMapping mapping : endpoint.request()) {
+            if (mapping instanceof ApplicationOperation.Path value) {
+                uriVariables.append(", ").append(value.input().equals("id")
+                        ? "ID"
+                        : requestValue(operation, value.input(), blankInput));
+            }
+        }
         String open = "mockMvc.perform(" + REQUESTS + "." + method
                 + "(" + path + uriVariables + ")";
         for (ApplicationOperation.RequestMapping mapping : endpoint.request()) {

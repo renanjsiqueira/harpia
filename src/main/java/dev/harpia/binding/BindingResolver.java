@@ -93,10 +93,19 @@ public final class BindingResolver {
             SpecAst.UseCaseDeclaration operation,
             dev.harpia.diag.SourceRef where) {
         java.util.List<HttpBinding.RequestMapping> mappings = new java.util.ArrayList<>();
-        if (operation.flow().stream().anyMatch(SpecAst.LoadById.class::isInstance)) {
-            mappings.add(new HttpBinding.Path("id", "id", where));
+        java.util.Set<String> fromPath = new java.util.LinkedHashSet<>();
+        // An inline endpoint has no mapping section, so a parameter binds to the input that shares
+        // its name. `id` is the record the flow loads and is not an input.
+        for (String parameter : dev.harpia.parse.EndpointParser.parameters(
+                operation.endpoint().map(SpecAst.Endpoint::path).orElse(""))) {
+            mappings.add(new HttpBinding.Path(parameter, parameter, where));
+            if (!parameter.equals("id")) {
+                fromPath.add(parameter);
+            }
         }
-        if (!operation.input().isEmpty()) {
+        boolean bodyRemains = operation.input().stream()
+                .anyMatch(field -> !fromPath.contains(field.name()));
+        if (bodyRemains) {
             mappings.add(new HttpBinding.Body("input", operation.where()));
         }
         return java.util.List.copyOf(mappings);

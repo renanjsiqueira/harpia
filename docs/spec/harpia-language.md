@@ -775,6 +775,30 @@ public record PageResponse<T>(
 - uma listagem paginada pode continuar respondendo `List<...>` quando o chamador não precisa dos
   metadados, e aí nenhum envelope é gerado.
 
+## 8.9 Parâmetros de path
+
+Na V1, um path aceita `{nome}` em qualquer segmento e em qualquer quantidade:
+
+```markdown
+### Endpoint
+
+GET /tenants/{tenant}/items/{id}
+
+### Input
+
+- tenant: String required
+```
+
+Um endpoint inline não tem seção de mapeamento, então **o nome é o mapeamento**: `{tenant}` é
+preenchido pelo input chamado `tenant`. Um parâmetro sem input correspondente é `HRP2131` — o
+segmento ficaria sem valor no momento da requisição.
+
+`{id}` continua com o significado de sempre: o registro que o flow carrega com `load ... by id`,
+não um input.
+
+Um input consumido pelo path não aparece de novo no corpo. Um binding externo (§ `harpia-bindings-v1`)
+continua podendo mapear explicitamente com `- x: path nome`.
+
 ## 9. Errors
 
 Cada item diretamente sob `### Errors` declara uma condição e seu status:
