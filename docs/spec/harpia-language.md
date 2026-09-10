@@ -798,7 +798,7 @@ GET /tenants/{tenant}/items/{id}
 ```
 
 Um endpoint inline não tem seção de mapeamento, então **o nome é o mapeamento**: `{tenant}` é
-preenchido pelo input chamado `tenant`. Um parâmetro sem input correspondente é `HRP2131` — o
+preenchido pelo input chamado `tenant`. Um parâmetro sem input correspondente é `HRP2135` — o
 segmento ficaria sem valor no momento da requisição.
 
 `{id}` continua com o significado de sempre: o registro que o flow carrega com `load ... by id`,
