@@ -205,8 +205,12 @@ public final class JavaSpringControllerTransformer {
         annotations.add(JavaAnnotationModel.of(
                 ANNOTATIONS + annotation,
                 new JavaAnnotationModel.Attribute("value", "\"" + externalName + "\"")));
+        // A declared enum is a closed set of names, so the URL carries it as well as it carries a
+        // scalar. Mapping only the scalar kind here used to make the whole target fail on one.
         return new JavaParameterModel(
-                mapping.input(), JavaTypeMapper.map(field.scalarType()), List.copyOf(annotations));
+                mapping.input(),
+                JavaTypeMapper.map(field.type(), layout.packageName(JavaLayout.DOMAIN)),
+                List.copyOf(annotations));
     }
 
     private static JavaTypeRef bodyType(

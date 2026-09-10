@@ -152,6 +152,8 @@ public final class ErrorCodes {
     public static final String SEMANTIC_PATCH_REQUIRED_INPUT = "HRP2136";
     /** A partial update is bound to a flow that updates nothing from the request. */
     public static final String SEMANTIC_PATCH_WITHOUT_UPDATE = "HRP2137";
+    /** An input bound to a path or query carries something a URL cannot spell. */
+    public static final String SEMANTIC_URL_BOUND_INPUT = "HRP2138";
 
     // --- HRP22xx: external binding semantics -------------------------------------------------
     /** A binding references an operation that is not declared. */

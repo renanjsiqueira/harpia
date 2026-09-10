@@ -7,6 +7,7 @@ import dev.harpia.binding.BindingValidator;
 import dev.harpia.diag.DiagnosticCollector;
 import dev.harpia.diag.ErrorCodes;
 import dev.harpia.diag.SourceRef;
+import dev.harpia.model.HttpBinding;
 import dev.harpia.logic.LogicType;
 import dev.harpia.model.LogicModel;
 import dev.harpia.model.Literals;
@@ -87,6 +88,7 @@ public final class SemanticValidator {
         }
 
         validateDomainErrorStatuses(project, diagnostics);
+        validateUrlBoundInputs(project, bindings, symbols, diagnostics);
 
         // An entity is orphaned when nothing in the project operates on it, which is no longer the
         // same question as whether its own module declares an operation.
@@ -98,6 +100,67 @@ public final class SemanticValidator {
                         module.where());
             }
         }
+    }
+
+    /**
+     * A value bound outside the request body has to fit in a URL.
+     *
+     * <p>A path segment and a query parameter each carry one value written as text. A scalar is
+     * one value; so is a declared enum, which is a closed set of names. A collection is many
+     * values and a declared Value is many fields, and neither has a spelling the URL agrees on —
+     * so they are refused here rather than left to explode inside a target.
+     */
+    private static void validateUrlBoundInputs(
+            ProjectAst project,
+            BindingModel bindings,
+            SymbolTable symbols,
+            DiagnosticCollector diagnostics) {
+        Map<String, SpecAst.UseCaseDeclaration> operations = new LinkedHashMap<>();
+        for (ModuleAst module : project.modules()) {
+            for (SpecAst.UseCaseDeclaration operation : module.useCases()) {
+                operations.putIfAbsent(
+                        Naming.useCaseBaseName(operation.title()), operation);
+            }
+        }
+        for (BindingModel.Http binding : bindings.http().values()) {
+            SpecAst.UseCaseDeclaration operation = operations.get(binding.operation());
+            if (operation == null) {
+                continue;
+            }
+            for (HttpBinding.RequestMapping mapping : binding.binding().request()) {
+                if (mapping instanceof HttpBinding.Body || mapping.input().equals("id")) {
+                    continue;
+                }
+                operation.input().stream()
+                        .filter(input -> input.name().equals(mapping.input()))
+                        .findFirst()
+                        .ifPresent(input -> {
+                            if (urlSpellable(input.type(), symbols)) {
+                                return;
+                            }
+                            diagnostics.error(
+                                    ErrorCodes.SEMANTIC_URL_BOUND_INPUT,
+                                    "input '" + input.name() + "' is '" + input.type()
+                                            + "', which a URL cannot carry; a path or query value "
+                                            + "is a scalar or a declared enum",
+                                    input.where());
+                        });
+            }
+        }
+    }
+
+    private static boolean urlSpellable(String type, SymbolTable symbols) {
+        if (FieldLineParser.elementOf(type).isPresent()) {
+            return false;
+        }
+        Optional<String> optional = FieldLineParser.optionalOf(type);
+        if (optional.isPresent()) {
+            return urlSpellable(optional.orElseThrow(), symbols);
+        }
+        if (FieldLineParser.referenceOf(type).isPresent()) {
+            return true;
+        }
+        return FieldLineParser.isScalar(type) || symbols.enumType(type).isPresent();
     }
 
     /**

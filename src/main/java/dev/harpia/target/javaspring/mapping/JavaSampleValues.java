@@ -140,6 +140,11 @@ public final class JavaSampleValues {
         if (field.reference().isPresent()) {
             return plainOf(field.reference().orElseThrow().idType());
         }
+        // The wire already spells a declared enum as its constant, which is what the JSON body
+        // carries. A URL is a different place to write the same value, not a different value.
+        if (field.enumTypeName().isPresent()) {
+            return enumSample(field);
+        }
         return switch (field.scalarType()) {
             case STRING, TEXT, EMAIL -> text(field);
             case INT, LONG -> "1";

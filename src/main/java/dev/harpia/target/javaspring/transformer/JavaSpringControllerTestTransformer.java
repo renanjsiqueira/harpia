@@ -341,10 +341,13 @@ public final class JavaSpringControllerTestTransformer {
         return Optional.empty();
     }
 
+    /** Whether the field holds text, which a declared enum does not: it holds one of its names. */
     private static boolean isText(ApplicationField field) {
-        return field.scalarType() == dev.harpia.application.ApplicationScalarType.STRING
-                || field.scalarType() == dev.harpia.application.ApplicationScalarType.TEXT
-                || field.scalarType() == dev.harpia.application.ApplicationScalarType.EMAIL;
+        return field.present().scalarKind()
+                .filter(kind -> kind == dev.harpia.application.ApplicationScalarType.STRING
+                        || kind == dev.harpia.application.ApplicationScalarType.TEXT
+                        || kind == dev.harpia.application.ApplicationScalarType.EMAIL)
+                .isPresent();
     }
 
     private static Optional<String> body(ApplicationOperation operation) {

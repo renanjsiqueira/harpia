@@ -804,6 +804,12 @@ segmento ficaria sem valor no momento da requisição.
 `{id}` continua com o significado de sempre: o registro que o flow carrega com `load ... by id`,
 não um input.
 
+Um segmento de path — como um query parameter — carrega **um** valor escrito como texto. Um escalar
+é um valor; um `## Enum` declarado também é, por ser um conjunto fechado de nomes, e chega ao
+parâmetro com o tipo declarado, grafado na URL como o corpo JSON já o grafa. Uma coleção são muitos
+valores e um `## Value` são muitos campos: nenhum dos dois tem grafia que a URL aceite, e ambos são
+`HRP2138`.
+
 Um input consumido pelo path não aparece de novo no corpo. Um binding externo (§ `harpia-bindings-v1`)
 continua podendo mapear explicitamente com `- x: path nome`.
 
