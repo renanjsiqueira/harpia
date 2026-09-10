@@ -26,6 +26,7 @@ final class AstRenderer {
                         .append(field.required() ? " required" : "")
                         .append(field.unique() ? " unique" : "")
                         .append(field.generated() ? " generated" : "")
+                        .append(field.owned() ? " owned" : "")
                         .append(field.defaultValue().map(value -> " default " + value).orElse(""))
                         .append('\n'));
             }

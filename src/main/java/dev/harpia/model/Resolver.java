@@ -170,9 +170,13 @@ public final class Resolver {
      * here is only the shape of the reference.
      */
     private static FieldType fieldType(String syntax, Declared declared) {
+        return fieldType(syntax, declared, false);
+    }
+
+    private static FieldType fieldType(String syntax, Declared declared, boolean owned) {
         Optional<String> element = FieldLineParser.elementOf(syntax);
         if (element.isPresent()) {
-            return FieldType.list(fieldType(element.orElseThrow(), declared));
+            return FieldType.list(fieldType(element.orElseThrow(), declared, owned));
         }
         Optional<String> reference = FieldLineParser.referenceOf(syntax);
         if (reference.isPresent()) {
@@ -186,7 +190,9 @@ public final class Resolver {
             return FieldType.scalar(TypeRef.fromSyntax(syntax));
         }
         if (declared.entities().contains(syntax)) {
-            return FieldType.relationship(syntax);
+            return owned
+                    ? FieldType.ownedRelationship(syntax)
+                    : FieldType.relationship(syntax);
         }
         if (declared.values().containsKey(syntax)) {
             return FieldType.value(syntax, declared.values().get(syntax));
@@ -205,7 +211,7 @@ public final class Resolver {
             SpecAst.FieldDeclaration field, Declared declared) {
         return new FieldModel(
                 field.name(),
-                fieldType(field.type(), declared),
+                fieldType(field.type(), declared, field.owned()),
                 field.required(),
                 field.unique(),
                 field.generated(),

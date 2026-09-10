@@ -284,6 +284,8 @@ Regras de superfície:
 - `Reference<Entity>` resolve para `ReferenceTo` e preserva somente a identidade tipada;
 - um nome de Entity em campo singular resolve para `RelationshipTo` lazy e independente;
 - `List<Entity>` é uma relação múltipla lazy e independente, não generic Java arbitrário;
+- o modifier `owned` troca o lifecycle da relação para dependente e é inválido em qualquer tipo
+  que não seja `Entity` ou `List<Entity>`;
 - `Optional<T>`, `List<T>` e `Page<T>` são os únicos containers inicialmente planejados;
 - ausência de `required` em input continua significando opcional para compatibilidade V0;
 - o formatter V1 não introduz a keyword redundante `optional`;

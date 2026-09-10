@@ -129,7 +129,7 @@ Estado atual do cenário:
 
 | Já suportado | Ainda necessário |
 |---|---|
-| Entity, campos, Enum, ValueObject, Rule/Invariant, Logic, Reference e relationships | owned relationship e Aggregate |
+| Entity, campos, Enum, ValueObject, Rule/Invariant, Logic, Reference e relationships owned | Aggregate e ownership de aggregate |
 | Command/Query CRUD, filtros/sort/page e binding HTTP básico | Flow com preconditions, calls e loop |
 | PostgreSQL, JPA e migration Flyway inicial | FraudService HTTP client e timeout básico |
 | Java/Spring Maven com testes gerados | Event/emit, JWT/role e package gate |
@@ -301,8 +301,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `DOM-012` **Relationships e referências** — `DONE` na V1; um Entity usado como tipo vira associação singular e `List<Entity>` vira associação múltipla compartilhável. Ambos carregam metadata explícita `LAZY`/`INDEPENDENT`, sem cascade; `Reference<T>` permanece identidade tipada sem carregamento. O Application IR expõe cardinalidade, loading e ciclo de vida · `P0` · `XL` · Area: `Domain`
   - Evidence: [`FieldType`](src/main/java/dev/harpia/model/FieldType.java), [`ApplicationFieldType`](src/main/java/dev/harpia/application/ApplicationFieldType.java), [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java), [`RelationshipFieldTest`](src/test/java/dev/harpia/validate/RelationshipFieldTest.java).
 
-- [ ] `DOM-013` **Owned relationship** — `TODO` · `P0` · `L` · Area: `Domain`
-  - Depends on: `DOM-012`.
+- [x] `DOM-013` **Owned relationship** — `DONE` na V1; o modifier `owned` em `Entity`/`List<Entity>` troca o ciclo de vida para `DEPENDENT`, torna o alvo exclusivo e gera one-to-one/one-to-many com cascade total e orphan removal. Uso em escalar, ValueObject ou `Reference<T>` é recusado por `HRP2131` · `P0` · `L` · Area: `Domain`
+  - Evidence: [`FieldLineParser`](src/main/java/dev/harpia/parse/FieldLineParser.java), [`FieldType`](src/main/java/dev/harpia/model/FieldType.java), [`SpringPersistenceMapper`](src/main/java/dev/harpia/target/javaspring/mapping/SpringPersistenceMapper.java), [`OwnedRelationshipTest`](src/test/java/dev/harpia/validate/OwnedRelationshipTest.java).
 
 - [x] `DOM-014` **Embedded ValueObject** — `DONE`; um campo de ValueObject gera `@Embedded`/`@AttributeOverride` e colunas prefixadas coerentes com a migration inicial · `P0` · `L` · Area: `Domain`
   - Evidence: [`JavaSpringValueTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringValueTransformer.java), [`DeclaredValueTest`](src/test/java/dev/harpia/validate/DeclaredValueTest.java).
@@ -813,16 +813,16 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 
 Em ordem de dependência e valor para a Reference Application:
 
-1. `DOM-013`: ciclo de vida dependente para `List<OrderItem> owned`.
-2. `FLOW-012`, `FLOW-014` e `FLOW-020`: precondition, calls e iteração controlada.
-3. `INTEG-001`–`INTEG-004`, `INTEG-010`, `RELY-001`: FraudService HTTP tipado.
-4. `EVENT-001`, `EVENT-003`, `EVENT-005`, `EVENT-007`, `FLOW-015`: Event local e emit.
-5. `SEC-002`, `SEC-003`, `SEC-005`, `SEC-007`, `API-008`: authenticated/role/JWT.
-6. `CUSTOM-002`, `CUSTOM-003`: contract, DI e layout custom protegido.
-7. `SPRING-012` e `GREEN-003`: `mvn package` e baseline integrada verificável.
-8. `HARNESS-001`–`HARNESS-004`: JSON estável e handoff consumível por agentes.
-9. `DOC-001`: catálogo compacto e exemplos canônicos para humanos e agentes.
-10. Reference Application end-to-end cobrindo o conjunto acima.
+1. `FLOW-012`, `FLOW-014` e `FLOW-020`: precondition, calls e iteração controlada.
+2. `INTEG-001`–`INTEG-004`, `INTEG-010`, `RELY-001`: FraudService HTTP tipado.
+3. `EVENT-001`, `EVENT-003`, `EVENT-005`, `EVENT-007`, `FLOW-015`: Event local e emit.
+4. `SEC-002`, `SEC-003`, `SEC-005`, `SEC-007`, `API-008`: authenticated/role/JWT.
+5. `CUSTOM-002`, `CUSTOM-003`: contract, DI e layout custom protegido.
+6. `SPRING-012` e `GREEN-003`: `mvn package` e baseline integrada verificável.
+7. `HARNESS-001`–`HARNESS-004`: JSON estável e handoff consumível por agentes.
+8. `DOC-001`: catálogo compacto e exemplos canônicos para humanos e agentes.
+9. Reference Application end-to-end cobrindo o conjunto acima.
+10. `PERSIST-008` e demais parciais P0 após o baseline integrado revelar o recorte necessário.
 
 ## Core Technical Debt
 
@@ -1889,11 +1889,11 @@ deliberados não têm meta de 100%.
 
 | Horizon | Total | Done | Partial | Todo | Other | Completion |
 |---|---:|---:|---:|---:|---:|---:|
-| Core V1 | 213 | 170 | 15 | 28 | 0 | 83,3% |
+| Core V1 | 213 | 171 | 15 | 27 | 0 | 83,8% |
 | Next / Upstream | 183 | 1 | 11 | 169 | 2 | 3,6% |
 | Labs / Research | 134 | 0 | 1 | 69 | 64 | N/A |
 | Custom / Non-goals | 20 | 0 | 0 | 0 | 20 | N/A |
-| **Canonical total** | **550** | **171** | **27** | **266** | **86** | — |
+| **Canonical total** | **550** | **172** | **27** | **265** | **86** | — |
 
 `Other` reúne `RESEARCH`, `NOT_SUPPORTED`, `CUSTOM` e `WONT_DO`. Ele não mascara trabalho do Core:
 a seleção Core contém apenas itens implementáveis `DONE`, `PARTIAL` ou `TODO`.
@@ -1911,14 +1911,14 @@ a seleção Core contém apenas itens implementáveis `DONE`, `PARTIAL` ou `TODO
 
 ## Audit Snapshot
 
-Baseline auditada no ciclo que fecha `DOM-012` e `PERSIST-009`:
+Baseline auditada no ciclo que fecha `DOM-013`:
 
 | Métrica | Resultado |
 |---|---:|
-| Produção Java | 210 arquivos / 21.194 linhas |
-| Testes Java | 82 arquivos / 11.597 linhas |
+| Produção Java | 210 arquivos / 21.289 linhas |
+| Testes Java | 83 arquivos / 11.775 linhas |
 | Gate | `mvn -o clean test` — **BUILD SUCCESS** |
-| Testes executados | 424; 0 failures, 0 errors, 0 skipped |
+| Testes executados | 427; 0 failures, 0 errors, 0 skipped |
 
 # Core V1 Completion Criteria
 
@@ -1948,16 +1948,16 @@ avançada, semantic diff, zero-downtime migration, marketplace ou plugin ecosyst
 
 ## Top 10 Core V1 Next Tasks
 
-1. Implementar `DOM-013` para `List<OrderItem> owned` e ciclo de vida dependente.
-2. Implementar `FLOW-012` para preconditions reutilizáveis.
-3. Implementar `FLOW-014`, `INTEG-001`–`INTEG-004` e `RELY-001` para FraudService.
-4. Implementar `FLOW-020` somente no recorte de coleção exigido pela Reference Application.
-5. Implementar `EVENT-001`/`EVENT-003`/`EVENT-005`/`EVENT-007` e `FLOW-015`.
-6. Implementar `SEC-002`/`SEC-003`/`SEC-005`/`SEC-007` e fechar `API-008`.
-7. Fechar `CUSTOM-002`/`CUSTOM-003` e provar DI/layout custom no Maven gerado.
-8. Fechar `SPRING-012`/`GREEN-003`, incluindo `mvn package` e o baseline integrado.
-9. Entregar `HARNESS-001`–`HARNESS-004` com JSON e handoff determinísticos.
-10. Executar a Commerce Reference Application E2E e fechar `DOC-001` com o exemplo canônico.
+1. Implementar `FLOW-012` para preconditions reutilizáveis.
+2. Implementar `FLOW-014`, `INTEG-001`–`INTEG-004` e `RELY-001` para FraudService.
+3. Implementar `FLOW-020` somente no recorte de coleção exigido pela Reference Application.
+4. Implementar `EVENT-001`/`EVENT-003`/`EVENT-005`/`EVENT-007` e `FLOW-015`.
+5. Implementar `SEC-002`/`SEC-003`/`SEC-005`/`SEC-007` e fechar `API-008`.
+6. Fechar `CUSTOM-002`/`CUSTOM-003` e provar DI/layout custom no Maven gerado.
+7. Fechar `SPRING-012`/`GREEN-003`, incluindo `mvn package` e o baseline integrado.
+8. Entregar `HARNESS-001`–`HARNESS-004` com JSON e handoff determinísticos.
+9. Executar a Commerce Reference Application E2E e fechar `DOC-001` com o exemplo canônico.
+10. Fechar `PERSIST-008` e demais parciais P0 após o baseline integrado definir o recorte.
 
 ## Key Scope Reductions
 

@@ -66,11 +66,12 @@ final class ValueDeclarationParser implements DeclarationParser {
                 continue;
             }
             SpecAst.FieldDeclaration declared = field.orElseThrow();
-            if (declared.generated() || declared.unique()) {
+            if (declared.generated() || declared.unique() || declared.owned()) {
                 diagnostics.error(
                         ErrorCodes.SYNTAX_VALUE_FIELD,
                         "field '" + declared.name() + "' of value '" + name
-                                + "' cannot be generated or unique; a value has no identity",
+                                + "' cannot be generated or unique, and cannot be owned; a value "
+                                + "has no identity or lifecycle",
                         declared.where());
                 valid = false;
                 continue;

@@ -124,7 +124,8 @@ public sealed interface ApplicationFieldType {
     }
 
     enum RelationshipLifecycle {
-        INDEPENDENT
+        INDEPENDENT,
+        DEPENDENT
     }
 
     static ApplicationFieldType reference(String entity, ApplicationScalarType idType) {

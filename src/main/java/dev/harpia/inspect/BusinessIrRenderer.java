@@ -23,6 +23,7 @@ final class BusinessIrRenderer {
                         .append(field.required() ? " required" : "")
                         .append(field.unique() ? " unique" : "")
                         .append(field.generated() ? " generated" : "")
+                        .append(owned(field) ? " owned" : "")
                         .append(field.defaultValue()
                                 .map(value -> " default " + value.source()).orElse(""))
                         .append('\n');
@@ -57,6 +58,16 @@ final class BusinessIrRenderer {
                 .append(logic.customContract().map(contract -> " custom " + contract).orElse(""))
                 .append('\n'));
         return out.toString();
+    }
+
+    private static boolean owned(FieldModel field) {
+        dev.harpia.model.FieldType type = field.type();
+        if (type instanceof dev.harpia.model.FieldType.Container container) {
+            type = container.element();
+        }
+        return type instanceof dev.harpia.model.FieldType.Relationship relationship
+                && relationship.lifecycle()
+                        == dev.harpia.model.FieldType.RelationshipLifecycle.DEPENDENT;
     }
 
     private static void renderFlow(StringBuilder out, List<FlowStep> flow, String indent) {

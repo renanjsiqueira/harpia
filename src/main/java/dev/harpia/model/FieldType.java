@@ -120,7 +120,8 @@ public sealed interface FieldType {
     }
 
     enum RelationshipLifecycle {
-        INDEPENDENT
+        INDEPENDENT,
+        DEPENDENT
     }
 
     static FieldType reference(String entity) {
@@ -130,6 +131,11 @@ public sealed interface FieldType {
     static FieldType relationship(String entity) {
         return new Relationship(
                 entity, RelationshipLoading.LAZY, RelationshipLifecycle.INDEPENDENT);
+    }
+
+    static FieldType ownedRelationship(String entity) {
+        return new Relationship(
+                entity, RelationshipLoading.LAZY, RelationshipLifecycle.DEPENDENT);
     }
 
     static FieldType optional(FieldType element) {

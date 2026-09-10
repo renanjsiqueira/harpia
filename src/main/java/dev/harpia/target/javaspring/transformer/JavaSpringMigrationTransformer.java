@@ -93,6 +93,14 @@ public final class JavaSpringMigrationTransformer {
         String owner = entity.tableName() + "_id";
         String targetTable = SqlNaming.identifier(relationship.entity());
         String target = targetTable + "_id";
+        List<String> constraints = new ArrayList<>();
+        constraints.add("CONSTRAINT " + SqlConstraintNames.primaryKey(table)
+                + " PRIMARY KEY (" + owner + ", " + target + ")");
+        if (relationship.lifecycle()
+                == dev.harpia.application.ApplicationFieldType.RelationshipLifecycle.DEPENDENT) {
+            constraints.add("CONSTRAINT " + SqlConstraintNames.unique(table, target)
+                    + " UNIQUE (" + target + ")");
+        }
         return new SqlMigrationModel.Table(
                 table,
                 List.of(
@@ -100,9 +108,7 @@ public final class JavaSpringMigrationTransformer {
                                 + " NOT NULL",
                         target + " " + PostgresTypes.column(relationship.idType())
                                 + " NOT NULL"),
-                List.of(
-                        "CONSTRAINT " + SqlConstraintNames.primaryKey(table)
-                                + " PRIMARY KEY (" + owner + ", " + target + ")"));
+                constraints);
     }
 
     private static String columnType(ApplicationField field) {
@@ -144,7 +150,12 @@ public final class JavaSpringMigrationTransformer {
                 + SqlConstraintNames.primaryKey(entity.tableName())
                 + " PRIMARY KEY (" + entity.idField().columnName() + ")");
         entity.fields().stream()
-                .filter(ApplicationField::unique)
+                .filter(field -> field.unique()
+                        || field.relationship()
+                                .filter(relationship -> relationship.lifecycle()
+                                        == dev.harpia.application.ApplicationFieldType
+                                                .RelationshipLifecycle.DEPENDENT)
+                                .isPresent())
                 .map(ApplicationField::columnName)
                 .sorted()
                 .forEach(column -> constraints.add("CONSTRAINT "

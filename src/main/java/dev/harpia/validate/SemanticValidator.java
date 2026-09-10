@@ -63,6 +63,8 @@ public final class SemanticValidator {
                             project.languageVersion(), field.type(), field.where(), symbols,
                             diagnostics);
                     validateOptionality(field.type(), field.required(), field.where(), diagnostics);
+                    validateOwnership(
+                            project.languageVersion(), field, symbols, diagnostics);
                 }
             }
         }
@@ -251,6 +253,28 @@ public final class SemanticValidator {
                             + "mandatory",
                     where);
         }
+    }
+
+    /** {@code owned} changes an association's lifecycle and has no meaning on a value. */
+    private static void validateOwnership(
+            LanguageVersion languageVersion,
+            SpecAst.FieldDeclaration field,
+            SymbolTable symbols,
+            DiagnosticCollector diagnostics) {
+        if (!field.owned()) {
+            return;
+        }
+        String target = FieldLineParser.elementOf(field.type()).orElse(field.type());
+        if (languageVersion == LanguageVersion.V1 && symbols.entity(target).isPresent()) {
+            return;
+        }
+        diagnostics.error(
+                ErrorCodes.SEMANTIC_OWNED_RELATIONSHIP,
+                languageVersion == LanguageVersion.V0
+                        ? "owned relationships need harpia.languageVersion 1"
+                        : "'owned' requires an Entity or List<Entity> relationship; '"
+                                + field.name() + "' is " + field.type(),
+                field.where());
     }
 
     private static Entity validateEntity(ModuleAst module, DiagnosticCollector diagnostics) {

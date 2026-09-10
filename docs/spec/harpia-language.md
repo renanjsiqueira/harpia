@@ -304,13 +304,26 @@ escolha implícita do target:
 |---|---|---|---|---|
 | `Customer` | uma | lazy | independente | nenhum |
 | `List<OrderItem>` | muitas, compartilháveis | lazy | independente | nenhum |
+| `Customer owned` | uma, exclusiva | lazy | dependente | total + orphan removal |
+| `List<OrderItem> owned` | muitas, exclusivas | lazy | dependente | total + orphan removal |
 
 No target Java/Spring, a forma singular usa uma coluna `<campo>_id`, `@ManyToOne` e `@JoinColumn`.
 A forma múltipla usa `@ManyToMany` e uma join table `<dono>_<campo>` com chave primária composta e
 chaves estrangeiras para dono e alvo. A migration cria primeiro todas as tabelas e só então adiciona
-as FKs, portanto ordem reversa, autorreferência e ciclos são válidos. Em ambos os casos, remover ou
-salvar o dono não remove nem salva o alvo por cascade. Dependência de ciclo de vida será declarada
-por `owned` em `DOM-013`.
+as FKs, portanto ordem reversa, autorreferência e ciclos são válidos. Sem `owned`, remover ou salvar
+o dono não remove nem salva o alvo por cascade.
+
+`owned` declara que o alvo não tem ciclo de vida independente daquele campo:
+
+```markdown
+- billingContact: Customer owned required
+- items: List<OrderItem> owned required
+```
+
+Ele só é válido em `Entity` ou `List<Entity>` (`HRP2131`). A associação singular vira one-to-one; a
+coleção vira one-to-many e sua FK de alvo é única, impedindo dois donos. O target Java/Spring usa
+`cascade = ALL` e `orphanRemoval = true`: salvar o dono salva os dependentes e removê-los da relação
+os elimina. `owned` não é aceito em escalar, ValueObject ou `Reference<T>`.
 
 Por contraste, `Reference<Customer>` guarda só a identidade e nunca carrega um `Customer`.
 

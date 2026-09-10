@@ -43,6 +43,7 @@ public final class FieldLineParser {
         boolean required = false;
         boolean unique = false;
         boolean generated = false;
+        boolean owned = false;
         String defaultValue = null;
         Set<String> seen = new HashSet<>();
         String modifiers = matcher.group(3);
@@ -60,7 +61,8 @@ public final class FieldLineParser {
                     remainder = "";
                 } else if (modifier.equals("required")
                         || modifier.equals("unique")
-                        || modifier.equals("generated")) {
+                        || modifier.equals("generated")
+                        || modifier.equals("owned")) {
                     if (!seen.add(modifier)) {
                         invalid(raw, where, diagnostics, "duplicate field modifier '" + modifier + "'");
                         return Optional.empty();
@@ -68,6 +70,7 @@ public final class FieldLineParser {
                     required |= modifier.equals("required");
                     unique |= modifier.equals("unique");
                     generated |= modifier.equals("generated");
+                    owned |= modifier.equals("owned");
                     remainder = separator < 0 ? "" : remainder.substring(separator).stripLeading();
                 } else {
                     invalid(raw, where, diagnostics, "unknown field modifier '" + modifier + "'");
@@ -76,7 +79,7 @@ public final class FieldLineParser {
             }
         }
         return Optional.of(new FieldDeclaration(
-                matcher.group(1), type, required, unique, generated,
+                matcher.group(1), type, required, unique, generated, owned,
                 Optional.ofNullable(defaultValue), where));
     }
 

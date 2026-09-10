@@ -160,13 +160,24 @@ public final class JavaSpringEntityTransformer {
         String ownerColumn = entity.tableName() + "_id";
         String targetColumn = dev.harpia.application.SqlNaming.identifier(relationship.entity())
                 + "_id";
+        boolean dependent = relationship.lifecycle()
+                == dev.harpia.application.ApplicationFieldType.RelationshipLifecycle.DEPENDENT;
         imports.add(new JavaImportModel("jakarta.persistence.FetchType"));
         imports.add(new JavaImportModel("jakarta.persistence.ForeignKey"));
         imports.add(new JavaImportModel("jakarta.persistence.JoinTable"));
-        annotations.add(JavaAnnotationModel.of(
-                "jakarta.persistence.ManyToMany",
-                new JavaAnnotationModel.Attribute(
-                        "fetch", "FetchType." + relationship.loading().name())));
+        List<JavaAnnotationModel.Attribute> association = new ArrayList<>();
+        association.add(new JavaAnnotationModel.Attribute(
+                "fetch", "FetchType." + relationship.loading().name()));
+        if (dependent) {
+            imports.add(new JavaImportModel("jakarta.persistence.CascadeType"));
+            association.add(new JavaAnnotationModel.Attribute("cascade", "CascadeType.ALL"));
+            association.add(new JavaAnnotationModel.Attribute("orphanRemoval", "true"));
+        }
+        annotations.add(new JavaAnnotationModel(
+                JavaTypeRef.of(dependent
+                        ? "jakarta.persistence.OneToMany"
+                        : "jakarta.persistence.ManyToMany"),
+                association));
         annotations.add(JavaAnnotationModel.of(
                 "jakarta.persistence.JoinTable",
                 new JavaAnnotationModel.Attribute("name", "\"" + table + "\""),
@@ -178,7 +189,8 @@ public final class JavaSpringEntityTransformer {
                 new JavaAnnotationModel.Attribute(
                         "inverseJoinColumns",
                         "@JoinColumn(name = \"" + targetColumn
-                                + "\", foreignKey = @ForeignKey(name = \""
+                                + "\"" + (dependent ? ", unique = true" : "")
+                                + ", foreignKey = @ForeignKey(name = \""
                                 + SqlConstraintNames.foreignKey(table, targetColumn) + "\"))")));
     }
 
