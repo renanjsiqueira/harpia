@@ -90,6 +90,7 @@ public record HttpBinding(
         GET,
         POST,
         PUT,
+        PATCH,
         DELETE
     }
 }

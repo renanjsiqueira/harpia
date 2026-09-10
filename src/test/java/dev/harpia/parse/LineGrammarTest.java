@@ -125,7 +125,7 @@ class LineGrammarTest {
                 Arguments.of("data", "- amount: money", ErrorCodes.SYNTAX_UNKNOWN_TYPE),
                 Arguments.of("data", "- name: String required required", ErrorCodes.SYNTAX_FIELD_LINE),
                 Arguments.of("input", "- id: UUID generated", ErrorCodes.SYNTAX_FIELD_LINE),
-                Arguments.of("endpoint", "PATCH /customers/{id}", ErrorCodes.SYNTAX_ENDPOINT),
+                Arguments.of("endpoint", "TRACE /customers/{id}", ErrorCodes.SYNTAX_ENDPOINT),
                 // A named parameter is valid syntax; whether it names an input is semantic.
                 Arguments.of("endpoint", "GET /customers/{CustomerId}", ErrorCodes.SYNTAX_ENDPOINT),
                 Arguments.of("endpoint", "GET /customers/{}", ErrorCodes.SYNTAX_ENDPOINT),

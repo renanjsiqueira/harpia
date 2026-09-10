@@ -164,7 +164,7 @@ O conteúdo de `### Endpoint` é exatamente uma linha:
 
 ```ebnf
 endpoint = method, sp, path ;
-method   = "GET" | "POST" | "PUT" | "DELETE" ;
+method   = "GET" | "POST" | "PUT" | "DELETE" ;  (* V1 acrescenta "PATCH"; ver § 8.10 *)
 path     = "/", path-segment, { "/", path-segment }, [ "/{id}" ] ;
 path-segment = lower, { lower | digit | "-" } ;
 ```
@@ -806,6 +806,37 @@ não um input.
 
 Um input consumido pelo path não aparece de novo no corpo. Um binding externo (§ `harpia-bindings-v1`)
 continua podendo mapear explicitamente com `- x: path nome`.
+
+## 8.10 PATCH
+
+Na V1 o método `PATCH` entra na gramática de `### Endpoint`. Na V0 o conjunto continua sendo
+`GET`, `POST`, `PUT` e `DELETE`; escrever `PATCH` ali é `HRP1010`.
+
+O que separa `PATCH` de `PUT` é uma frase: **`PUT` enuncia o recurso inteiro, `PATCH` enuncia
+apenas as mudanças**. Num `PUT`, um campo que a requisição omitiu é um campo posto em nada; num
+`PATCH`, o mesmo campo omitido não é mudança alguma e o valor armazenado permanece. `update ... from
+input` copia, no `PATCH`, somente os campos que chegaram.
+
+```markdown
+### Endpoint
+
+PATCH /customers/{id}
+
+### Input
+
+- name: String
+- email: Email
+```
+
+Duas recusas vêm da mesma frase:
+
+- um input `required` é `HRP2136` — a requisição pode omitir o campo, então exigi-lo contradiz o
+  método que permite omiti-lo;
+- um flow sem `update ... from input` é `HRP2137` — não há mudança nenhuma a enunciar, e chamar a
+  operação de parcial não diz nada sobre ela.
+
+Só um binding decide entre atualização total e parcial, porque só um binding diz como a requisição
+chega. Uma operação sem exposição HTTP não é parcial.
 
 ## 9. Errors
 

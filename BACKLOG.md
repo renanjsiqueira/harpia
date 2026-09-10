@@ -458,7 +458,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `API-002` **GET, POST, PUT e DELETE** — `DONE` · `P0` · `M` · Area: `API`
   - Evidence: [`HttpBinding`](src/main/java/dev/harpia/model/HttpBinding.java), [`ApplicationLayerTransformerTest`](src/test/java/dev/harpia/target/javaspring/transformer/ApplicationLayerTransformerTest.java).
 
-- [ ] `API-003` **PATCH** — `TODO` · `P0` · `M` · Area: `API`
+- [x] `API-003` **PATCH** — `DONE` na V1; `PATCH` entra na gramática de `### Endpoint` e significa atualização parcial: `update ... from input` copia só os campos que chegaram, um input `required` é `HRP2136` e um flow que não atualiza nada é `HRP2137`. A V0 mantém os quatro verbos (`HRP1010`) · `P0` · `M` · Area: `API`
+  - Evidence: [`PartialUpdateTest`](src/test/java/dev/harpia/binding/PartialUpdateTest.java), [`EndpointParser`](src/main/java/dev/harpia/parse/EndpointParser.java), [`BindingValidator`](src/main/java/dev/harpia/binding/BindingValidator.java), [`ApplicationOperation.partialUpdate`](src/main/java/dev/harpia/application/ApplicationOperation.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java).
 
 - [x] `API-004` **Path params gerais** — `DONE` na V1; um path aceita `{nome}` em qualquer segmento e em qualquer quantidade. Num endpoint inline o nome **é** o mapeamento: `{tenant}` é preenchido pelo input `tenant`, e um parâmetro sem input correspondente é `HRP2131`. `{id}` mantém o significado de sempre — o registro que o flow carrega · `P0` · `M` · Area: `API`
   - Evidence: [`EndpointParser`](src/main/java/dev/harpia/parse/EndpointParser.java), [`BindingResolver`](src/main/java/dev/harpia/binding/BindingResolver.java), [`BindingValidator`](src/main/java/dev/harpia/binding/BindingValidator.java), [`PathParameterTest`](src/test/java/dev/harpia/binding/PathParameterTest.java).

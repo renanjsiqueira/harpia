@@ -112,7 +112,7 @@ class SpecParserDiagnosticsTest {
 
                 ### Endpoint
 
-                PATCH /customers
+                TRACE /customers
 
                 ### Access
 

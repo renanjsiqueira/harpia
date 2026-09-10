@@ -51,6 +51,18 @@ public record ApplicationOperation(
         }
     }
 
+    /**
+     * Whether an update applies only the fields the request actually carried.
+     *
+     * <p>A full update states the whole resource, so a field the request left out is a field set to
+     * nothing. A partial update states only the changes, so a field left out is not a change at
+     * all and the stored value stands. Only a binding can say which of the two was meant, because
+     * only a binding says how the request arrives.
+     */
+    public boolean partialUpdate() {
+        return endpoint.map(exposed -> exposed.method() == HttpMethod.PATCH).orElse(false);
+    }
+
     /** Whether the semantic flow needs the entity identifier, independently of any binding. */
     public boolean requiresId() {
         return allInstructions().stream()
@@ -173,6 +185,7 @@ public record ApplicationOperation(
         GET,
         POST,
         PUT,
+        PATCH,
         DELETE
     }
 

@@ -63,6 +63,7 @@ public final class BindingValidator {
                         binding.endpointWhere());
             }
             validatePathParameters(binding, operation, diagnostics);
+            validatePartialUpdate(project.languageVersion(), binding, operation, diagnostics);
             validateMappings(binding.binding(), operation, loadsById, diagnostics);
         }
     }
@@ -90,6 +91,47 @@ public final class BindingValidator {
                     "path parameter '{" + parameter + "}' has no input '" + parameter
                             + "' in operation '" + operation.title() + "' to fill it",
                     binding.endpointWhere());
+        }
+    }
+
+    /**
+     * A partial update states only the changes.
+     *
+     * <p>That is what separates it from a full update, and everything here follows from it: a
+     * field the request may omit cannot also be demanded, and an operation that copies nothing
+     * from the request has no changes to state, so calling it partial says nothing about it.
+     */
+    private static void validatePartialUpdate(
+            dev.harpia.LanguageVersion languageVersion,
+            BindingModel.Http binding,
+            SpecAst.UseCaseDeclaration operation,
+            DiagnosticCollector diagnostics) {
+        if (binding.binding().method() != HttpBinding.HttpMethod.PATCH) {
+            return;
+        }
+        if (languageVersion == dev.harpia.LanguageVersion.V0) {
+            diagnostics.error(
+                    ErrorCodes.SYNTAX_ENDPOINT,
+                    "PATCH needs harpia.languageVersion 1",
+                    binding.endpointWhere(),
+                    "set harpia.languageVersion to 1");
+            return;
+        }
+        if (operation.flow().stream().noneMatch(SpecAst.UpdateFrom.class::isInstance)) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_PATCH_WITHOUT_UPDATE,
+                    "PATCH states a partial update, but operation '" + operation.title()
+                            + "' never updates from input",
+                    binding.endpointWhere());
+        }
+        for (SpecAst.InputDeclaration input : operation.input()) {
+            if (input.required()) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_PATCH_REQUIRED_INPUT,
+                        "input '" + input.name() + "' is required, but PATCH lets the request omit "
+                                + "it; a partial update carries only the fields it changes",
+                        input.where());
+            }
         }
     }
 

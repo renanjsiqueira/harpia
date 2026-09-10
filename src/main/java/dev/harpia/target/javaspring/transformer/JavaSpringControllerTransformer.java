@@ -225,6 +225,7 @@ public final class JavaSpringControllerTransformer {
             case GET -> "GetMapping";
             case POST -> "PostMapping";
             case PUT -> "PutMapping";
+            case PATCH -> "PatchMapping";
             case DELETE -> "DeleteMapping";
         };
         return JavaAnnotationModel.of(

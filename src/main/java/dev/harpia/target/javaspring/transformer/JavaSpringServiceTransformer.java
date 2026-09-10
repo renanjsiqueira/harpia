@@ -246,7 +246,7 @@ public final class JavaSpringServiceTransformer {
                 case CREATE_FROM -> {
                     String variable = instruction.variable().orElseThrow();
                     statements.add(entityName + " " + variable + " = new " + entityName + "();");
-                    copyInput(statements, variable, operation);
+                    copyInput(statements, variable, operation, false);
                 }
                 case LOAD_BY_ID -> {
                     explicitImports.add(names.notFoundException());
@@ -313,7 +313,8 @@ public final class JavaSpringServiceTransformer {
                             + "(" + element.body() + ");");
                 }
                 case UPDATE_FROM ->
-                        copyInput(statements, instruction.variable().orElseThrow(), operation);
+                        copyInput(statements, instruction.variable().orElseThrow(), operation,
+                                operation.partialUpdate());
                 case LIST_ALL -> {
                     explicitImports.add("org.springframework.data.domain.Sort");
                     if (instruction.paged()) {
@@ -442,11 +443,28 @@ public final class JavaSpringServiceTransformer {
         return name.toString();
     }
 
+    /**
+     * Copies the request onto the entity.
+     *
+     * <p>A partial update copies only what arrived: a field the request omitted is not a change,
+     * so the stored value has to survive the copy. A full update copies everything, because there
+     * the omission is itself the statement that the field holds nothing.
+     */
     private static void copyInput(
-            List<String> statements, String variable, ApplicationOperation operation) {
+            List<String> statements,
+            String variable,
+            ApplicationOperation operation,
+            boolean partial) {
         for (ApplicationField field : operation.input()) {
-            statements.add(variable + "." + JavaLayout.accessor("set", field.name())
-                    + "(" + REQUEST_PARAMETER + "." + field.name() + "());");
+            String assignment = variable + "." + JavaLayout.accessor("set", field.name())
+                    + "(" + REQUEST_PARAMETER + "." + field.name() + "());";
+            if (partial) {
+                statements.add("if (" + REQUEST_PARAMETER + "." + field.name() + "() != null) {");
+                statements.add("    " + assignment);
+                statements.add("}");
+            } else {
+                statements.add(assignment);
+            }
         }
     }
 

@@ -148,6 +148,10 @@ public final class ErrorCodes {
     public static final String SEMANTIC_DUPLICATE_INTEGRATION_INPUT = "HRP2134";
     /** A path parameter names nothing the operation can fill it with. */
     public static final String SEMANTIC_PATH_PARAM_INPUT = "HRP2135";
+    /** A partial update demands an input the client is free to omit. */
+    public static final String SEMANTIC_PATCH_REQUIRED_INPUT = "HRP2136";
+    /** A partial update is bound to a flow that updates nothing from the request. */
+    public static final String SEMANTIC_PATCH_WITHOUT_UPDATE = "HRP2137";
 
     // --- HRP22xx: external binding semantics -------------------------------------------------
     /** A binding references an operation that is not declared. */
