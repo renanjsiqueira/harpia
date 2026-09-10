@@ -354,20 +354,43 @@ public final class SemanticValidator {
     private static void validateAssignments(
             SpecAst.UseCaseDeclaration useCase, Entity target, DiagnosticCollector diagnostics) {
         for (SpecAst.FlowStatement statement : useCase.flow()) {
-            if (!(statement instanceof SpecAst.SetField set)) {
+            String fieldName;
+            boolean collection;
+            if (statement instanceof SpecAst.SetField set) {
+                fieldName = set.field();
+                collection = false;
+            } else if (statement instanceof SpecAst.ChangeCollection change) {
+                fieldName = change.field();
+                collection = true;
+            } else {
                 continue;
             }
-            SpecAst.FieldDeclaration field = target.fields().get(set.field());
+            SpecAst.FieldDeclaration field = target.fields().get(fieldName);
             if (field == null) {
                 diagnostics.error(
                         ErrorCodes.SEMANTIC_INPUT_FIELD_UNKNOWN,
-                        "entity '" + target.name() + "' has no field '" + set.field() + "'",
-                        set.where());
-            } else if (field.generated()) {
+                        "entity '" + target.name() + "' has no field '" + fieldName + "'",
+                        statement.where());
+                continue;
+            }
+            if (field.generated()) {
                 diagnostics.error(
                         ErrorCodes.SEMANTIC_INPUT_FIELD_UNKNOWN,
-                        "'" + set.field() + "' is generated, so the flow cannot assign it",
-                        set.where());
+                        "'" + fieldName + "' is generated, so the flow cannot assign it",
+                        statement.where());
+                continue;
+            }
+            // Adding to something that holds one value is not adding, it is replacing.
+            boolean isCollection = FieldLineParser.elementOf(field.type()).isPresent();
+            if (collection != isCollection) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_INPUT_FIELD_UNKNOWN,
+                        collection
+                                ? "'" + fieldName + "' is " + field.type()
+                                        + ", not a collection; use 'set' to assign it"
+                                : "'" + fieldName + "' is " + field.type()
+                                        + "; use 'add' or 'remove' to change a collection",
+                        statement.where());
             }
         }
     }
@@ -733,6 +756,9 @@ public final class SemanticValidator {
             } else if (statement instanceof SpecAst.ListBy value) {
                 define(variables, value.variable(), ValueType.list(value.entity()), value.where(), diagnostics);
             } else if (statement instanceof SpecAst.SetField value) {
+                requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
+                createsOrUpdates = true;
+            } else if (statement instanceof SpecAst.ChangeCollection value) {
                 requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
                 createsOrUpdates = true;
             } else if (statement instanceof SpecAst.UpdateFrom value) {

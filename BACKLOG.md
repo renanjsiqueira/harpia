@@ -385,9 +385,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `FLOW-010` **`return` entity/list/nothing** — `DONE` para V0 · `P0` · `M` · Area: `API`
   - Evidence: [`OutputParser`](src/main/java/dev/harpia/parse/OutputParser.java), [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java).
 
-- [ ] `FLOW-011` **`set`, `add` e `remove`** — `PARTIAL`; `set x.campo = <expressão>` atribui um campo a partir de uma expressão tipada contra o tipo do campo, recusando campo inexistente ou `generated`. `add`/`remove` sobre coleções continuam abertos · `P0` · `L` · Area: `API`
-  - Depends on: `TYPE-021` (pronto), `DOM-012`.
-  - Evidence: [`FlowLineParser`](src/main/java/dev/harpia/parse/FlowLineParser.java), [`LogicAnalyzer`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`SetFieldTest`](src/test/java/dev/harpia/validate/SetFieldTest.java).
+- [x] `FLOW-011` **`set`, `add` e `remove`** — `DONE` na V1 para campos escalares e coleções; `set x.campo = <expressão>` atribui, `add <elemento> to x.coleção` e `remove <elemento> from x.coleção` mudam a coleção no lugar. A expressão é tipada contra o tipo do campo — ou do **elemento**, no caso da coleção — e usar a forma errada para a espécie do campo é recusado. Campo `generated` não pode ser atribuído · `P0` · `L` · Area: `API`
+  - Evidence: [`FlowLineParser`](src/main/java/dev/harpia/parse/FlowLineParser.java), [`LogicAnalyzer`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`SetFieldTest`](src/test/java/dev/harpia/validate/SetFieldTest.java), [`CollectionChangeTest`](src/test/java/dev/harpia/validate/CollectionChangeTest.java).
 
 - [ ] `FLOW-012` **`require`** — `TODO` · `P0` · `M` · Area: `API`
   - Depends on: `RULE-001`.
@@ -814,7 +813,7 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 Em ordem de dependência e valor para a Reference Application:
 
 1. `DOM-012` e `PERSIST-009`: relationships end-to-end sobre a referência tipada de `TYPE-023`.
-2. `add`/`remove` de `FLOW-011` e `FLOW-019`/`FLOW-020`: mutação de coleção e controle de fluxo.
+2. `FLOW-019`/`FLOW-020`: if/else e for each no Flow.
 3. `FLOW-011`–`FLOW-014`, `FLOW-019`, `FLOW-020`: mutação, precondition/failure, calls e controle.
 4. `INTEG-001`–`INTEG-004`, `INTEG-010`, `RELY-001`: FraudService HTTP tipado.
 5. `EVENT-001`, `EVENT-003`, `EVENT-005`, `EVENT-007`, `FLOW-015`: Event local e emit.

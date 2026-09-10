@@ -43,6 +43,10 @@ public final class FlowLineParser {
                     + " +by +([a-z][A-Za-z0-9]*(?: +and +[a-z][A-Za-z0-9]*)*)" + SORT + PAGED + "$");
     private static final Pattern SET = Pattern.compile(
             "^set +" + VARIABLE + "\\.([a-z][A-Za-z0-9]*) += +(\\S.*)$");
+    private static final Pattern ADD = Pattern.compile(
+            "^add +(\\S.*?) +to +" + VARIABLE + "\\.([a-z][A-Za-z0-9]*)$");
+    private static final Pattern REMOVE = Pattern.compile(
+            "^remove +(\\S.*?) +from +" + VARIABLE + "\\.([a-z][A-Za-z0-9]*)$");
     private static final Pattern SAVE = Pattern.compile("^save +" + VARIABLE + "$");
     private static final Pattern DELETE = Pattern.compile("^delete +" + VARIABLE + "$");
     private static final Pattern RETURN = Pattern.compile("^return +(nothing|[a-z][A-Za-z0-9]*)$");
@@ -50,6 +54,20 @@ public final class FlowLineParser {
             "^fail +([a-z]+(?: [a-z]+)*?) +when +(\\S.*)$");
 
     private FlowLineParser() {
+    }
+
+    private static Optional<FlowStatement> collectionChange(
+            SpecAst.CollectionChange change,
+            Matcher matcher,
+            SourceRef where,
+            DiagnosticCollector diagnostics) {
+        String text = matcher.group(1).strip();
+        String variable = matcher.group(2);
+        String field = matcher.group(3);
+        return LogicLexer.tokenize(text, where, diagnostics)
+                .flatMap(tokens -> LogicExpressionParser.parse(tokens, diagnostics))
+                .map(element -> new SpecAst.ChangeCollection(
+                        change, variable, field, text, element, where));
     }
 
     /** {@code sorted by priority desc and name} in declaration order; ascending when unsaid. */
@@ -106,6 +124,14 @@ public final class FlowLineParser {
             return LogicLexer.tokenize(text, where, diagnostics)
                     .flatMap(tokens -> LogicExpressionParser.parse(tokens, diagnostics))
                     .map(value -> new SetField(variable, field, text, value, where));
+        }
+        matcher = ADD.matcher(line);
+        if (matcher.matches()) {
+            return collectionChange(SpecAst.CollectionChange.ADD, matcher, where, diagnostics);
+        }
+        matcher = REMOVE.matcher(line);
+        if (matcher.matches()) {
+            return collectionChange(SpecAst.CollectionChange.REMOVE, matcher, where, diagnostics);
         }
         matcher = LIST_BY.matcher(line);
         if (matcher.matches()) {

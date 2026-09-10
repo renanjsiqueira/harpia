@@ -124,8 +124,8 @@ public final class SpecAst {
     }
 
     public sealed interface FlowStatement
-            permits ValidateInput, CreateFrom, LoadById, FindBy, UpdateFrom, SetField, ListAll,
-                    ListBy, Save, Delete, Fail, Return {
+            permits ValidateInput, CreateFrom, LoadById, FindBy, UpdateFrom, SetField,
+                    ChangeCollection, ListAll, ListBy, Save, Delete, Fail, Return {
         SourceRef where();
     }
 
@@ -164,6 +164,35 @@ public final class SpecAst {
     }
 
     public record UpdateFrom(String variable, SourceRef where) implements FlowStatement {}
+
+    /** Whether an element joins a collection or leaves it. */
+    public enum CollectionChange {
+        ADD,
+        REMOVE
+    }
+
+    /**
+     * Adds an element to a collection field, or takes one out.
+     *
+     * <p>A collection is changed in place rather than replaced: {@code set} assigns a whole value,
+     * and saying "one more" is not the same as saying "these".
+     */
+    public record ChangeCollection(
+            CollectionChange change,
+            String variable,
+            String field,
+            String text,
+            LogicAst.Expression element,
+            SourceRef where) implements FlowStatement {
+        public ChangeCollection {
+            Objects.requireNonNull(change, "change");
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(field, "field");
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(element, "element");
+            Objects.requireNonNull(where, "where");
+        }
+    }
 
     /**
      * Assigns one field of an entity from an expression.

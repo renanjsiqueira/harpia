@@ -341,6 +341,20 @@ public final class ApplicationModelBuilder {
                     Optional.empty(),
                     value.where());
         }
+        if (source instanceof FlowStep.ChangeCollection value) {
+            return new FlowInstruction(
+                    value.change() == dev.harpia.parse.SpecAst.CollectionChange.ADD
+                            ? FlowCommand.ADD_TO
+                            : FlowCommand.REMOVE_FROM,
+                    Optional.of(value.variable()),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    false,
+                    Optional.of(new FlowInstruction.TypedValue(
+                            value.field(), value.text(), value.element())),
+                    value.where());
+        }
         if (source instanceof FlowStep.SetField value) {
             return new FlowInstruction(
                     FlowCommand.SET_FIELD,

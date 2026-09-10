@@ -538,7 +538,18 @@ porque são operações diferentes, e o flow diz qual aconteceu.
   atribuí-lo seria uma promessa que o flow não pode cumprir;
 - a atribuição acontece onde o flow a coloca, portanto antes do `save` se for para ser armazenada.
 
-Fora do recorte: `add` e `remove` sobre coleções.
+Uma coleção não é atribuída com `set`: dizer "mais um" não é o mesmo que dizer "estes".
+
+```flow
+add name to product.tags
+remove name from product.tags
+```
+
+- o elemento é tipado contra o tipo **do elemento** da coleção, não da coleção;
+- usar `add`/`remove` num campo escalar, ou `set` numa coleção, é recusado — a forma diz qual
+  espécie de campo se esperava;
+- a coleção da entidade gerada começa vazia (`new ArrayList<>()`): uma coleção que ninguém atribuiu
+  está vazia, não ausente, e adicionar a uma nula falharia no primeiro elemento.
 
 ## 8.2 fail
 

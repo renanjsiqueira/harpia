@@ -83,6 +83,9 @@ final class ApplicationIrRenderer {
                         .append(instruction.value()
                                 .map(typed -> switch (instruction.command()) {
                                     case FAIL -> " " + typed.name() + " when " + typed.text();
+                                    case ADD_TO -> " " + typed.text() + " to " + typed.name();
+                                    case REMOVE_FROM ->
+                                            " " + typed.text() + " from " + typed.name();
                                     default -> " " + typed.name() + " = " + typed.text();
                                 })
                                 .orElse(""))

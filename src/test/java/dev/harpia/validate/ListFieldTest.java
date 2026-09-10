@@ -51,9 +51,10 @@ class ListFieldTest {
                 .contains("@ElementCollection")
                 .contains("@CollectionTable(name = \"product_tags\", "
                         + "joinColumns = @JoinColumn(name = \"product_id\"))")
-                .contains("private List<String> tags;")
+                .as("an empty collection is not an absent one, so it starts empty")
+                .contains("private List<String> tags = new ArrayList<>();")
                 .as("a collection of a declared enum still stores the name, not the ordinal")
-                .contains("private List<Channel> channels;");
+                .contains("private List<Channel> channels = new ArrayList<>();");
 
         String migration = files.get(MIGRATION);
         String ownerTable = migration.substring(

@@ -110,7 +110,10 @@ public final class LogicAnalyzer {
         Map<SourceRef, TypedExpression> typed = new LinkedHashMap<>();
         for (ModuleAst module : project.modules()) {
             for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
-                if (useCase.flow().stream().noneMatch(SpecAst.SetField.class::isInstance)) {
+                boolean assigns = useCase.flow().stream().anyMatch(statement ->
+                        statement instanceof SpecAst.SetField
+                                || statement instanceof SpecAst.ChangeCollection);
+                if (!assigns) {
                     continue;
                 }
                 Map<String, String> variables = new LinkedHashMap<>();
@@ -125,27 +128,51 @@ public final class LogicAnalyzer {
                 }
                 List<LogicModel.Parameter> scope = scopeOf(useCase.input());
                 for (SpecAst.FlowStatement statement : useCase.flow()) {
-                    if (!(statement instanceof SpecAst.SetField set)) {
+                    String variable;
+                    String fieldName;
+                    String text;
+                    LogicAst.Expression expression;
+                    boolean element;
+                    if (statement instanceof SpecAst.SetField set) {
+                        variable = set.variable();
+                        fieldName = set.field();
+                        text = set.text();
+                        expression = set.value();
+                        element = false;
+                    } else if (statement instanceof SpecAst.ChangeCollection change) {
+                        variable = change.variable();
+                        fieldName = change.field();
+                        text = change.text();
+                        expression = change.element();
+                        element = true;
+                    } else {
                         continue;
                     }
-                    SpecAst.FieldDeclaration field = Optional.ofNullable(
-                                    variables.get(set.variable()))
+                    SpecAst.FieldDeclaration field = Optional.ofNullable(variables.get(variable))
                             .map(entities::get)
-                            .map(fields -> fields.get(set.field()))
+                            .map(fields -> fields.get(fieldName))
                             .orElse(null);
-                    if (field == null || !FieldLineParser.isScalar(field.type())) {
+                    if (field == null) {
+                        continue;
+                    }
+                    // An element joins a collection, so what it must be is the collection's
+                    // element type, not the collection.
+                    String expected = element
+                            ? FieldLineParser.elementOf(field.type()).orElse(null)
+                            : field.type();
+                    if (expected == null || !FieldLineParser.isScalar(expected)) {
                         // Nothing to type against; the structural error is reported elsewhere.
                         continue;
                     }
                     analyzeExpression(
-                            "'" + set.text() + "'",
+                            "'" + text + "'",
                             scope,
-                            LogicType.of(field.type()),
-                            set.value(),
+                            LogicType.of(expected),
+                            expression,
                             symbols,
-                            set.where(),
+                            statement.where(),
                             diagnostics)
-                            .ifPresent(value -> typed.put(set.where(), value));
+                            .ifPresent(value -> typed.put(statement.where(), value));
                 }
             }
         }

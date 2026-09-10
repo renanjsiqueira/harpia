@@ -307,6 +307,15 @@ public final class Resolver {
             return new FlowStep.FindBy(
                     value.variable(), value.entity(), value.field(), value.where());
         }
+        if (statement instanceof SpecAst.ChangeCollection value) {
+            return new FlowStep.ChangeCollection(
+                    value.change(),
+                    value.variable(),
+                    value.field(),
+                    value.text(),
+                    assignments.get(value.where()),
+                    value.where());
+        }
         if (statement instanceof SpecAst.SetField value) {
             return new FlowStep.SetField(
                     value.variable(),

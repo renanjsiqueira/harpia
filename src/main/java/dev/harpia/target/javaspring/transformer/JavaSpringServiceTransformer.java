@@ -256,6 +256,22 @@ public final class JavaSpringServiceTransformer {
                             + JavaLayout.accessor("set", assigned.name())
                             + "(" + written.body() + ");");
                 }
+                case ADD_TO, REMOVE_FROM -> {
+                    ApplicationOperation.FlowInstruction.TypedValue changed =
+                            instruction.value().orElseThrow();
+                    String variable = instruction.variable().orElseThrow();
+                    JavaLogicWriter.Result element = JavaLogicWriter.condition(
+                            changed.expression(),
+                            operation.methodName(),
+                            field -> REQUEST_PARAMETER + "." + field + "()");
+                    explicitImports.addAll(element.imports());
+                    statements.add(variable + "."
+                            + JavaLayout.accessor("get", changed.name()) + "()."
+                            + (instruction.command() == ApplicationOperation.FlowCommand.ADD_TO
+                                    ? "add"
+                                    : "remove")
+                            + "(" + element.body() + ");");
+                }
                 case UPDATE_FROM ->
                         copyInput(statements, instruction.variable().orElseThrow(), operation);
                 case LIST_ALL -> {

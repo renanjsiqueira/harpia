@@ -218,7 +218,7 @@ public record ApplicationOperation(
                 case FIND_BY, LIST_BY ->
                         variable.isPresent() && entity.isPresent() && !fields.isEmpty();
                 // The assigned field is the value's own name, so it is not repeated in `fields`.
-                case SET_FIELD ->
+                case SET_FIELD, ADD_TO, REMOVE_FROM ->
                         variable.isPresent() && fields.isEmpty() && value.isPresent();
                 case CREATE_FROM, LOAD_BY_ID, LIST_ALL -> variable.isPresent() && entity.isPresent();
                 case UPDATE_FROM, SAVE, DELETE -> variable.isPresent() && entity.isEmpty();
@@ -236,6 +236,8 @@ public record ApplicationOperation(
         FIND_BY,
         LIST_BY,
         SET_FIELD,
+        ADD_TO,
+        REMOVE_FROM,
         CREATE_FROM,
         LOAD_BY_ID,
         UPDATE_FROM,

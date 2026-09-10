@@ -11,6 +11,7 @@ public sealed interface FlowStep
                 FlowStep.FindBy,
                 FlowStep.UpdateFrom,
                 FlowStep.SetField,
+                FlowStep.ChangeCollection,
                 FlowStep.ListAll,
                 FlowStep.ListBy,
                 FlowStep.Save,
@@ -88,6 +89,24 @@ public sealed interface FlowStep
     record SortOrder(String field, boolean descending) {
         public SortOrder {
             Objects.requireNonNull(field, "field");
+        }
+    }
+
+    /** Adds an element to a collection field, or takes one out. */
+    record ChangeCollection(
+            dev.harpia.parse.SpecAst.CollectionChange change,
+            String variable,
+            String field,
+            String text,
+            dev.harpia.logic.TypedExpression element,
+            SourceRef where) implements FlowStep {
+        public ChangeCollection {
+            Objects.requireNonNull(change, "change");
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(field, "field");
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(element, "element");
+            Objects.requireNonNull(where, "where");
         }
     }
 

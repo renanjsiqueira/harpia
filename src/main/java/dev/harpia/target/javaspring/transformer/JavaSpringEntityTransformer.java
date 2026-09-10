@@ -94,13 +94,20 @@ public final class JavaSpringEntityTransformer {
                         "jakarta.persistence.Enumerated",
                         new JavaAnnotationModel.Attribute("value", "EnumType.STRING")));
             });
+            // A collection that was never assigned is empty, not absent: adding to a null one
+            // would fail on the first element the flow contributes.
+            Optional<String> initial = field.elementType().isPresent()
+                    ? Optional.of("new ArrayList<>()")
+                    : defaults.map(field);
+            field.elementType().ifPresent(ignored ->
+                    explicitImports.add(new JavaImportModel("java.util.ArrayList")));
             fields.add(new JavaFieldModel(
                     field.name(),
                     type,
                     JavaVisibility.PRIVATE,
                     Set.of(),
                     annotations,
-                    defaults.map(field),
+                    initial,
                     Optional.of(field.where())));
             methods.add(getter(field, type, JavaTypeMapper.map(field.type(), domain)));
             methods.add(setter(field, type));

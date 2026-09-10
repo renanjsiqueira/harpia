@@ -65,7 +65,8 @@ public final class JavaSampleValues {
             return declared.orElseThrow() + "." + enumSample(field);
         }
         if (field.elementType().isPresent()) {
-            return "List.of(" + element(field) + ")";
+            // A flow may add to this collection, and an immutable one would refuse.
+            return "new ArrayList<>(List.of(" + element(field) + "))";
         }
         if (field.valueType().isPresent()) {
             ApplicationFieldType.ValueType value = field.valueType().orElseThrow();
@@ -155,6 +156,7 @@ public final class JavaSampleValues {
             imports.addAll(requiredImports(present(field), domainPackage));
         });
         field.elementType().ifPresent(element -> {
+            imports.add("java.util.ArrayList");
             imports.add("java.util.List");
             imports.addAll(requiredImports(sample(field), domainPackage));
         });
