@@ -11,6 +11,7 @@ import dev.harpia.parse.SpecAst.FlowStatement;
 import dev.harpia.parse.SpecAst.ListAll;
 import dev.harpia.parse.SpecAst.ListBy;
 import dev.harpia.parse.SpecAst.LoadById;
+import dev.harpia.parse.SpecAst.Require;
 import dev.harpia.parse.SpecAst.Return;
 import dev.harpia.parse.SpecAst.Save;
 import dev.harpia.parse.SpecAst.SetField;
@@ -21,7 +22,7 @@ import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Closed grammar for the eight V0 flow commands. */
+/** Closed line grammar for Flow commands. */
 public final class FlowLineParser {
 
     private static final String VARIABLE = "([a-z][A-Za-z0-9]*)";
@@ -52,6 +53,8 @@ public final class FlowLineParser {
     private static final Pattern RETURN = Pattern.compile("^return +(nothing|[a-z][A-Za-z0-9]*)$");
     private static final Pattern FAIL = Pattern.compile(
             "^fail +([a-z]+(?: [a-z]+)*?) +when +(\\S.*)$");
+    private static final Pattern REQUIRE = Pattern.compile(
+            "^require +(\\S.*?) +otherwise +([a-z]+(?: [a-z]+)*)$");
 
     private FlowLineParser() {
     }
@@ -160,6 +163,15 @@ public final class FlowLineParser {
                             .flatMap(tokens -> LogicExpressionParser.parse(tokens, diagnostics));
             return parsed.map(expression -> new Fail(error, condition, expression, where));
         }
+        matcher = REQUIRE.matcher(line);
+        if (matcher.matches()) {
+            String condition = matcher.group(1).strip();
+            String error = matcher.group(2);
+            Optional<LogicAst.Expression> parsed =
+                    LogicLexer.tokenize(condition, where, diagnostics)
+                            .flatMap(tokens -> LogicExpressionParser.parse(tokens, diagnostics));
+            return parsed.map(expression -> new Require(condition, expression, error, where));
+        }
         matcher = RETURN.matcher(line);
         if (matcher.matches()) {
             return Optional.of(new Return(
@@ -172,7 +184,8 @@ public final class FlowLineParser {
         diagnostics.error(
                 ErrorCodes.SYNTAX_FLOW_COMMAND,
                 "unknown flow command '" + raw
-                        + "'; expected validate, create, load, update, list, save, delete, or return",
+                        + "'; expected validate, create, load, update, set, add, remove, list, "
+                        + "require, fail, save, delete, or return",
                 where);
         return Optional.empty();
     }

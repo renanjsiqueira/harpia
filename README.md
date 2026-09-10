@@ -363,6 +363,14 @@ delete x
 return x|nothing
 ```
 
+Flow V1 adds small, typed orchestration commands. A positive precondition names the domain error
+that is raised when it is false; the status is declared once in `### Errors`:
+
+```text
+require amount <= balance otherwise insufficient balance
+fail insufficient balance when amount > balance
+```
+
 Normal Markdown prose remains documentation. It never silently becomes executable behavior.
 Arbitrary Java, authentication, events, integrations, and unrecognized Flow sentences are rejected
 instead of guessed.

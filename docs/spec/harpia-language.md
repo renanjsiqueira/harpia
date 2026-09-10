@@ -596,7 +596,7 @@ remove name from product.tags
 
 Na V1, o Flow pode levantar um erro de domínio declarado:
 
-```markdown
+````markdown
 ### Flow
 
 ```flow
@@ -610,7 +610,7 @@ return payment
 ### Errors
 
 - insufficient balance -> 422
-```
+````
 
 - a guarda é obrigatória. Um `fail` incondicional encerraria toda execução da operação, então a
   condição é o que faz dele uma instrução e não um beco sem saída;
@@ -622,6 +622,41 @@ return payment
 
 A diferença para `### Rules`: uma rule diz que o input é inválido e responde o status de
 `invalid input`. Um `fail` nomeia **qual** erro de negócio ocorreu e responde o status daquele erro.
+
+## 8.10 require
+
+Na V1, uma precondition positiva pode ser colocada no ponto exato do Flow em que precisa valer:
+
+````markdown
+### Flow
+
+```flow
+validate input
+require amount <= balance otherwise insufficient balance
+payment = create Payment from input
+save payment
+return payment
+```
+
+### Errors
+
+- insufficient balance -> 422
+````
+
+`require A otherwise E` continua quando `A` é verdadeira e levanta `E` quando ela é falsa. É a
+forma positiva correspondente a `fail E when not A`, preservada no AST e nos IRs como precondition
+em vez de ser reescrita para outra instrução.
+
+- a condição usa a mesma expressão tipada de `### Rules`, precisa ser `Boolean` e, neste recorte,
+  enxerga os campos escalares do input;
+- `otherwise` é obrigatório e recebe o nome de um erro de domínio declarado na própria operação
+  (`HRP2127`);
+- status não é aceito na instrução. `otherwise 422` duplicaria a decisão que pertence a
+  `### Errors`; declare um nome de negócio e mapeie o status uma única vez;
+- `languageVersion: 0` recusa `require` com `HRP1107`.
+
+Condições sobre variáveis carregadas pelo Flow e referência nominal a Rules ficam no alcance maior
+de `RULE-004`; este slice fecha a precondition inline sobre o input sem antecipar member access.
 
 ## 8.9 if / else
 

@@ -315,6 +315,18 @@ public final class ApplicationModelBuilder {
                             value.error(), value.text(), value.condition())),
                     value.where());
         }
+        if (source instanceof FlowStep.Require value) {
+            return new FlowInstruction(
+                    FlowCommand.REQUIRE,
+                    Optional.empty(),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    false,
+                    Optional.of(new FlowInstruction.TypedValue(
+                            value.error(), value.text(), value.condition())),
+                    value.where());
+        }
         if (source instanceof FlowStep.CreateFrom value) {
             return new FlowInstruction(
                     FlowCommand.CREATE_FROM,

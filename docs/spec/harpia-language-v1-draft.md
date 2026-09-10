@@ -213,12 +213,23 @@ input-access  = "input.", field-name ;
 O parser produz `EmitEvent(eventSymbol, arguments, sourceRange)`. O Semantic Analyzer resolve o
 Event, valida exatamente os campos obrigatórios e compara o tipo de cada expressão.
 
-Operações seguintes entram uma por vez, com AST e semântica próprias:
+As extensões incrementais já estabilizadas nesse caminho são:
 
 ```text
 require <rule> otherwise <error>
-fail <error>
+fail <error> when <rule>
 set <target> = <expression>
+add <expression> to <collection>
+remove <expression> from <collection>
+if <rule> / else
+```
+
+`require` é uma precondition positiva: continua quando a expressão booleana é verdadeira e levanta
+um erro de domínio declarado quando é falsa. No slice atual, a expressão enxerga o input escalar;
+member access sobre variáveis de Flow permanece fora desse recorte. As próximas operações entram
+uma por vez, com AST e semântica próprias:
+
+```text
 call <integration>.<operation>(named arguments)
 send <email> to <expression>
 ```

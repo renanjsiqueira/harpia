@@ -22,24 +22,24 @@ final class FlowBlockParser {
     private static final int MAX_DEPTH = 2;
 
     private final List<IndentedLines.Line> lines;
-    private final boolean conditionalFlow;
+    private final boolean v1Flow;
     private final DiagnosticCollector diagnostics;
     private int cursor;
     private boolean failed;
 
     private FlowBlockParser(
             List<IndentedLines.Line> lines,
-            boolean conditionalFlow,
+            boolean v1Flow,
             DiagnosticCollector diagnostics) {
         this.lines = lines;
-        this.conditionalFlow = conditionalFlow;
+        this.v1Flow = v1Flow;
         this.diagnostics = diagnostics;
     }
 
     static Optional<List<FlowStatement>> parse(
             List<RawSpan> bodyLines,
             SourceRef blockWhere,
-            boolean conditionalFlow,
+            boolean v1Flow,
             DiagnosticCollector diagnostics) {
         Objects.requireNonNull(bodyLines, "bodyLines");
         Objects.requireNonNull(blockWhere, "blockWhere");
@@ -59,7 +59,7 @@ final class FlowBlockParser {
         }
 
         FlowBlockParser parser =
-                new FlowBlockParser(scanned.orElseThrow(), conditionalFlow, diagnostics);
+                new FlowBlockParser(scanned.orElseThrow(), v1Flow, diagnostics);
         List<FlowStatement> flow = parser.block(0, 0);
         if (parser.failed) {
             return Optional.empty();
@@ -95,6 +95,14 @@ final class FlowBlockParser {
     }
 
     private Optional<FlowStatement> statement(IndentedLines.Line line, int level, int depth) {
+        if (!v1Flow && line.text().startsWith("require ")) {
+            diagnostics.error(
+                    ErrorCodes.SYNTAX_DECLARATION_TOO_NEW,
+                    "'require' in a flow needs harpia.languageVersion 1",
+                    line.contentWhere());
+            failed = true;
+            return Optional.empty();
+        }
         if (!line.text().startsWith("if ")) {
             cursor++;
             Optional<FlowStatement> parsed =
@@ -105,7 +113,7 @@ final class FlowBlockParser {
             return parsed;
         }
 
-        if (!conditionalFlow) {
+        if (!v1Flow) {
             diagnostics.error(
                     ErrorCodes.SYNTAX_DECLARATION_TOO_NEW,
                     "'if' in a flow needs harpia.languageVersion 1",

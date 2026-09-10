@@ -193,7 +193,7 @@ public final class LogicAnalyzer {
     }
 
     /**
-     * The typed guard of every {@code fail} in the project, by operation and source position.
+     * The typed condition of every guarded Flow instruction, by source position.
      *
      * <p>A guard is a boolean condition over the operation's input, which is the same thing a rule
      * is. Typing it through the same analysis keeps one definition of what an expression means.
@@ -248,6 +248,16 @@ public final class LogicAnalyzer {
                         fail.where(),
                         diagnostics)
                         .ifPresent(expression -> typed.put(fail.where(), expression));
+            } else if (statement instanceof SpecAst.Require require) {
+                analyzeExpression(
+                        "precondition '" + require.text() + "'",
+                        scope,
+                        LogicType.BOOLEAN,
+                        require.condition(),
+                        symbols,
+                        require.where(),
+                        diagnostics)
+                        .ifPresent(expression -> typed.put(require.where(), expression));
             } else if (statement instanceof SpecAst.Conditional conditional) {
                 analyzeExpression(
                         "condition '" + conditional.text() + "'",

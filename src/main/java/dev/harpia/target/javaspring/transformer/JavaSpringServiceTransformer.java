@@ -222,7 +222,7 @@ public final class JavaSpringServiceTransformer {
                         statements.add("}");
                     }
                 }
-                case FAIL -> {
+                case FAIL, REQUIRE -> {
                     ApplicationOperation.FlowInstruction.TypedValue raised =
                             instruction.value().orElseThrow();
                     String exception = dev.harpia.model.Naming.errorSymbol(raised.name())
@@ -233,7 +233,11 @@ public final class JavaSpringServiceTransformer {
                             operation.methodName(),
                             field -> REQUEST_PARAMETER + "." + field + "()");
                     explicitImports.addAll(condition.imports());
-                    statements.add("if (" + condition.body() + ") {");
+                    String failureCondition = instruction.command()
+                                    == ApplicationOperation.FlowCommand.REQUIRE
+                            ? "!(" + condition.body() + ")"
+                            : condition.body();
+                    statements.add("if (" + failureCondition + ") {");
                     statements.add("    throw new " + exception + "(\""
                             + raised.text().replace("\\", "\\\\").replace("\"", "\\\"")
                             + "\");");

@@ -122,11 +122,13 @@ final class ApplicationIrRenderer {
                                     .reduce((left, right) -> left + " and " + right)
                                     .orElse(""))
                     .append(instruction.paged() ? " paged" : "")
-                    // The shape is shared; how it reads is not. A fail raises when something
-                    // holds; a set assigns a value to a field.
+                    // The shape is shared; how it reads is not. Fail raises when a condition
+                    // holds, require raises unless it holds, and set assigns a value.
                     .append(instruction.value()
                             .map(typed -> switch (instruction.command()) {
                                 case FAIL -> " " + typed.name() + " when " + typed.text();
+                                case REQUIRE ->
+                                        " " + typed.text() + " otherwise " + typed.name();
                                 case IF -> " " + typed.text();
                                 case ADD_TO -> " " + typed.text() + " to " + typed.name();
                                 case REMOVE_FROM ->

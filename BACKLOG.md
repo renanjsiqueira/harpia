@@ -1,7 +1,7 @@
 # Harpia Backlog
 
 Fonte única oficial de escopo, status, prioridade e evidência da Harpia. Auditoria reorganizada em
-**2026-09-09** a partir da codebase; documentação sozinha não conta como implementação.
+**2026-09-10** a partir da codebase; documentação sozinha não conta como implementação.
 
 ## Product Definition
 
@@ -130,7 +130,7 @@ Estado atual do cenário:
 | Já suportado | Ainda necessário |
 |---|---|
 | Entity, campos, Enum, ValueObject, Rule/Invariant, Logic, Reference e relationships owned | Aggregate e ownership de aggregate |
-| Command/Query CRUD, filtros/sort/page e binding HTTP básico | Flow com preconditions, calls e loop |
+| Command/Query CRUD, filtros/sort/page, require e binding HTTP básico | Flow com calls e loop |
 | PostgreSQL, JPA e migration Flyway inicial | FraudService HTTP client e timeout básico |
 | Java/Spring Maven com testes gerados | Event/emit, JWT/role e package gate |
 | código developer-owned e source mapping | custom DI/layout, JSON e handoff manifest |
@@ -388,8 +388,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `FLOW-011` **`set`, `add` e `remove`** — `DONE` na V1 para campos escalares e coleções; `set x.campo = <expressão>` atribui, `add <elemento> to x.coleção` e `remove <elemento> from x.coleção` mudam a coleção no lugar. A expressão é tipada contra o tipo do campo — ou do **elemento**, no caso da coleção — e usar a forma errada para a espécie do campo é recusado. Campo `generated` não pode ser atribuído · `P0` · `L` · Area: `API`
   - Evidence: [`FlowLineParser`](src/main/java/dev/harpia/parse/FlowLineParser.java), [`LogicAnalyzer`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`SetFieldTest`](src/test/java/dev/harpia/validate/SetFieldTest.java), [`CollectionChangeTest`](src/test/java/dev/harpia/validate/CollectionChangeTest.java).
 
-- [ ] `FLOW-012` **`require`** — `TODO` · `P0` · `M` · Area: `API`
-  - Depends on: `RULE-001`.
+- [x] `FLOW-012` **`require`** — `DONE` na V1 para precondition inline sobre o input; `require <condição> otherwise <erro>` continua quando a condição booleana tipada é verdadeira e, quando falsa, levanta um erro de domínio declarado em `### Errors`. O status não é duplicado no Flow e V0 recusa a construção · `P0` · `M` · Area: `API`
+  - Evidence: [`FlowLineParser`](src/main/java/dev/harpia/parse/FlowLineParser.java), [`LogicAnalyzer`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`RequireInstructionTest`](src/test/java/dev/harpia/validate/RequireInstructionTest.java).
 
 - [x] `FLOW-013` **`fail` com erro tipado** — `DONE` na V1; `fail <erro> when <condição>` levanta um erro de domínio declarado em `### Errors`, com a condição tipada contra o input pelo mesmo analisador de Rules e Invariants. Um `fail` sem guarda não é comando de flow, e levantar erro não declarado é `HRP2127` · `P0` · `M` · Area: `API`
   - Evidence: [`FlowLineParser`](src/main/java/dev/harpia/parse/FlowLineParser.java), [`LogicAnalyzer`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`FailInstructionTest`](src/test/java/dev/harpia/validate/FailInstructionTest.java).
@@ -813,7 +813,7 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 
 Em ordem de dependência e valor para a Reference Application:
 
-1. `FLOW-012`, `FLOW-014` e `FLOW-020`: precondition, calls e iteração controlada.
+1. `FLOW-014` e `FLOW-020`: calls e iteração controlada.
 2. `INTEG-001`–`INTEG-004`, `INTEG-010`, `RELY-001`: FraudService HTTP tipado.
 3. `EVENT-001`, `EVENT-003`, `EVENT-005`, `EVENT-007`, `FLOW-015`: Event local e emit.
 4. `SEC-002`, `SEC-003`, `SEC-005`, `SEC-007`, `API-008`: authenticated/role/JWT.
@@ -891,8 +891,9 @@ de conclusão do Core V1.
 - [ ] `RULE-003` **Policy reutilizável** — `TODO` · `P1` · `XL` · Area: `Security`
   - Depends on: `RULE-001`, `SEC-003`.
 
-- [ ] `RULE-004` **Requires / precondition** — `TODO` · `P1` · `M` · Area: `Domain`
+- [ ] `RULE-004` **Requires / precondition** — `PARTIAL`; `FLOW-012` entrega a precondition inline sobre o input, mas member access sobre variáveis de Flow e referência nominal a Rules ainda não existem · `P1` · `M` · Area: `Domain`
   - Depends on: `RULE-001`, `FLOW-012`.
+  - Evidence: [`RequireInstructionTest`](src/test/java/dev/harpia/validate/RequireInstructionTest.java).
 
 - [ ] `RULE-005` **Ensures / postcondition** — `TODO` · `P2` · `M` · Area: `Domain`
   - Depends on: `RULE-001`, `CMD-001`.
@@ -1889,11 +1890,11 @@ deliberados não têm meta de 100%.
 
 | Horizon | Total | Done | Partial | Todo | Other | Completion |
 |---|---:|---:|---:|---:|---:|---:|
-| Core V1 | 213 | 171 | 15 | 27 | 0 | 83,8% |
-| Next / Upstream | 183 | 1 | 11 | 169 | 2 | 3,6% |
+| Core V1 | 213 | 172 | 15 | 26 | 0 | 84,3% |
+| Next / Upstream | 183 | 1 | 12 | 168 | 2 | 3,8% |
 | Labs / Research | 134 | 0 | 1 | 69 | 64 | N/A |
 | Custom / Non-goals | 20 | 0 | 0 | 0 | 20 | N/A |
-| **Canonical total** | **550** | **172** | **27** | **265** | **86** | — |
+| **Canonical total** | **550** | **173** | **28** | **263** | **86** | — |
 
 `Other` reúne `RESEARCH`, `NOT_SUPPORTED`, `CUSTOM` e `WONT_DO`. Ele não mascara trabalho do Core:
 a seleção Core contém apenas itens implementáveis `DONE`, `PARTIAL` ou `TODO`.
@@ -1911,14 +1912,14 @@ a seleção Core contém apenas itens implementáveis `DONE`, `PARTIAL` ou `TODO
 
 ## Audit Snapshot
 
-Baseline auditada no ciclo que fecha `DOM-013`:
+Baseline auditada no ciclo que fecha `FLOW-012`:
 
 | Métrica | Resultado |
 |---|---:|
-| Produção Java | 210 arquivos / 21.289 linhas |
-| Testes Java | 83 arquivos / 11.775 linhas |
+| Produção Java | 210 arquivos / 21.382 linhas |
+| Testes Java | 84 arquivos / 11.961 linhas |
 | Gate | `mvn -o clean test` — **BUILD SUCCESS** |
-| Testes executados | 427; 0 failures, 0 errors, 0 skipped |
+| Testes executados | 432; 0 failures, 0 errors, 0 skipped |
 
 # Core V1 Completion Criteria
 
@@ -1948,15 +1949,15 @@ avançada, semantic diff, zero-downtime migration, marketplace ou plugin ecosyst
 
 ## Top 10 Core V1 Next Tasks
 
-1. Implementar `FLOW-012` para preconditions reutilizáveis.
-2. Implementar `FLOW-014`, `INTEG-001`–`INTEG-004` e `RELY-001` para FraudService.
-3. Implementar `FLOW-020` somente no recorte de coleção exigido pela Reference Application.
-4. Implementar `EVENT-001`/`EVENT-003`/`EVENT-005`/`EVENT-007` e `FLOW-015`.
-5. Implementar `SEC-002`/`SEC-003`/`SEC-005`/`SEC-007` e fechar `API-008`.
-6. Fechar `CUSTOM-002`/`CUSTOM-003` e provar DI/layout custom no Maven gerado.
-7. Fechar `SPRING-012`/`GREEN-003`, incluindo `mvn package` e o baseline integrado.
-8. Entregar `HARNESS-001`–`HARNESS-004` com JSON e handoff determinísticos.
-9. Executar a Commerce Reference Application E2E e fechar `DOC-001` com o exemplo canônico.
+1. Implementar `FLOW-014`, `INTEG-001`–`INTEG-004` e `RELY-001` para FraudService.
+2. Implementar `FLOW-020` somente no recorte de coleção exigido pela Reference Application.
+3. Implementar `EVENT-001`/`EVENT-003`/`EVENT-005`/`EVENT-007` e `FLOW-015`.
+4. Implementar `SEC-002`/`SEC-003`/`SEC-005`/`SEC-007` e fechar `API-008`.
+5. Fechar `CUSTOM-002`/`CUSTOM-003` e provar DI/layout custom no Maven gerado.
+6. Fechar `SPRING-012`/`GREEN-003`, incluindo `mvn package` e o baseline integrado.
+7. Entregar `HARNESS-001`–`HARNESS-004` com JSON e handoff determinísticos.
+8. Executar a Commerce Reference Application E2E e fechar `DOC-001` com o exemplo canônico.
+9. Fechar `RULE-004` ao ampliar preconditions para valores produzidos pelo Flow.
 10. Fechar `PERSIST-008` e demais parciais P0 após o baseline integrado definir o recorte.
 
 ## Key Scope Reductions

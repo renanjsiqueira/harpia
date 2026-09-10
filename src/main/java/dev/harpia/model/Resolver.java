@@ -389,6 +389,13 @@ public final class Resolver {
                     guards.get(value.where()),
                     value.where());
         }
+        if (statement instanceof SpecAst.Require value) {
+            return new FlowStep.Require(
+                    value.text(),
+                    guards.get(value.where()),
+                    value.error(),
+                    value.where());
+        }
         if (statement instanceof SpecAst.Return value) {
             return new FlowStep.Return(value.variable(), value.where());
         }

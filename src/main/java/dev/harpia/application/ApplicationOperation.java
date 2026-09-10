@@ -202,9 +202,9 @@ public record ApplicationOperation(
         /**
          * A name, the source it was written as, and the expression it was typed to.
          *
-         * <p>A {@code fail} names the error it raises and carries the condition that raises it; a
-         * {@code set} names the field it assigns and carries the value. The shape is the same
-         * because the question is: which thing, written how, meaning what.
+         * <p>A {@code fail} or {@code require} names the error and carries its condition; a
+         * {@code set} names the field and carries the assigned value. The shape is the same because
+         * the question is: which thing, written how, meaning what.
          */
         public record TypedValue(
                 String name, String text, dev.harpia.logic.TypedExpression expression) {
@@ -229,7 +229,7 @@ public record ApplicationOperation(
                     where);
         }
 
-        /** Every instruction but {@code fail}, which is the only one that carries a guard. */
+        /** An instruction that carries neither a typed expression nor conditional branches. */
         public FlowInstruction(
                 FlowCommand command,
                 Optional<String> variable,
@@ -251,7 +251,7 @@ public record ApplicationOperation(
             Objects.requireNonNull(where, "where");
             boolean valid = switch (command) {
                 case VALIDATE_INPUT -> variable.isEmpty() && entity.isEmpty();
-                case FAIL -> value.isPresent() && variable.isEmpty() && entity.isEmpty();
+                case FAIL, REQUIRE -> value.isPresent() && variable.isEmpty() && entity.isEmpty();
                 case FIND_BY, LIST_BY ->
                         variable.isPresent() && entity.isPresent() && !fields.isEmpty();
                 // The assigned field is the value's own name, so it is not repeated in `fields`.
@@ -278,6 +278,7 @@ public record ApplicationOperation(
     public enum FlowCommand {
         VALIDATE_INPUT,
         FAIL,
+        REQUIRE,
         FIND_BY,
         LIST_BY,
         SET_FIELD,

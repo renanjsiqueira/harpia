@@ -18,6 +18,7 @@ public sealed interface FlowStep
                 FlowStep.Save,
                 FlowStep.Delete,
                 FlowStep.Fail,
+                FlowStep.Require,
                 FlowStep.Return {
 
     SourceRef where();
@@ -38,6 +39,20 @@ public sealed interface FlowStep
             Objects.requireNonNull(error, "error");
             Objects.requireNonNull(text, "text");
             Objects.requireNonNull(condition, "condition");
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
+    /** Continues only when its typed precondition holds; otherwise raises the named error. */
+    record Require(
+            String text,
+            dev.harpia.logic.TypedExpression condition,
+            String error,
+            SourceRef where) implements FlowStep {
+        public Require {
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(condition, "condition");
+            Objects.requireNonNull(error, "error");
             Objects.requireNonNull(where, "where");
         }
     }

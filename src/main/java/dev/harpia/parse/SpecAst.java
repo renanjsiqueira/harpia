@@ -126,7 +126,8 @@ public final class SpecAst {
 
     public sealed interface FlowStatement
             permits ValidateInput, CreateFrom, LoadById, FindBy, UpdateFrom, SetField,
-                    ChangeCollection, Conditional, ListAll, ListBy, Save, Delete, Fail, Return {
+                    ChangeCollection, Conditional, ListAll, ListBy, Save, Delete, Fail, Require,
+                    Return {
         SourceRef where();
     }
 
@@ -145,6 +146,18 @@ public final class SpecAst {
             Objects.requireNonNull(error, "error");
             Objects.requireNonNull(text, "text");
             Objects.requireNonNull(condition, "condition");
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
+    /** Continues only when its boolean precondition holds; otherwise raises a declared error. */
+    public record Require(
+            String text, LogicAst.Expression condition, String error, SourceRef where)
+            implements FlowStatement {
+        public Require {
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(condition, "condition");
+            Objects.requireNonNull(error, "error");
             Objects.requireNonNull(where, "where");
         }
     }

@@ -75,6 +75,11 @@ final class BusinessIrRenderer {
             out.append(indent).append("Step ").append(step.getClass().getSimpleName());
             if (step instanceof FlowStep.Conditional conditional) {
                 out.append(' ').append(conditional.text());
+            } else if (step instanceof FlowStep.Fail fail) {
+                out.append(' ').append(fail.error()).append(" when ").append(fail.text());
+            } else if (step instanceof FlowStep.Require require) {
+                out.append(' ').append(require.text())
+                        .append(" otherwise ").append(require.error());
             }
             out.append('\n');
             if (step instanceof FlowStep.Conditional conditional) {

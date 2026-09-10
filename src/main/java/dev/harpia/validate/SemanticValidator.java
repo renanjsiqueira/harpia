@@ -533,12 +533,15 @@ public final class SemanticValidator {
                 .map(error -> error.name().orElseThrow())
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
         for (SpecAst.FlowStatement statement : flattened(useCase.flow())) {
-            if (statement instanceof SpecAst.Fail fail && !declared.contains(fail.error())) {
+            String raised = statement instanceof SpecAst.Fail fail
+                    ? fail.error()
+                    : statement instanceof SpecAst.Require require ? require.error() : null;
+            if (raised != null && !declared.contains(raised)) {
                 diagnostics.error(
                         ErrorCodes.SEMANTIC_FAIL_UNDECLARED,
-                        "flow raises '" + fail.error() + "', which operation '" + useCase.title()
+                        "flow raises '" + raised + "', which operation '" + useCase.title()
                                 + "' does not declare in '### Errors'",
-                        fail.where());
+                        statement.where());
             }
         }
     }
