@@ -55,6 +55,11 @@ public final class JavaSpringControllerTestTransformer {
                 .toList();
         TreeSet<String> imports = new TreeSet<>(FIXED_IMPORTS);
         imports.add(names.responseImport());
+        // A paged operation answers with the envelope, so the test has to name it too.
+        if (entity.operations().stream().anyMatch(operation ->
+                operation.result().kind() == ApplicationOperation.ResultKind.PAGE)) {
+            imports.add(names.dtoPackage() + ".PageResponse");
+        }
         entity.fields().forEach(field ->
                 imports.addAll(JavaSampleValues.requiredImports(
                         field, context.layout().packageName(JavaLayout.DOMAIN))));
@@ -228,6 +233,10 @@ public final class JavaSpringControllerTestTransformer {
         if (operation.result().kind() == ResultKind.LIST) {
             imports.add("java.util.List");
             value = "List.of(sampleResponse())";
+        }
+        if (operation.result().kind() == ResultKind.PAGE) {
+            imports.add("java.util.List");
+            value = "new PageResponse<>(List.of(sampleResponse()), 0, 1, 1L, 1)";
         }
         statements.add(MOCKITO + ".when(service." + operation.methodName()
                 + "(" + stubArguments(operation) + "))");

@@ -477,8 +477,9 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `API-009` **Validação HTTP** — `DONE` para o recorte atual; `validate input` vale na fronteira HTTP inteira, não só no corpo: parâmetros de path/query/header carregam as constraints declaradas, `ConstraintViolationException` responde o status declarado, e o teste de controller gerado envia valores de requisição em texto puro e um valor realmente inválido · `P0` · `M` · Area: `API`
   - Evidence: [`SpringValidationMapper`](src/main/java/dev/harpia/target/javaspring/mapping/SpringValidationMapper.java), [`JavaSpringControllerTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringControllerTransformer.java), [`JavaSpringErrorTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringErrorTransformer.java), [`ExternalHttpBindingTest`](src/test/java/dev/harpia/binding/ExternalHttpBindingTest.java).
 
-- [ ] `API-010` **Pagination HTTP** — `TODO` · `P0` · `M` · Area: `API`
-  - Depends on: `QUERY-005`.
+- [x] `API-010` **Pagination HTTP** — `DONE` na V1; um endpoint cujo output é `Page<Entidade>` responde o envelope `PageResponse<T>` no corpo, com o status declarado · `P0` · `M` · Area: `API`
+  - Depends on: `QUERY-005` (pronto).
+  - Evidence: [`JavaSpringControllerTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringControllerTransformer.java), [`PageOutputTest`](src/test/java/dev/harpia/validate/PageOutputTest.java).
 
 - [x] `API-015` **Error envelope V0** — `DONE` para status/error/message · `P0` · `M` · Area: `API`
   - Evidence: [`JavaSpringErrorTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringErrorTransformer.java), [`ApplicationLayerTransformerTest`](src/test/java/dev/harpia/target/javaspring/transformer/ApplicationLayerTransformerTest.java).
@@ -812,7 +813,7 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 Em ordem de dependência e valor para a Reference Application:
 
 1. `DOM-012` e `PERSIST-009`: relationships end-to-end sobre a referência tipada de `TYPE-023`.
-2. `TYPE-025` e `API-010`: envelope `Page<T>` com total e páginas sobre a paginação de `QUERY-005`.
+2. `FLOW-011` e `FLOW-019`/`FLOW-020`: mutação explícita e controle de fluxo.
 3. `FLOW-011`–`FLOW-014`, `FLOW-019`, `FLOW-020`: mutação, precondition/failure, calls e controle.
 4. `INTEG-001`–`INTEG-004`, `INTEG-010`, `RELY-001`: FraudService HTTP tipado.
 5. `EVENT-001`, `EVENT-003`, `EVENT-005`, `EVENT-007`, `FLOW-015`: Event local e emit.
@@ -863,8 +864,8 @@ de conclusão do Core V1.
 
 - [ ] `TYPE-019` **Secret** — `TODO` · `P1` · `M` · Area: `Security`
 
-- [ ] `TYPE-025` **Page&lt;T&gt;** — `TODO` · `P1` · `M` · Area: `API`
-  - Depends on: `TYPE-021`, `QUERY-005`.
+- [x] `TYPE-025` **Page&lt;T&gt;** — `DONE` na V1; `### Output` aceita `Page<Entidade>` e o target emite um `PageResponse<T>` genérico uma vez por projeto, com conteúdo, página, tamanho, total de registros e de páginas. O finder passa a devolver `Page` para trazer a contagem da mesma consulta que fatiou. Declarar `Page` sem listagem paginada é recusado · `P1` · `M` · Area: `API`
+  - Evidence: [`OutputParser`](src/main/java/dev/harpia/parse/OutputParser.java), [`JavaSpringDtoTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringDtoTransformer.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`PageOutputTest`](src/test/java/dev/harpia/validate/PageOutputTest.java).
 
 - [ ] `DOM-008` **Campos imutáveis** — `TODO` · `P2` · `M` · Area: `Domain`
 
@@ -1948,7 +1949,7 @@ avançada, semantic diff, zero-downtime migration, marketplace ou plugin ecosyst
 ## Top 10 Core V1 Next Tasks
 
 1. Fechar `TYPE-023` → `DOM-012` → `PERSIST-009` para relationships reais.
-2. Implementar `TYPE-025`/`API-010` para SearchOrders.
+2. Implementar `FLOW-011` e `FLOW-019`/`FLOW-020` para SearchOrders.
 3. Implementar `FLOW-011`–`FLOW-013` para mutação e erros/preconditions explícitos.
 4. Implementar `FLOW-014`, `INTEG-001`–`INTEG-004` e `RELY-001` para FraudService.
 5. Implementar `FLOW-019`/`FLOW-020` somente no recorte exigido pela Reference Application.

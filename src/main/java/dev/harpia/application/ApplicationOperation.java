@@ -261,6 +261,7 @@ public record ApplicationOperation(
     public enum ResultKind {
         ENTITY,
         LIST,
+        PAGE,
         NOTHING
     }
 

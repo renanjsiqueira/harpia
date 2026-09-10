@@ -34,6 +34,8 @@ public final class JavaSpringProjectTransformer {
     public JavaProjectModel transform(JavaSpringContext context) {
         Objects.requireNonNull(context, "context");
         List<JavaSourceFile> files = new ArrayList<>();
+        java.util.Optional<dev.harpia.target.javaspring.model.JavaSourceFile> pageResponse =
+                java.util.Optional.empty();
         files.add(bootstrap.transform(context));
         files.addAll(enums.transform(context));
         files.addAll(values.transform(context));
@@ -43,6 +45,11 @@ public final class JavaSpringProjectTransformer {
             files.add(entities.transform(context, entity));
             files.add(repositories.transform(context, entity));
             files.add(dtos.response(context, entity));
+            // One envelope serves every paged operation, so it is emitted once.
+            if (pageResponse.isEmpty() && entity.operations().stream().anyMatch(operation ->
+                    operation.result().kind() == ApplicationOperation.ResultKind.PAGE)) {
+                pageResponse = java.util.Optional.of(dtos.pageResponse(context, entity));
+            }
             for (ApplicationOperation operation : entity.operations()) {
                 operation.requestTypeName().ifPresent(request ->
                         files.add(dtos.request(context, operation, request)));
@@ -66,6 +73,7 @@ public final class JavaSpringProjectTransformer {
         for (ApplicationLogic logic : context.application().logics()) {
             files.add(logics.transform(context, logic));
         }
+        pageResponse.ifPresent(files::add);
         return new JavaProjectModel(files);
     }
 }

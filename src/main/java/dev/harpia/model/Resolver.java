@@ -233,6 +233,7 @@ public final class Resolver {
                 switch (useCase.output().shape().kind()) {
                     case ENTITY -> OutputModel.Kind.ENTITY;
                     case LIST -> OutputModel.Kind.LIST;
+                    case PAGE -> OutputModel.Kind.PAGE;
                     case NOTHING -> OutputModel.Kind.NOTHING;
                 },
                 useCase.output().shape().entity());

@@ -53,6 +53,11 @@ public final class JavaSpringServiceTestTransformer {
         Names names = Names.of(context, entity);
         TreeSet<String> imports = new TreeSet<>(FIXED_IMPORTS);
         imports.add(names.responseImport());
+        // A paged operation answers with the envelope, so the test has to name it too.
+        if (entity.operations().stream().anyMatch(operation ->
+                operation.result().kind() == ApplicationOperation.ResultKind.PAGE)) {
+            imports.add(names.dtoPackage() + ".PageResponse");
+        }
         entity.fields().forEach(field ->
                 imports.addAll(
                         JavaSampleValues.requiredImports(field, names.domainPackage())));
@@ -248,9 +253,16 @@ public final class JavaSpringServiceTestTransformer {
                             instruction.fields().stream().map(field -> MATCHERS + ".any()"),
                             java.util.stream.Stream.of(last))
                     .collect(java.util.stream.Collectors.joining(", "));
+            boolean reportsPage =
+                    operation.result().kind() == ApplicationOperation.ResultKind.PAGE;
+            if (reportsPage) {
+                imports.add("org.springframework.data.domain.PageImpl");
+            }
             statements.add(MOCKITO + ".when(repository." + finderName(instruction)
                     + "(" + matchers + "))");
-            statements.add("        .thenReturn(List.of(entity));");
+            statements.add("        .thenReturn("
+                    + (reportsPage ? "new PageImpl<>(List.of(entity))" : "List.of(entity)")
+                    + ");");
         });
         if (saves) {
             statements.add(MOCKITO + ".when(repository.save(" + MATCHERS + ".any("
@@ -297,7 +309,11 @@ public final class JavaSpringServiceTestTransformer {
             statements.add(MOCKITO + ".verify(repository).delete(entity);");
         }
         if (lists) {
-            statements.add(ASSERTIONS + ".assertThat(response).hasSize(1);");
+            statements.add(ASSERTIONS + ".assertThat(response"
+                    + (operation.result().kind() == ApplicationOperation.ResultKind.PAGE
+                            ? ".content()"
+                            : "")
+                    + ").hasSize(1);");
             boolean pagedList = instruction(operation, FlowCommand.LIST_ALL)
                     .filter(ApplicationOperation.FlowInstruction::paged)
                     .isPresent();
@@ -391,9 +407,11 @@ public final class JavaSpringServiceTestTransformer {
         if (operation.result().kind() == ApplicationOperation.ResultKind.NOTHING) {
             return invocation;
         }
-        String type = operation.result().kind() == ApplicationOperation.ResultKind.LIST
-                ? "List<" + names.responseName() + ">"
-                : names.responseName();
+        String type = switch (operation.result().kind()) {
+            case LIST -> "List<" + names.responseName() + ">";
+            case PAGE -> "PageResponse<" + names.responseName() + ">";
+            case ENTITY, NOTHING -> names.responseName();
+        };
         return type + " response = " + invocation;
     }
 

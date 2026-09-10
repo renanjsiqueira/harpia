@@ -153,6 +153,8 @@ public final class JavaSpringServiceTransformer {
         return switch (operation.result().kind()) {
             case ENTITY -> names.responseType();
             case LIST -> JavaTypeRef.parameterized("java.util.List", names.responseType());
+            case PAGE -> JavaTypeRef.parameterized(
+                    names.dtoPackage() + ".PageResponse", names.responseType());
             case NOTHING -> JavaTypeRef.of("void");
         };
     }
@@ -229,11 +231,15 @@ public final class JavaSpringServiceTransformer {
                     if (instruction.paged()) {
                         explicitImports.add("org.springframework.data.domain.PageRequest");
                     }
+                    if (reportsPage(operation)) {
+                        explicitImports.add("org.springframework.data.domain.Page");
+                        explicitImports.add(names.dtoPackage() + ".PageResponse");
+                    }
                     String variable = instruction.variable().orElseThrow();
                     String arguments = instruction.fields().stream()
                             .map(field -> REQUEST_PARAMETER + "." + field + "()")
                             .collect(java.util.stream.Collectors.joining(", "));
-                    statements.add("List<" + entityName + "> " + variable + " = "
+                    statements.add(listingType(operation, entityName) + " " + variable + " = "
                             + REPOSITORY_FIELD + "." + finderName(instruction) + "("
                             + arguments + ", " + pageable(entity, instruction) + ");");
                 }
@@ -244,11 +250,17 @@ public final class JavaSpringServiceTransformer {
                     if (instruction.paged()) {
                         explicitImports.add("org.springframework.data.domain.PageRequest");
                     }
+                    if (reportsPage(operation)) {
+                        explicitImports.add("org.springframework.data.domain.Page");
+                        explicitImports.add(names.dtoPackage() + ".PageResponse");
+                    }
                     String variable = instruction.variable().orElseThrow();
-                    statements.add("List<" + entityName + "> " + variable + " = "
+                    statements.add(listingType(operation, entityName) + " " + variable + " = "
                             + REPOSITORY_FIELD + ".findAll("
                             + pageable(entity, instruction) + ")"
-                            + (instruction.paged() ? ".getContent();" : ";"));
+                            + (instruction.paged() && !reportsPage(operation)
+                                    ? ".getContent();"
+                                    : ";"));
                 }
                 case SAVE -> {
                     String variable = instruction.variable().orElseThrow();
@@ -273,14 +285,42 @@ public final class JavaSpringServiceTransformer {
                 }
                 case DELETE -> statements.add(REPOSITORY_FIELD + ".delete("
                         + instruction.variable().orElseThrow() + ");");
-                case RETURN -> instruction.variable().ifPresent(variable -> statements.add(
-                        operation.result().kind() == ApplicationOperation.ResultKind.LIST
-                                ? "return " + variable + ".stream().map("
-                                        + names.serviceName() + "::toResponse).toList();"
-                                : "return toResponse(" + variable + ");"));
+                case RETURN -> instruction.variable().ifPresent(variable -> statements.addAll(
+                        returned(names, operation, variable)));
             }
         }
         return statements;
+    }
+
+    private static boolean reportsPage(ApplicationOperation operation) {
+        return operation.result().kind() == ApplicationOperation.ResultKind.PAGE;
+    }
+
+    private static String listingType(ApplicationOperation operation, String entityName) {
+        return reportsPage(operation) ? "Page<" + entityName + ">" : "List<" + entityName + ">";
+    }
+
+    /**
+     * What the method hands back.
+     *
+     * <p>A page reports which page it is, so the service keeps the page the query returned rather
+     * than throwing the metadata away and returning only the rows.
+     */
+    private static List<String> returned(
+            Names names, ApplicationOperation operation, String variable) {
+        return switch (operation.result().kind()) {
+            case LIST -> List.of("return " + variable + ".stream().map("
+                    + names.serviceName() + "::toResponse).toList();");
+            case PAGE -> List.of(
+                    "return new PageResponse<>(",
+                    "        " + variable + ".getContent().stream()",
+                    "                .map(" + names.serviceName() + "::toResponse).toList(),",
+                    "        " + variable + ".getNumber(),",
+                    "        " + variable + ".getSize(),",
+                    "        " + variable + ".getTotalElements(),",
+                    "        " + variable + ".getTotalPages());");
+            case ENTITY, NOTHING -> List.of("return toResponse(" + variable + ");");
+        };
     }
 
     /**

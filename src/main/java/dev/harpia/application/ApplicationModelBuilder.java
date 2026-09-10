@@ -396,6 +396,7 @@ public final class ApplicationModelBuilder {
         ResultKind kind = switch (output.shape().kind()) {
             case ENTITY -> ResultKind.ENTITY;
             case LIST -> ResultKind.LIST;
+            case PAGE -> ResultKind.PAGE;
             case NOTHING -> ResultKind.NOTHING;
         };
         return new Result(

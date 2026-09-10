@@ -10,6 +10,7 @@ import dev.harpia.target.javaspring.mapping.SpringValidationMapper;
 import dev.harpia.target.javaspring.model.JavaFieldModel;
 import dev.harpia.target.javaspring.model.JavaSourceFile;
 import dev.harpia.target.javaspring.model.JavaTypeModel;
+import dev.harpia.target.javaspring.model.JavaTypeRef;
 import dev.harpia.target.javaspring.model.JavaVisibility;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +27,56 @@ import java.util.Set;
 public final class JavaSpringDtoTransformer {
 
     private final SpringValidationMapper validation = new SpringValidationMapper();
+
+    /**
+     * The envelope a paged operation answers with.
+     *
+     * <p>It is generic and emitted once: what a page reports about itself does not depend on what
+     * it holds, so one record serves every paged operation in the project.
+     */
+    public JavaSourceFile pageResponse(JavaSpringContext context, ApplicationEntity entity) {
+        List<JavaFieldModel> components = List.of(
+                component("content", JavaTypeRef.parameterized("java.util.List",
+                        JavaTypeRef.of("T")), entity),
+                component("page", JavaTypeRef.of("int"), entity),
+                component("size", JavaTypeRef.of("int"), entity),
+                component("totalElements", JavaTypeRef.of("long"), entity),
+                component("totalPages", JavaTypeRef.of("int"), entity));
+        JavaTypeModel type = new JavaTypeModel(
+                JavaTypeModel.Kind.RECORD,
+                context.layout().packageName(JavaLayout.DTO),
+                "PageResponse",
+                JavaVisibility.PUBLIC,
+                Set.of(),
+                Optional.of("One page of results, with what the caller needs to ask for the "
+                        + "next one."),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of("T"),
+                List.of(),
+                components,
+                List.of(),
+                List.of(),
+                Optional.of(entity.where()));
+        return new JavaSourceFile(
+                JavaLayout.sourcePath(
+                        context.layout().packagePath(JavaLayout.DTO), "PageResponse"),
+                type,
+                Optional.of(entity.where()));
+    }
+
+    private static JavaFieldModel component(
+            String name, JavaTypeRef type, ApplicationEntity entity) {
+        return new JavaFieldModel(
+                name,
+                type,
+                JavaVisibility.PACKAGE_PRIVATE,
+                Set.of(),
+                List.of(),
+                java.util.Optional.empty(),
+                java.util.Optional.of(entity.where()));
+    }
 
     public JavaSourceFile response(JavaSpringContext context, ApplicationEntity entity) {
         List<JavaFieldModel> components = entity.fields().stream()

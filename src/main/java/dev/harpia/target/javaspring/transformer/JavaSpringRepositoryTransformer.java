@@ -65,11 +65,19 @@ public final class JavaSpringRepositoryTransformer {
                                     "sort",
                                     JavaTypeRef.of("org.springframework.data.domain.Sort")));
                 }
+                // An operation that reports a page needs the count the page carries, so the
+                // finder returns the page rather than only its rows.
+                boolean reportsPage = operation.result().kind()
+                        == ApplicationOperation.ResultKind.PAGE;
+                JavaTypeRef manyType = reportsPage
+                        ? JavaTypeRef.parameterized(
+                                "org.springframework.data.domain.Page", entityType)
+                        : JavaTypeRef.parameterized("java.util.List", entityType);
                 byName.putIfAbsent(method.toString(), new JavaMethodModel(
                         method.toString(),
                         single
                                 ? JavaTypeRef.parameterized("java.util.Optional", entityType)
-                                : JavaTypeRef.parameterized("java.util.List", entityType),
+                                : manyType,
                         JavaVisibility.PACKAGE_PRIVATE,
                         Set.of(JavaModifier.ABSTRACT),
                         List.of(),

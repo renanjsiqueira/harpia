@@ -17,6 +17,7 @@ public record JavaTypeModel(
         List<JavaAnnotationModel> annotations,
         List<JavaImportModel> explicitImports,
         List<String> constants,
+        List<String> typeParameters,
         List<JavaTypeRef> superTypes,
         List<JavaFieldModel> fields,
         List<JavaConstructorModel> constructors,
@@ -33,6 +34,7 @@ public record JavaTypeModel(
         annotations = List.copyOf(annotations);
         explicitImports = explicitImports.stream().sorted().distinct().toList();
         constants = List.copyOf(constants);
+        typeParameters = List.copyOf(typeParameters);
         if (!constants.isEmpty() && kind != Kind.ENUM) {
             throw new IllegalArgumentException("only an enum declares constants: " + name);
         }
@@ -59,7 +61,36 @@ public record JavaTypeModel(
             List<JavaMethodModel> methods,
             Optional<SourceRef> source) {
         this(kind, packageName, name, visibility, modifiers, documentation, annotations,
-                explicitImports, List.of(), superTypes, fields, constructors, methods, source);
+                explicitImports, List.of(), List.of(), superTypes, fields, constructors, methods,
+                source);
+    }
+
+    /** A type that declares constants but no type parameters, which is every enum. */
+    public JavaTypeModel(
+            Kind kind,
+            String packageName,
+            String name,
+            JavaVisibility visibility,
+            Set<JavaModifier> modifiers,
+            Optional<String> documentation,
+            List<JavaAnnotationModel> annotations,
+            List<JavaImportModel> explicitImports,
+            List<String> constants,
+            List<JavaTypeRef> superTypes,
+            List<JavaFieldModel> fields,
+            List<JavaConstructorModel> constructors,
+            List<JavaMethodModel> methods,
+            Optional<SourceRef> source) {
+        this(kind, packageName, name, visibility, modifiers, documentation, annotations,
+                explicitImports, constants, List.of(), superTypes, fields, constructors, methods,
+                source);
+    }
+
+    /** The name as it is declared, which for a generic type carries its parameters. */
+    public String declaredName() {
+        return typeParameters.isEmpty()
+                ? name
+                : name + "<" + String.join(", ", typeParameters) + ">";
     }
 
     public enum Kind {

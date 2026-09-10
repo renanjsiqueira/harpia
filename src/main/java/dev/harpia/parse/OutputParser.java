@@ -14,7 +14,8 @@ import java.util.regex.Pattern;
 public final class OutputParser {
 
     private static final Pattern OUTPUT = Pattern.compile(
-            "^(\\d{3}) +(nothing|[A-Z][A-Za-z0-9]*|List<[A-Z][A-Za-z0-9]*>)$");
+            "^(\\d{3}) +(nothing|[A-Z][A-Za-z0-9]*|List<[A-Z][A-Za-z0-9]*>"
+                    + "|Page<[A-Z][A-Za-z0-9]*>)$");
 
     private OutputParser() {
     }
@@ -33,6 +34,10 @@ public final class OutputParser {
         OutputShape shape;
         if (value.equals("nothing")) {
             shape = new OutputShape(OutputKind.NOTHING, Optional.empty());
+        } else if (value.startsWith("Page<")) {
+            shape = new SpecAst.OutputShape(
+                    OutputKind.PAGE,
+                    Optional.of(value.substring("Page<".length(), value.length() - 1)));
         } else if (value.startsWith("List<")) {
             shape = new OutputShape(
                     OutputKind.LIST, Optional.of(value.substring("List<".length(), value.length() - 1)));
@@ -46,7 +51,7 @@ public final class OutputParser {
             String raw, SourceRef where, DiagnosticCollector diagnostics) {
         diagnostics.error(
                 ErrorCodes.SYNTAX_USE_CASE_SECTION,
-                "invalid output '" + raw + "'; expected a 2xx status and entity, List<Entity>, or nothing",
+                "invalid output '" + raw + "'; expected a 2xx status and entity, List<Entity>, Page<Entity>, or nothing",
                 where);
         return Optional.empty();
     }

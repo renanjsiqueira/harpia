@@ -296,6 +296,7 @@ public final class SemanticValidator {
         validateRules(useCase, diagnostics);
         validateFailures(useCase, diagnostics);
         validateFinds(useCase, target.orElseThrow(), diagnostics);
+        validatePageOutput(useCase, diagnostics);
         validateFlow(target.orElseThrow(), useCase, diagnostics);
     }
 
@@ -340,6 +341,26 @@ public final class SemanticValidator {
                     pageable(useCase, list.where(), diagnostics);
                 }
             }
+        }
+    }
+
+    /**
+     * A {@code Page} output reports which page was returned, so there has to be one.
+     *
+     * <p>Total and page count come from the query that took the slice. Declaring the envelope over
+     * an unpaged listing would mean reporting a page nobody asked for.
+     */
+    private static void validatePageOutput(
+            SpecAst.UseCaseDeclaration useCase, DiagnosticCollector diagnostics) {
+        if (useCase.output().shape().kind() != SpecAst.OutputKind.PAGE) {
+            return;
+        }
+        if (useCase.flow().stream().noneMatch(SemanticValidator::paged)) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_PAGED_WITHOUT_INPUT,
+                    "output 'Page<" + useCase.output().shape().entity().orElse("")
+                            + ">' needs a paged listing in the flow to report a page of",
+                    useCase.output().where());
         }
     }
 
@@ -792,7 +813,9 @@ public final class SemanticValidator {
                     && ((type.kind() == ValueKind.ENTITY
                                     && output.shape().kind() == SpecAst.OutputKind.ENTITY)
                             || (type.kind() == ValueKind.LIST
-                                    && output.shape().kind() == SpecAst.OutputKind.LIST))
+                                    && (output.shape().kind() == SpecAst.OutputKind.LIST
+                                            || output.shape().kind()
+                                                    == SpecAst.OutputKind.PAGE)))
                     && output.shape().entity().filter(type.entity()::equals).isPresent();
         }
         boolean noContentMatches = (output.status() == 204)
@@ -810,6 +833,7 @@ public final class SemanticValidator {
         return switch (output.shape().kind()) {
             case ENTITY -> output.shape().entity().orElseThrow();
             case LIST -> "List<" + output.shape().entity().orElseThrow() + ">";
+            case PAGE -> "Page<" + output.shape().entity().orElseThrow() + ">";
             case NOTHING -> "nothing";
         };
     }

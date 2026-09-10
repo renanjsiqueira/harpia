@@ -219,6 +219,7 @@ public final class SpecAst {
     public enum OutputKind {
         ENTITY,
         LIST,
+        PAGE,
         NOTHING
     }
 

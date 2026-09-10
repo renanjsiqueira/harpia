@@ -549,6 +549,37 @@ return payment
 A diferença para `### Rules`: uma rule diz que o input é inválido e responde o status de
 `invalid input`. Um `fail` nomeia **qual** erro de negócio ocorreu e responde o status daquele erro.
 
+## 8.7 Page como saída
+
+Na V1, `### Output` aceita `Page<Entidade>`:
+
+```markdown
+### Output
+
+200 Page<Ticket>
+```
+
+`List<Ticket>` sobre uma consulta paginada entrega ao chamador os registros sem nenhuma forma de
+pedir os próximos. `Page<Ticket>` carrega o que ele precisa para continuar:
+
+```java
+public record PageResponse<T>(
+        List<T> content,
+        int page,
+        int size,
+        long totalElements,
+        int totalPages) {
+}
+```
+
+- o envelope é genérico e emitido **uma vez por projeto**: o que uma página reporta sobre si mesma
+  não depende do que ela contém;
+- o finder passa a devolver `Page` para trazer a contagem da **mesma** consulta que fatiou, em vez
+  de uma segunda consulta que poderia discordar;
+- declarar `Page<...>` sem uma listagem `paged` no flow é recusado — não haveria página a reportar;
+- uma listagem paginada pode continuar respondendo `List<...>` quando o chamador não precisa dos
+  metadados, e aí nenhum envelope é gerado.
+
 ## 9. Errors
 
 Cada item diretamente sob `### Errors` declara uma condição e seu status:

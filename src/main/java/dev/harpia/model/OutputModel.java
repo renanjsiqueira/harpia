@@ -21,6 +21,7 @@ public record OutputModel(int status, Shape shape) {
     public enum Kind {
         ENTITY,
         LIST,
+        PAGE,
         NOTHING
     }
 }

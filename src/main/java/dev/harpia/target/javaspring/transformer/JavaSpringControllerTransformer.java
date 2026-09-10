@@ -149,7 +149,8 @@ public final class JavaSpringControllerTransformer {
         return new JavaMethodModel(
                 operation.methodName(),
                 JavaTypeRef.parameterized(
-                        "org.springframework.http.ResponseEntity", bodyType(operation, responseType)),
+                        "org.springframework.http.ResponseEntity",
+                        bodyType(layout, operation, responseType)),
                 JavaVisibility.PUBLIC,
                 Set.of(),
                 List.of(mapping(endpoint)),
@@ -209,10 +210,12 @@ public final class JavaSpringControllerTransformer {
     }
 
     private static JavaTypeRef bodyType(
-            ApplicationOperation operation, JavaTypeRef responseType) {
+            JavaLayout layout, ApplicationOperation operation, JavaTypeRef responseType) {
         return switch (operation.result().kind()) {
             case ENTITY -> responseType;
             case LIST -> JavaTypeRef.parameterized("java.util.List", responseType);
+            case PAGE -> JavaTypeRef.parameterized(
+                    layout.packageName(JavaLayout.DTO) + ".PageResponse", responseType);
             case NOTHING -> JavaTypeRef.of("java.lang.Void");
         };
     }
