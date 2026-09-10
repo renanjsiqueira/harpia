@@ -420,7 +420,11 @@ Spring, URLs, credentials, or persistence entities; bindings and providers suppl
 ./bin/harpia inspect --dir <project> --stage symbols
 ./bin/harpia inspect --dir <project> --stage business-ir
 ./bin/harpia inspect --dir <project> --stage application-ir
+./bin/harpia inspect --dir <project> --stage business-ir --json
+./bin/harpia capabilities --dir <project>
+./bin/harpia capabilities --dir <project> --json
 ./bin/harpia targets
+./bin/harpia targets --json
 ./bin/harpia targets java-spring
 ./bin/harpia version
 ```
@@ -444,7 +448,14 @@ of guessing. Each diagnostic carries `severity`, `code`, `message`, and — when
 one — a `where` with `file`, `line`, `column` and an optional `endLine`/`endColumn`; a second
 location travels as `related` rather than as prose inside the message. `build` adds an `output`
 object with the directory and the `created`, `updated`, `unchanged`, `stale`, `deleted` and
-`unknown` file lists. A run that never compiled reports in the same shape, without `output`.
+`unknown` file lists. `inspect` adds `stage` and the stage text as one escaped `rendered` string.
+`targets` lists every catalogued target as data, including the ones this compiler cannot generate,
+and answers an unknown name with `unknownTarget` plus the catalogue. A run that never compiled
+reports in the same shape, without the command's own extra field.
+
+`capabilities` answers the other half of `targets`: what these specifications actually asked for.
+Each entry names the capability, who supplies it — `<target>` when the target implements it itself
+rather than choosing a provider — and every declaration that required it, with its location.
 
 Run `./bin/harpia targets` rather than assuming target support. Unsupported targets fail before
 generation and never fall back to Java/Spring.

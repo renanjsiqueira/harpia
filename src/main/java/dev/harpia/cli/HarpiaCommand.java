@@ -14,6 +14,7 @@ import java.util.concurrent.Callable;
             BuildCommand.class,
             InspectCommand.class,
             TargetsCommand.class,
+            CapabilitiesCommand.class,
             VersionCommand.class
         })
 public final class HarpiaCommand implements Callable<Integer> {

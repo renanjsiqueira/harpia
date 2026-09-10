@@ -33,6 +33,9 @@ public final class InspectCommand implements Callable<Integer> {
             description = "One of: ast, symbols, business-ir, application-ir.")
     private String stage;
 
+    @Option(names = "--json", description = "Report the result as one JSON object on stdout.")
+    private boolean json;
+
     @Spec
     private CommandSpec spec;
 
@@ -48,20 +51,30 @@ public final class InspectCommand implements Callable<Integer> {
 
         CompileResult result = new HarpiaCompiler().compile(
                 new CompileRequest(directory, CompileRequest.Mode.VALIDATE));
-        DiagnosticPrinter.print(result.diagnostics(), spec.commandLine().getErr());
-
         Optional<String> rendered = Inspector.render(result, selected.orElseThrow());
+        int exitCode = rendered.isEmpty() && CommandSupport.exitCode(result) == ExitCode.SUCCESS
+                ? ExitCode.COMPILATION_ERROR
+                : CommandSupport.exitCode(result);
+        if (json) {
+            spec.commandLine().getOut().println(JsonReport.ofStage(
+                    exitCode,
+                    result.diagnostics(),
+                    selected.orElseThrow().id(),
+                    rendered.orElse("")));
+            spec.commandLine().getOut().flush();
+            return exitCode;
+        }
+
+        DiagnosticPrinter.print(result.diagnostics(), spec.commandLine().getErr());
         if (rendered.isEmpty()) {
             spec.commandLine().getErr().printf(
                     "Stage '%s' was not reached; earlier stages failed.%n",
                     selected.orElseThrow().id());
             spec.commandLine().getErr().flush();
-            return CommandSupport.exitCode(result) == ExitCode.SUCCESS
-                    ? ExitCode.COMPILATION_ERROR
-                    : CommandSupport.exitCode(result);
+            return exitCode;
         }
         spec.commandLine().getOut().print(rendered.orElseThrow());
         spec.commandLine().getOut().flush();
-        return CommandSupport.exitCode(result);
+        return exitCode;
     }
 }

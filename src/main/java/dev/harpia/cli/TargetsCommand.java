@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
+import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 import picocli.CommandLine.Spec;
 
@@ -27,6 +28,9 @@ public final class TargetsCommand implements Callable<Integer> {
             description = "Show details for one target instead of listing all.")
     private String target;
 
+    @Option(names = "--json", description = "Report the result as one JSON object on stdout.")
+    private boolean json;
+
     @Spec
     private CommandSpec spec;
 
@@ -34,7 +38,11 @@ public final class TargetsCommand implements Callable<Integer> {
     public Integer call() {
         PrintWriter out = spec.commandLine().getOut();
         if (target == null) {
-            list(out);
+            if (json) {
+                out.println(JsonReport.ofTargets(TargetCatalog.all()));
+            } else {
+                list(out);
+            }
             out.flush();
             return ExitCode.SUCCESS;
         }
@@ -42,11 +50,21 @@ public final class TargetsCommand implements Callable<Integer> {
         if (descriptor.isEmpty()) {
             spec.commandLine().getErr().println("Unknown target: " + target);
             spec.commandLine().getErr().flush();
-            list(out);
+            // The catalogue is the answer to "then which ones are there", so it follows either
+            // way; in JSON it follows as data rather than as a second thing to read.
+            if (json) {
+                out.println(JsonReport.ofUnknownTarget(target, TargetCatalog.all()));
+            } else {
+                list(out);
+            }
             out.flush();
             return ExitCode.USAGE_OR_IO_ERROR;
         }
-        info(out, descriptor.orElseThrow());
+        if (json) {
+            out.println(JsonReport.ofTarget(descriptor.orElseThrow()));
+        } else {
+            info(out, descriptor.orElseThrow());
+        }
         out.flush();
         return ExitCode.SUCCESS;
     }
