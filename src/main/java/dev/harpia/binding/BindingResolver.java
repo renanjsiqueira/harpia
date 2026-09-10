@@ -103,12 +103,34 @@ public final class BindingResolver {
                 fromPath.add(parameter);
             }
         }
-        boolean bodyRemains = operation.input().stream()
-                .anyMatch(field -> !fromPath.contains(field.name()));
-        if (bodyRemains) {
+        java.util.List<SpecAst.InputDeclaration> remaining = operation.input().stream()
+                .filter(field -> !fromPath.contains(field.name()))
+                .toList();
+        if (remaining.isEmpty()) {
+            return java.util.List.copyOf(mappings);
+        }
+        // A request that carries no body still has to carry its inputs, and the only other place
+        // an inline endpoint has for them is the query string. The name is the mapping there too.
+        if (carriesBody(operation)) {
             mappings.add(new HttpBinding.Body("input", operation.where()));
+        } else {
+            for (SpecAst.InputDeclaration field : remaining) {
+                mappings.add(new HttpBinding.Query(field.name(), field.name(), field.where()));
+            }
         }
         return java.util.List.copyOf(mappings);
+    }
+
+    /**
+     * Whether the request has a body to put the remaining inputs in.
+     *
+     * <p>GET and DELETE state what to act on, not a document to act with. A body on either is
+     * something no client expects to send and no proxy promises to forward, so what those verbs
+     * carry goes in the URL.
+     */
+    private static boolean carriesBody(SpecAst.UseCaseDeclaration operation) {
+        String method = operation.endpoint().map(SpecAst.Endpoint::method).orElse("");
+        return !method.equals("GET") && !method.equals("DELETE");
     }
 
     private static HttpBinding.ResponseMapping inferredResponse(

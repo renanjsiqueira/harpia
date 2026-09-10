@@ -10,6 +10,7 @@ Application customer-service
     Column active: BOOLEAN required
     Operation createCustomer nature=INFERRED kind=CREATE transactional=true
       HttpOperation POST /customers access=PUBLIC
+        Request input from body
       RequestModel CreateCustomerRequest
       Result 201 ENTITY CustomerResponse
       Instruction VALIDATE_INPUT
@@ -20,6 +21,7 @@ Application customer-service
       Failure DUPLICATE -> 409
     Operation getCustomer nature=INFERRED kind=READ transactional=false
       HttpOperation GET /customers/{id} access=PUBLIC
+        Request id from path {id}
       Result 200 ENTITY CustomerResponse
       Instruction LOAD_BY_ID
       Instruction RETURN
@@ -31,6 +33,8 @@ Application customer-service
       Instruction RETURN
     Operation updateCustomer nature=INFERRED kind=UPDATE transactional=true
       HttpOperation PUT /customers/{id} access=PUBLIC
+        Request id from path {id}
+        Request input from body
       RequestModel UpdateCustomerRequest
       Result 200 ENTITY CustomerResponse
       Instruction VALIDATE_INPUT
@@ -43,6 +47,7 @@ Application customer-service
       Failure DUPLICATE -> 409
     Operation deleteCustomer nature=INFERRED kind=DELETE transactional=true
       HttpOperation DELETE /customers/{id} access=PUBLIC
+        Request id from path {id}
       Result 204 NOTHING
       Instruction LOAD_BY_ID
       Instruction DELETE

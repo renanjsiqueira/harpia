@@ -66,9 +66,18 @@ final class ApplicationIrRenderer {
                         .append(" kind=").append(operation.kind())
                         .append(" transactional=").append(operation.transactional()).append('\n');
                 operation.endpoint().ifPresentOrElse(
-                        endpoint -> out.append("      HttpOperation ").append(endpoint.method())
-                                .append(' ').append(endpoint.path())
-                                .append(" access=").append(endpoint.access()).append('\n'),
+                        endpoint -> {
+                            out.append("      HttpOperation ").append(endpoint.method())
+                                    .append(' ').append(endpoint.path())
+                                    .append(" access=").append(endpoint.access()).append('\n');
+                            // Where an input arrives is a decision, not a formatting detail: the
+                            // same declared input is a path segment, a query parameter or a field
+                            // of the body depending on what the binding said.
+                            endpoint.request().forEach(mapping ->
+                                    out.append("        Request ").append(mapping.input())
+                                            .append(" from ").append(carrier(mapping))
+                                            .append('\n'));
+                        },
                         () -> out.append("      Binding none\n"));
                 operation.requestTypeName().ifPresent(request ->
                         out.append("      RequestModel ").append(request).append('\n'));
@@ -120,6 +129,19 @@ final class ApplicationIrRenderer {
             });
         });
         return out.toString();
+    }
+
+    private static String carrier(ApplicationOperation.RequestMapping mapping) {
+        if (mapping instanceof ApplicationOperation.Path value) {
+            return "path {" + value.parameter() + "}";
+        }
+        if (mapping instanceof ApplicationOperation.Query value) {
+            return "query " + value.parameter();
+        }
+        if (mapping instanceof ApplicationOperation.Header value) {
+            return "header " + value.header();
+        }
+        return "body";
     }
 
     private static void renderFlow(

@@ -813,6 +813,30 @@ valores e um `## Value` são muitos campos: nenhum dos dois tem grafia que a URL
 Um input consumido pelo path não aparece de novo no corpo. Um binding externo (§ `harpia-bindings-v1`)
 continua podendo mapear explicitamente com `- x: path nome`.
 
+## 8.9.1 Query parameters
+
+Um endpoint inline coloca no corpo os inputs que o path não consumiu — exceto quando o método não
+tem corpo. `GET` e `DELETE` enunciam *sobre o que* agir, não um documento *com o que* agir: um corpo
+neles é algo que nenhum cliente envia e nenhum proxy promete encaminhar. Nesses dois verbos, o que
+sobra vira query parameter, e o nome continua sendo o mapeamento:
+
+```markdown
+### Endpoint
+
+GET /customers
+
+### Input
+
+- page: Int required
+- size: Int required
+```
+
+gera `GET /customers?page=…&size=…`. Nada muda em `POST`, `PUT` e `PATCH`, que continuam com corpo.
+Um input já consumido pelo path não é pedido de novo.
+
+Onde cada input chega é visível na Application IR (`harpia inspect --stage=application-ir`), uma
+linha `Request <input> from path {p} | query p | header h | body` por mapeamento.
+
 ## 8.10 PATCH
 
 Na V1 o método `PATCH` entra na gramática de `### Endpoint`. Na V0 o conjunto continua sendo

@@ -465,7 +465,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
   - Um valor ligado fora do corpo carrega o que a URL sabe escrever: escalar ou enum declarado (com o tipo declarado no parâmetro); coleção e Value são `HRP2138` em vez de estourarem dentro do target.
   - Evidence: [`EndpointParser`](src/main/java/dev/harpia/parse/EndpointParser.java), [`BindingResolver`](src/main/java/dev/harpia/binding/BindingResolver.java), [`BindingValidator`](src/main/java/dev/harpia/binding/BindingValidator.java), [`PathParameterTest`](src/test/java/dev/harpia/binding/PathParameterTest.java), [`UrlBoundInputTest`](src/test/java/dev/harpia/binding/UrlBoundInputTest.java).
 
-- [ ] `API-005` **Query params e headers** — `TODO` · `P0` · `L` · Area: `API`
+- [ ] `API-005` **Query params e headers** — `PARTIAL`; query params prontos. Num endpoint inline, `GET` e `DELETE` não têm corpo, então os inputs que o path não consumiu viram query parameters com o próprio nome — `GET /customers?page=…&size=…` em vez de um corpo em GET; os demais verbos seguem com corpo. Headers continuam pendentes: nada num endpoint inline nomeia um header, então dependem da sintaxe de mapeamento explícito dos bindings externos · `P0` · `L` · Area: `API`
+  - Evidence: [`QueryParameterTest`](src/test/java/dev/harpia/binding/QueryParameterTest.java), [`BindingResolver`](src/main/java/dev/harpia/binding/BindingResolver.java), [`ApplicationIrRenderer`](src/main/java/dev/harpia/inspect/ApplicationIrRenderer.java).
   - Depends on: `BIND-002`.
 
 - [x] `API-006` **Request body DTO e response body DTO** — `DONE` para CRUD V0 · `P0` · `L` · Area: `API`
