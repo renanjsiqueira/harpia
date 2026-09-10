@@ -17,8 +17,9 @@ recriar Java e sem invalidar specs existentes antes de haver migração e format
 - preparar ValueObject, Enum, Integration e Custom Java sem fingir suporte;
 - manter gramática pequena, formal e determinística.
 
-Não são objetivos da V1 inicial: condicionais gerais, loops, async, workflow, cloud providers,
-outras linguagens de destino ou snippets Java na spec.
+Não são objetivos da V1 inicial: loops gerais, async, workflow, cloud providers, outras linguagens
+de destino ou snippets Java na spec. Flow possui apenas branching limitado e tipado; algoritmos
+continuam pertencendo a `Logic` ou a código custom.
 
 ## 2. Versionamento e compatibilidade
 
@@ -225,8 +226,9 @@ send <email> to <expression>
 `load E by id` mantém semântica de resultado obrigatório e erro `not found`. `find` será reservado
 para buscas que retornam zero, um ou muitos resultados; portanto não é sinônimo de `load`.
 
-`if`, loops, parallel e async não entram até existir evidência de que construções semânticas mais
-específicas não resolvem os casos importantes.
+`if`/`else` está implementado como branching de orquestração: condição booleana sobre o input,
+indentação de quatro espaços, no máximo dois níveis e sem declarar variáveis ou retornar dentro de
+um ramo. Loops, parallel e async continuam fora deste recorte.
 
 ## 7. Rules V1
 

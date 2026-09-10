@@ -401,7 +401,7 @@ public final class JavaSpringControllerTestTransformer {
     }
 
     private static boolean has(ApplicationOperation operation, FlowCommand command) {
-        return operation.flow().stream()
+        return operation.allInstructions().stream()
                 .anyMatch(instruction -> instruction.command() == command);
     }
 

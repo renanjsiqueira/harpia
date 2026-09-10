@@ -2,8 +2,10 @@ package dev.harpia.inspect;
 
 import dev.harpia.model.EntityModel;
 import dev.harpia.model.FieldModel;
+import dev.harpia.model.FlowStep;
 import dev.harpia.model.ProjectModel;
 import dev.harpia.model.UseCaseModel;
+import java.util.List;
 
 /** Renders business meaning. No word here names a language, a framework or a build tool. */
 final class BusinessIrRenderer {
@@ -41,8 +43,7 @@ final class BusinessIrRenderer {
                 useCase.input().forEach(field -> out.append("    Input ")
                         .append(field.name()).append(": ").append(field.type().syntax())
                         .append(field.required() ? " required" : "").append('\n'));
-                useCase.flow().steps().forEach(step -> out.append("    Step ")
-                        .append(step.getClass().getSimpleName()).append('\n'));
+                renderFlow(out, useCase.flow().steps(), "    ");
                 out.append("    Output ").append(useCase.output().status())
                         .append(' ').append(useCase.output().shape().kind())
                         .append(useCase.output().shape().entity().map(e -> " " + e).orElse(""))
@@ -56,6 +57,24 @@ final class BusinessIrRenderer {
                 .append(logic.customContract().map(contract -> " custom " + contract).orElse(""))
                 .append('\n'));
         return out.toString();
+    }
+
+    private static void renderFlow(StringBuilder out, List<FlowStep> flow, String indent) {
+        for (FlowStep step : flow) {
+            out.append(indent).append("Step ").append(step.getClass().getSimpleName());
+            if (step instanceof FlowStep.Conditional conditional) {
+                out.append(' ').append(conditional.text());
+            }
+            out.append('\n');
+            if (step instanceof FlowStep.Conditional conditional) {
+                out.append(indent).append("  Then\n");
+                renderFlow(out, conditional.whenTrue(), indent + "    ");
+                if (!conditional.whenFalse().isEmpty()) {
+                    out.append(indent).append("  Else\n");
+                    renderFlow(out, conditional.whenFalse(), indent + "    ");
+                }
+            }
+        }
     }
 
 }

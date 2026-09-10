@@ -582,6 +582,32 @@ return payment
 A diferença para `### Rules`: uma rule diz que o input é inválido e responde o status de
 `invalid input`. Um `fail` nomeia **qual** erro de negócio ocorreu e responde o status daquele erro.
 
+## 8.9 if / else
+
+Na V1, Flow pode escolher entre duas sequências curtas de orquestração:
+
+```flow
+purchase = create Purchase from input
+if premium
+    set purchase.status = "PRIORITY"
+else
+    set purchase.status = "STANDARD"
+save purchase
+return purchase
+```
+
+- a condição usa a expressão tipada de Logic, precisa resultar em `Boolean` e enxerga o input;
+- `else` é opcional e fica sozinho na linha;
+- cada nível usa exatamente quatro espaços, tabs são recusados e há no máximo dois níveis;
+- os ramos podem usar variáveis já definidas, mas não podem definir uma variável nova nem executar
+  `return` (`HRP2130`); assim o valor não escapa do escopo Java de um único ramo e o Flow conserva
+  uma saída final explícita;
+- `languageVersion: 0` recusa `if` com `HRP1107`; a construção pertence à V1;
+- o Java gerado preserva a posição e a ordem dos comandos dos dois ramos.
+
+Esse recorte é branching de aplicação, não uma segunda linguagem de algoritmos. Cálculo reutilizável
+e controle mais profundo devem ser extraídos para `Logic` ou para uma implementação custom.
+
 ## 8.7 Page como saída
 
 Na V1, `### Output` aceita `Page<Entidade>`:

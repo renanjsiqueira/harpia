@@ -34,6 +34,7 @@ final class UseCaseDeclarationParser implements DeclarationParser {
     private final DeclarationKind declaredKind;
     private final String prefix;
     private final boolean executableRules;
+    private final boolean conditionalFlow;
 
     /**
      * Prefixes a later language version gives meaning to. The fallback only sees them when the
@@ -46,11 +47,11 @@ final class UseCaseDeclarationParser implements DeclarationParser {
 
     /** The legacy V0 form: any heading, kind inferred later, `### Rules` documentary. */
     UseCaseDeclarationParser() {
-        this(DeclarationKind.USE_CASE, null, false);
+        this(DeclarationKind.USE_CASE, null, false, false);
     }
 
     UseCaseDeclarationParser(DeclarationKind declaredKind, String prefix) {
-        this(declaredKind, prefix, true);
+        this(declaredKind, prefix, true, true);
     }
 
     /**
@@ -60,9 +61,18 @@ final class UseCaseDeclarationParser implements DeclarationParser {
      */
     UseCaseDeclarationParser(
             DeclarationKind declaredKind, String prefix, boolean executableRules) {
+        this(declaredKind, prefix, executableRules, executableRules);
+    }
+
+    private UseCaseDeclarationParser(
+            DeclarationKind declaredKind,
+            String prefix,
+            boolean executableRules,
+            boolean conditionalFlow) {
         this.declaredKind = declaredKind;
         this.prefix = prefix;
         this.executableRules = executableRules;
+        this.conditionalFlow = conditionalFlow;
     }
 
     private static final Pattern TITLE =
@@ -267,7 +277,7 @@ final class UseCaseDeclarationParser implements DeclarationParser {
         return new ParseItems<>(input, valid);
     }
 
-    private static ParseItems<FlowStatement> parseFlow(
+    private ParseItems<FlowStatement> parseFlow(
             Optional<Section> section, DiagnosticCollector diagnostics) {
         if (section.isEmpty()) {
             return new ParseItems<>(List.of(), false);
@@ -283,21 +293,12 @@ final class UseCaseDeclarationParser implements DeclarationParser {
             return new ParseItems<>(List.of(), false);
         }
 
-        List<FlowStatement> flow = new ArrayList<>();
-        boolean valid = true;
-        for (RawSpan line : values.getFirst().fencedBodyLines()) {
-            if (line.text().isBlank()) {
-                continue;
-            }
-            Optional<FlowStatement> statement =
-                    FlowLineParser.parse(line.text(), line.where(), diagnostics);
-            if (statement.isPresent()) {
-                flow.add(statement.orElseThrow());
-            } else {
-                valid = false;
-            }
-        }
-        return new ParseItems<>(flow, valid);
+        Optional<List<FlowStatement>> flow = FlowBlockParser.parse(
+                values.getFirst().fencedBodyLines(),
+                values.getFirst().raw().where(),
+                conditionalFlow,
+                diagnostics);
+        return new ParseItems<>(flow.orElse(List.of()), flow.isPresent());
     }
 
     private static Optional<Output> parseOutput(

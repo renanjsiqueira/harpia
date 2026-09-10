@@ -197,7 +197,7 @@ public final class ApplicationModelBuilder {
         List<FlowInstruction> flow = source.flow().steps().stream()
                 .map(ApplicationModelBuilder::instruction)
                 .toList();
-        Kind kind = operationKind(source.flow().steps());
+        Kind kind = operationKind(source.flow().allSteps());
         return new ApplicationOperation(
                 source.title(),
                 lowerFirst(source.baseName()),
@@ -339,6 +339,24 @@ public final class ApplicationModelBuilder {
                     sortOrders(value.sort()),
                     value.paged(),
                     Optional.empty(),
+                    value.where());
+        }
+        if (source instanceof FlowStep.Conditional value) {
+            return new FlowInstruction(
+                    FlowCommand.IF,
+                    Optional.empty(),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    false,
+                    Optional.of(new FlowInstruction.TypedValue(
+                            "if", value.text(), value.condition())),
+                    value.whenTrue().stream()
+                            .map(ApplicationModelBuilder::instruction)
+                            .toList(),
+                    value.whenFalse().stream()
+                            .map(ApplicationModelBuilder::instruction)
+                            .toList(),
                     value.where());
         }
         if (source instanceof FlowStep.ChangeCollection value) {

@@ -31,7 +31,7 @@ public final class JavaSpringRepositoryTransformer {
         String domain = context.layout().packageName(JavaLayout.DOMAIN);
         java.util.TreeMap<String, JavaMethodModel> byName = new java.util.TreeMap<>();
         for (ApplicationOperation operation : entity.operations()) {
-            for (ApplicationOperation.FlowInstruction instruction : operation.flow()) {
+            for (ApplicationOperation.FlowInstruction instruction : operation.allInstructions()) {
                 boolean single =
                         instruction.command() == ApplicationOperation.FlowCommand.FIND_BY;
                 boolean many = instruction.command() == ApplicationOperation.FlowCommand.LIST_BY;

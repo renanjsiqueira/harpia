@@ -134,6 +134,8 @@ public final class ErrorCodes {
     public static final String SEMANTIC_FIND_NOT_UNIQUE = "HRP2128";
     /** A paged listing has no page and size to read. */
     public static final String SEMANTIC_PAGED_WITHOUT_INPUT = "HRP2129";
+    /** A branch attempts to define a flow variable or return from a nested scope. */
+    public static final String SEMANTIC_FLOW_BRANCH_SCOPE = "HRP2130";
 
     // --- HRP22xx: external binding semantics -------------------------------------------------
     /** A binding references an operation that is not declared. */

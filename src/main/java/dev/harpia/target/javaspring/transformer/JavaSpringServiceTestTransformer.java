@@ -143,7 +143,7 @@ public final class JavaSpringServiceTestTransformer {
      */
     private static String expectedSort(
             ApplicationEntity entity, ApplicationOperation operation) {
-        List<ApplicationOperation.FlowInstruction.SortOrder> orders = operation.flow().stream()
+        List<ApplicationOperation.FlowInstruction.SortOrder> orders = operation.allInstructions().stream()
                 .filter(candidate -> candidate.command() == FlowCommand.LIST_ALL
                         || candidate.command() == FlowCommand.LIST_BY)
                 .findFirst()
@@ -166,7 +166,7 @@ public final class JavaSpringServiceTestTransformer {
 
     private static Optional<ApplicationOperation.FlowInstruction> instruction(
             ApplicationOperation operation, FlowCommand command) {
-        return operation.flow().stream()
+        return operation.allInstructions().stream()
                 .filter(candidate -> candidate.command() == command)
                 .findFirst();
     }
@@ -185,7 +185,7 @@ public final class JavaSpringServiceTestTransformer {
 
     /** The field a {@code find} in this operation searches by, when there is one. */
     private static Optional<String> finder(ApplicationOperation operation) {
-        return operation.flow().stream()
+        return operation.allInstructions().stream()
                 .filter(instruction -> instruction.command() == FlowCommand.FIND_BY)
                 .findFirst()
                 .map(instruction -> instruction.fields().getFirst());
@@ -454,7 +454,7 @@ public final class JavaSpringServiceTestTransformer {
     }
 
     private static boolean has(ApplicationOperation operation, FlowCommand command) {
-        return operation.flow().stream()
+        return operation.allInstructions().stream()
                 .anyMatch(instruction -> instruction.command() == command);
     }
 

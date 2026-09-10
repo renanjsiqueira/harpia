@@ -323,7 +323,7 @@ public final class SemanticValidator {
         Set<String> inputs = useCase.input().stream()
                 .map(SpecAst.InputDeclaration::name)
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
-        for (SpecAst.FlowStatement statement : useCase.flow()) {
+        for (SpecAst.FlowStatement statement : flattened(useCase.flow())) {
             if (statement instanceof SpecAst.FindBy find) {
                 // A find assigns to one variable, so uniqueness is what makes the singular true.
                 searchable(target, inputs, find.field(), true, find.where(), diagnostics);
@@ -353,7 +353,7 @@ public final class SemanticValidator {
      */
     private static void validateAssignments(
             SpecAst.UseCaseDeclaration useCase, Entity target, DiagnosticCollector diagnostics) {
-        for (SpecAst.FlowStatement statement : useCase.flow()) {
+        for (SpecAst.FlowStatement statement : flattened(useCase.flow())) {
             String fieldName;
             boolean collection;
             if (statement instanceof SpecAst.SetField set) {
@@ -503,7 +503,7 @@ public final class SemanticValidator {
                 .filter(error -> error.kind() == SpecAst.ErrorKind.DOMAIN)
                 .map(error -> error.name().orElseThrow())
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
-        for (SpecAst.FlowStatement statement : useCase.flow()) {
+        for (SpecAst.FlowStatement statement : flattened(useCase.flow())) {
             if (statement instanceof SpecAst.Fail fail && !declared.contains(fail.error())) {
                 diagnostics.error(
                         ErrorCodes.SEMANTIC_FAIL_UNDECLARED,
@@ -554,7 +554,7 @@ public final class SemanticValidator {
             SymbolTable symbols,
             DiagnosticCollector diagnostics) {
         Map<String, SourceRef> named = new LinkedHashMap<>();
-        for (SpecAst.FlowStatement statement : useCase.flow()) {
+        for (SpecAst.FlowStatement statement : flattened(useCase.flow())) {
             referenced(statement).ifPresent(reference ->
                     named.putIfAbsent(reference.name(), reference.where()));
         }
@@ -607,6 +607,20 @@ public final class SemanticValidator {
     }
 
     private record Reference(String name, SourceRef where) {
+    }
+
+    /** Every statement a flow contains, branches included, in the order they are written. */
+    private static java.util.List<SpecAst.FlowStatement> flattened(
+            java.util.List<SpecAst.FlowStatement> flow) {
+        java.util.List<SpecAst.FlowStatement> all = new java.util.ArrayList<>();
+        for (SpecAst.FlowStatement statement : flow) {
+            all.add(statement);
+            if (statement instanceof SpecAst.Conditional conditional) {
+                all.addAll(flattened(conditional.whenTrue()));
+                all.addAll(flattened(conditional.whenFalse()));
+            }
+        }
+        return all;
     }
 
     private static Optional<Reference> referenced(SpecAst.FlowStatement statement) {
@@ -671,7 +685,7 @@ public final class SemanticValidator {
         if (useCase.declaredKind() != dev.harpia.parse.DeclarationKind.QUERY) {
             return;
         }
-        for (SpecAst.FlowStatement statement : useCase.flow()) {
+        for (SpecAst.FlowStatement statement : flattened(useCase.flow())) {
             String operation = mutating(statement);
             if (operation != null) {
                 diagnostics.error(
@@ -695,6 +709,12 @@ public final class SemanticValidator {
         }
         if (statement instanceof SpecAst.Delete) {
             return "delete";
+        }
+        if (statement instanceof SpecAst.SetField) {
+            return "set";
+        }
+        if (statement instanceof SpecAst.ChangeCollection change) {
+            return change.change() == SpecAst.CollectionChange.ADD ? "add" : "remove";
         }
         return null;
     }
@@ -739,47 +759,7 @@ public final class SemanticValidator {
             DiagnosticCollector diagnostics) {
         Map<String, SpecAst.FieldDeclaration> fields = target.fields();
         Map<String, ValueType> variables = new LinkedHashMap<>();
-        boolean createsOrUpdates = false;
-        boolean saves = false;
-
-        for (int index = 0; index < useCase.flow().size(); index++) {
-            SpecAst.FlowStatement statement = useCase.flow().get(index);
-            if (statement instanceof SpecAst.CreateFrom value) {
-                define(variables, value.variable(), ValueType.entity(value.entity()), value.where(), diagnostics);
-                createsOrUpdates = true;
-            } else if (statement instanceof SpecAst.LoadById value) {
-                define(variables, value.variable(), ValueType.entity(value.entity()), value.where(), diagnostics);
-            } else if (statement instanceof SpecAst.FindBy value) {
-                define(variables, value.variable(), ValueType.entity(value.entity()), value.where(), diagnostics);
-            } else if (statement instanceof SpecAst.ListAll value) {
-                define(variables, value.variable(), ValueType.list(value.entity()), value.where(), diagnostics);
-            } else if (statement instanceof SpecAst.ListBy value) {
-                define(variables, value.variable(), ValueType.list(value.entity()), value.where(), diagnostics);
-            } else if (statement instanceof SpecAst.SetField value) {
-                requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
-                createsOrUpdates = true;
-            } else if (statement instanceof SpecAst.ChangeCollection value) {
-                requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
-                createsOrUpdates = true;
-            } else if (statement instanceof SpecAst.UpdateFrom value) {
-                requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
-                createsOrUpdates = true;
-            } else if (statement instanceof SpecAst.Save value) {
-                requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
-                saves = true;
-            } else if (statement instanceof SpecAst.Delete value) {
-                requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
-            } else if (statement instanceof SpecAst.Return value && value.variable().isPresent()) {
-                requireVariable(variables, value.variable().orElseThrow(), value.where(), diagnostics);
-            }
-
-            if (statement instanceof SpecAst.Return && index != useCase.flow().size() - 1) {
-                diagnostics.error(
-                        ErrorCodes.SEMANTIC_FLOW_RETURN,
-                        "return must be the final flow step",
-                        statement.where());
-            }
-        }
+        FlowFacts facts = validateFlowBlock(useCase.flow(), variables, false, diagnostics);
 
         if (useCase.flow().isEmpty()
                 || !(useCase.flow().getLast() instanceof SpecAst.Return returned)) {
@@ -796,8 +776,8 @@ public final class SemanticValidator {
                 Optional<SpecAst.FieldDeclaration> field = error.field().map(fields::get);
                 boolean reachable = field.isPresent()
                         && field.orElseThrow().unique()
-                        && createsOrUpdates
-                        && saves;
+                        && facts.createsOrUpdates()
+                        && facts.saves();
                 if (!reachable) {
                     diagnostics.error(
                             ErrorCodes.SEMANTIC_DUPLICATE_ON_NON_UNIQUE,
@@ -807,6 +787,129 @@ public final class SemanticValidator {
                 }
             }
         }
+    }
+
+    /** Validates one lexical block while keeping branch-local declarations out of outer scope. */
+    private static FlowFacts validateFlowBlock(
+            java.util.List<SpecAst.FlowStatement> flow,
+            Map<String, ValueType> variables,
+            boolean branch,
+            DiagnosticCollector diagnostics) {
+        boolean createsOrUpdates = false;
+        boolean saves = false;
+        for (int index = 0; index < flow.size(); index++) {
+            SpecAst.FlowStatement statement = flow.get(index);
+            Optional<String> definition = definedVariable(statement);
+            if (branch && definition.isPresent()) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_BRANCH_SCOPE,
+                        "flow branch cannot define variable '" + definition.orElseThrow()
+                                + "'; define it before 'if' so both branches share one value",
+                        statement.where());
+                continue;
+            }
+            if (branch && statement instanceof SpecAst.Return) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_BRANCH_SCOPE,
+                        "flow branch cannot return; the operation has one final top-level return",
+                        statement.where());
+                continue;
+            }
+            if (statement instanceof SpecAst.CreateFrom value) {
+                define(
+                        variables,
+                        value.variable(),
+                        ValueType.entity(value.entity()),
+                        value.where(),
+                        diagnostics);
+                createsOrUpdates = true;
+            } else if (statement instanceof SpecAst.LoadById value) {
+                define(
+                        variables,
+                        value.variable(),
+                        ValueType.entity(value.entity()),
+                        value.where(),
+                        diagnostics);
+            } else if (statement instanceof SpecAst.FindBy value) {
+                define(
+                        variables,
+                        value.variable(),
+                        ValueType.entity(value.entity()),
+                        value.where(),
+                        diagnostics);
+            } else if (statement instanceof SpecAst.ListAll value) {
+                define(
+                        variables,
+                        value.variable(),
+                        ValueType.list(value.entity()),
+                        value.where(),
+                        diagnostics);
+            } else if (statement instanceof SpecAst.ListBy value) {
+                define(
+                        variables,
+                        value.variable(),
+                        ValueType.list(value.entity()),
+                        value.where(),
+                        diagnostics);
+            } else if (statement instanceof SpecAst.SetField value) {
+                requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
+                createsOrUpdates = true;
+            } else if (statement instanceof SpecAst.ChangeCollection value) {
+                requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
+                createsOrUpdates = true;
+            } else if (statement instanceof SpecAst.UpdateFrom value) {
+                requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
+                createsOrUpdates = true;
+            } else if (statement instanceof SpecAst.Save value) {
+                requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
+                saves = true;
+            } else if (statement instanceof SpecAst.Delete value) {
+                requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
+            } else if (statement instanceof SpecAst.Conditional conditional) {
+                FlowFacts whenTrue = validateFlowBlock(
+                        conditional.whenTrue(), new LinkedHashMap<>(variables), true, diagnostics);
+                FlowFacts whenFalse = validateFlowBlock(
+                        conditional.whenFalse(), new LinkedHashMap<>(variables), true, diagnostics);
+                createsOrUpdates |= whenTrue.createsOrUpdates() || whenFalse.createsOrUpdates();
+                saves |= whenTrue.saves() || whenFalse.saves();
+            } else if (statement instanceof SpecAst.Return value && value.variable().isPresent()) {
+                requireVariable(
+                        variables,
+                        value.variable().orElseThrow(),
+                        value.where(),
+                        diagnostics);
+            }
+
+            if (statement instanceof SpecAst.Return && index != flow.size() - 1) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_RETURN,
+                        "return must be the final flow step",
+                        statement.where());
+            }
+        }
+        return new FlowFacts(createsOrUpdates, saves);
+    }
+
+    private static Optional<String> definedVariable(SpecAst.FlowStatement statement) {
+        if (statement instanceof SpecAst.CreateFrom value) {
+            return Optional.of(value.variable());
+        }
+        if (statement instanceof SpecAst.LoadById value) {
+            return Optional.of(value.variable());
+        }
+        if (statement instanceof SpecAst.FindBy value) {
+            return Optional.of(value.variable());
+        }
+        if (statement instanceof SpecAst.ListAll value) {
+            return Optional.of(value.variable());
+        }
+        if (statement instanceof SpecAst.ListBy value) {
+            return Optional.of(value.variable());
+        }
+        return Optional.empty();
+    }
+
+    private record FlowFacts(boolean createsOrUpdates, boolean saves) {
     }
 
     private static void define(

@@ -27,7 +27,7 @@ public final class CapabilityAnalyzer {
                         Capability.HTTP,
                         "operation " + useCase.baseName() + " declares an HTTP binding",
                         useCase.where())));
-                for (FlowStep step : useCase.flow().steps()) {
+                for (FlowStep step : useCase.flow().allSteps()) {
                     if (usesPersistence(step)) {
                         requirements.add(new CapabilityRequirement(
                                 Capability.PERSISTENCE,

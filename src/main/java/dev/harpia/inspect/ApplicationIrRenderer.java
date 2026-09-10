@@ -6,6 +6,7 @@ import dev.harpia.application.ApplicationOperation;
 import dev.harpia.application.ApplicationProject;
 import dev.harpia.capability.Capability;
 import dev.harpia.capability.ResolvedCapability;
+import java.util.List;
 
 /**
  * Renders application behaviour: persistent entities, operations, request and response models and
@@ -65,31 +66,7 @@ final class ApplicationIrRenderer {
                         .append('\n');
                 operation.rules().forEach(rule -> out.append("      Rule ")
                         .append(rule.text()).append('\n'));
-                operation.flow().forEach(instruction -> out.append("      Instruction ")
-                        .append(instruction.command())
-                        .append(instruction.fields().isEmpty()
-                                ? ""
-                                : " by " + String.join(" and ", instruction.fields()))
-                        .append(instruction.sort().isEmpty()
-                                ? ""
-                                : " sorted by " + instruction.sort().stream()
-                                        .map(order -> order.field()
-                                                + (order.descending() ? " desc" : " asc"))
-                                        .reduce((left, right) -> left + " and " + right)
-                                        .orElse(""))
-                        .append(instruction.paged() ? " paged" : "")
-                        // The shape is shared; how it reads is not. A fail raises when something
-                        // holds; a set assigns a value to a field.
-                        .append(instruction.value()
-                                .map(typed -> switch (instruction.command()) {
-                                    case FAIL -> " " + typed.name() + " when " + typed.text();
-                                    case ADD_TO -> " " + typed.text() + " to " + typed.name();
-                                    case REMOVE_FROM ->
-                                            " " + typed.text() + " from " + typed.name();
-                                    default -> " " + typed.name() + " = " + typed.text();
-                                })
-                                .orElse(""))
-                        .append('\n'));
+                renderFlow(out, operation.flow(), "      ");
                 operation.failures().forEach(failure -> out.append("      Failure ")
                         .append(failure.condition())
                         .append(failure.name().map(name -> " '" + name + "'").orElse(""))
@@ -114,5 +91,46 @@ final class ApplicationIrRenderer {
                 .append(logic.customContract().map(contract -> " custom " + contract).orElse(""))
                 .append('\n'));
         return out.toString();
+    }
+
+    private static void renderFlow(
+            StringBuilder out,
+            List<ApplicationOperation.FlowInstruction> flow,
+        String indent) {
+        for (ApplicationOperation.FlowInstruction instruction : flow) {
+            out.append(indent).append("Instruction ").append(instruction.command())
+                    .append(instruction.fields().isEmpty()
+                            ? ""
+                            : " by " + String.join(" and ", instruction.fields()))
+                    .append(instruction.sort().isEmpty()
+                            ? ""
+                            : " sorted by " + instruction.sort().stream()
+                                    .map(order -> order.field()
+                                            + (order.descending() ? " desc" : " asc"))
+                                    .reduce((left, right) -> left + " and " + right)
+                                    .orElse(""))
+                    .append(instruction.paged() ? " paged" : "")
+                    // The shape is shared; how it reads is not. A fail raises when something
+                    // holds; a set assigns a value to a field.
+                    .append(instruction.value()
+                            .map(typed -> switch (instruction.command()) {
+                                case FAIL -> " " + typed.name() + " when " + typed.text();
+                                case IF -> " " + typed.text();
+                                case ADD_TO -> " " + typed.text() + " to " + typed.name();
+                                case REMOVE_FROM ->
+                                        " " + typed.text() + " from " + typed.name();
+                                default -> " " + typed.name() + " = " + typed.text();
+                            })
+                            .orElse(""))
+                    .append('\n');
+            if (instruction.command() == ApplicationOperation.FlowCommand.IF) {
+                out.append(indent).append("  Then\n");
+                renderFlow(out, instruction.whenTrue(), indent + "    ");
+                if (!instruction.whenFalse().isEmpty()) {
+                    out.append(indent).append("  Else\n");
+                    renderFlow(out, instruction.whenFalse(), indent + "    ");
+                }
+            }
+        }
     }
 }

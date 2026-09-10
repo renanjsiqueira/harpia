@@ -12,6 +12,23 @@ public record FlowModel(List<FlowStep> steps, Map<String, ValueType> variables) 
         variables = Collections.unmodifiableMap(new LinkedHashMap<>(variables));
     }
 
+    /** Every step in source order, including steps nested in conditional branches. */
+    public List<FlowStep> allSteps() {
+        java.util.ArrayList<FlowStep> result = new java.util.ArrayList<>();
+        append(steps, result);
+        return List.copyOf(result);
+    }
+
+    private static void append(List<FlowStep> source, List<FlowStep> target) {
+        for (FlowStep step : source) {
+            target.add(step);
+            if (step instanceof FlowStep.Conditional conditional) {
+                append(conditional.whenTrue(), target);
+                append(conditional.whenFalse(), target);
+            }
+        }
+    }
+
     public record ValueType(Kind kind, String entity) {
         public ValueType {
             Objects.requireNonNull(kind, "kind");

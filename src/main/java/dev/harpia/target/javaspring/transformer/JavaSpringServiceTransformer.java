@@ -145,7 +145,7 @@ public final class JavaSpringServiceTransformer {
     }
 
     private static boolean validates(ApplicationOperation operation) {
-        return operation.flow().stream().anyMatch(instruction ->
+        return operation.allInstructions().stream().anyMatch(instruction ->
                 instruction.command() == ApplicationOperation.FlowCommand.VALIDATE_INPUT);
     }
 
@@ -165,9 +165,45 @@ public final class JavaSpringServiceTransformer {
             ApplicationOperation operation,
             TreeSet<String> explicitImports) {
         List<String> statements = new ArrayList<>();
+        emit(names, entity, operation, operation.flow(), statements, explicitImports);
+        return statements;
+    }
+
+    /** Renders one level of a flow; a conditional renders its branches by calling back in. */
+    private void emit(
+            Names names,
+            ApplicationEntity entity,
+            ApplicationOperation operation,
+            List<ApplicationOperation.FlowInstruction> flow,
+            List<String> statements,
+            TreeSet<String> explicitImports) {
         String entityName = entity.typeName();
-        for (ApplicationOperation.FlowInstruction instruction : operation.flow()) {
+        for (ApplicationOperation.FlowInstruction instruction : flow) {
             switch (instruction.command()) {
+                case IF -> {
+                    ApplicationOperation.FlowInstruction.TypedValue condition =
+                            instruction.value().orElseThrow();
+                    JavaLogicWriter.Result written = JavaLogicWriter.condition(
+                            condition.expression(),
+                            operation.methodName(),
+                            field -> REQUEST_PARAMETER + "." + field + "()");
+                    explicitImports.addAll(written.imports());
+                    statements.add("if (" + written.body() + ") {");
+                    List<String> branch = new ArrayList<>();
+                    emit(names, entity, operation, instruction.whenTrue(), branch,
+                            explicitImports);
+                    branch.forEach(line -> statements.add("    " + line));
+                    if (instruction.whenFalse().isEmpty()) {
+                        statements.add("}");
+                    } else {
+                        statements.add("} else {");
+                        List<String> otherwise = new ArrayList<>();
+                        emit(names, entity, operation, instruction.whenFalse(), otherwise,
+                                explicitImports);
+                        otherwise.forEach(line -> statements.add("    " + line));
+                        statements.add("}");
+                    }
+                }
                 case VALIDATE_INPUT -> {
                     // Field constraints are enforced by Bean Validation at the method boundary.
                     // A rule is the part of validating the input that no annotation can express,
@@ -318,7 +354,6 @@ public final class JavaSpringServiceTransformer {
                         returned(names, operation, variable)));
             }
         }
-        return statements;
     }
 
     private static boolean reportsPage(ApplicationOperation operation) {

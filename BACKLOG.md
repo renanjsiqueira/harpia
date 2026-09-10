@@ -400,7 +400,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [ ] `FLOW-015` **`emit` Event** — `TODO` · `P0` · `M` · Area: `Messaging`
   - Depends on: `EVENT-001`.
 
-- [ ] `FLOW-019` **If / else em Flow** — `TODO`; existe apenas em Logic pura · `P0` · `L` · Area: `API`
+- [x] `FLOW-019` **If / else em Flow** — `DONE` na V1; `if <condição>`/`else` usa expressões booleanas tipadas sobre o input e blocos com quatro espaços, preserva os ramos nos AST/IRs/inspect e gera Java na posição declarada. São permitidos dois níveis; ramos usam variáveis já definidas, mas não definem variável nem retornam (`HRP2130`) · `P0` · `L` · Area: `API`
+  - Evidence: [`FlowBlockParser`](src/main/java/dev/harpia/parse/FlowBlockParser.java), [`FlowStep`](src/main/java/dev/harpia/model/FlowStep.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`FlowConditionalTest`](src/test/java/dev/harpia/validate/FlowConditionalTest.java).
 
 - [ ] `FLOW-020` **For each** — `TODO` · `P0` · `L` · Area: `API`
   - Depends on: `TYPE-021`.
@@ -813,14 +814,14 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 Em ordem de dependência e valor para a Reference Application:
 
 1. `DOM-012` e `PERSIST-009`: relationships end-to-end sobre a referência tipada de `TYPE-023`.
-2. `FLOW-019`/`FLOW-020`: if/else e for each no Flow.
-3. `FLOW-011`–`FLOW-014`, `FLOW-019`, `FLOW-020`: mutação, precondition/failure, calls e controle.
-4. `INTEG-001`–`INTEG-004`, `INTEG-010`, `RELY-001`: FraudService HTTP tipado.
-5. `EVENT-001`, `EVENT-003`, `EVENT-005`, `EVENT-007`, `FLOW-015`: Event local e emit.
-6. `SEC-002`, `SEC-003`, `SEC-005`, `SEC-007`, `API-008`: authenticated/role/JWT.
-7. `CUSTOM-002`, `CUSTOM-003`: contract, DI e layout custom protegido.
-8. `SPRING-012` e `GREEN-003`: `mvn package` e baseline integrada verificável.
-9. `HARNESS-001`–`HARNESS-004`: JSON estável e handoff consumível por agentes.
+2. `FLOW-012`, `FLOW-014` e `FLOW-020`: precondition, calls e iteração controlada.
+3. `INTEG-001`–`INTEG-004`, `INTEG-010`, `RELY-001`: FraudService HTTP tipado.
+4. `EVENT-001`, `EVENT-003`, `EVENT-005`, `EVENT-007`, `FLOW-015`: Event local e emit.
+5. `SEC-002`, `SEC-003`, `SEC-005`, `SEC-007`, `API-008`: authenticated/role/JWT.
+6. `CUSTOM-002`, `CUSTOM-003`: contract, DI e layout custom protegido.
+7. `SPRING-012` e `GREEN-003`: `mvn package` e baseline integrada verificável.
+8. `HARNESS-001`–`HARNESS-004`: JSON estável e handoff consumível por agentes.
+9. `DOC-001`: catálogo compacto e exemplos canônicos para humanos e agentes.
 10. Reference Application end-to-end cobrindo o conjunto acima.
 
 ## Core Technical Debt
@@ -1888,11 +1889,11 @@ deliberados não têm meta de 100%.
 
 | Horizon | Total | Done | Partial | Todo | Other | Completion |
 |---|---:|---:|---:|---:|---:|---:|
-| Core V1 | 213 | 159 | 17 | 37 | 0 | 78,6% |
-| Next / Upstream | 183 | 0 | 11 | 170 | 2 | 3,0% |
+| Core V1 | 213 | 168 | 16 | 29 | 0 | 82,6% |
+| Next / Upstream | 183 | 1 | 11 | 169 | 2 | 3,6% |
 | Labs / Research | 134 | 0 | 1 | 69 | 64 | N/A |
 | Custom / Non-goals | 20 | 0 | 0 | 0 | 20 | N/A |
-| **Canonical total** | **550** | **159** | **29** | **276** | **86** | — |
+| **Canonical total** | **550** | **169** | **28** | **267** | **86** | — |
 
 `Other` reúne `RESEARCH`, `NOT_SUPPORTED`, `CUSTOM` e `WONT_DO`. Ele não mascara trabalho do Core:
 a seleção Core contém apenas itens implementáveis `DONE`, `PARTIAL` ou `TODO`.
@@ -1910,15 +1911,14 @@ a seleção Core contém apenas itens implementáveis `DONE`, `PARTIAL` ou `TODO
 
 ## Audit Snapshot
 
-Baseline auditada: commit `de17aa8` (`TYPE-022: Optional<T> explícito`), isolado das mudanças
-locais concorrentes que já existiam no workspace.
+Baseline auditada no ciclo que fecha `FLOW-019`:
 
 | Métrica | Resultado |
 |---|---:|
-| Produção Java | 208 arquivos / 18.682 linhas |
-| Testes Java | 71 arquivos / 9.555 linhas |
+| Produção Java | 210 arquivos / 20.849 linhas |
+| Testes Java | 81 arquivos / 11.383 linhas |
 | Gate | `mvn -o clean test` — **BUILD SUCCESS** |
-| Testes executados | 378; 0 failures, 0 errors, 0 skipped |
+| Testes executados | 421; 0 failures, 0 errors, 0 skipped |
 
 # Core V1 Completion Criteria
 
@@ -1948,16 +1948,16 @@ avançada, semantic diff, zero-downtime migration, marketplace ou plugin ecosyst
 
 ## Top 10 Core V1 Next Tasks
 
-1. Fechar `TYPE-023` → `DOM-012` → `PERSIST-009` para relationships reais.
-2. Implementar `FLOW-011` e `FLOW-019`/`FLOW-020` para SearchOrders.
-3. Implementar `FLOW-011`–`FLOW-013` para mutação e erros/preconditions explícitos.
-4. Implementar `FLOW-014`, `INTEG-001`–`INTEG-004` e `RELY-001` para FraudService.
-5. Implementar `FLOW-019`/`FLOW-020` somente no recorte exigido pela Reference Application.
-6. Implementar `EVENT-001`/`EVENT-003`/`EVENT-005`/`EVENT-007` e `FLOW-015`.
-7. Implementar `SEC-002`/`SEC-003`/`SEC-005`/`SEC-007` e fechar `API-008`.
-8. Fechar `CUSTOM-002`/`CUSTOM-003` e provar DI/layout custom no Maven gerado.
-9. Fechar `SPRING-012`/`GREEN-003`, incluindo `mvn package` e o baseline integrado.
-10. Entregar `HARNESS-001`–`HARNESS-004` e executar a Commerce Reference Application E2E.
+1. Fechar `DOM-012` → `PERSIST-009` para relationships reais sobre `Reference<T>`.
+2. Implementar `FLOW-012` para preconditions reutilizáveis.
+3. Implementar `FLOW-014`, `INTEG-001`–`INTEG-004` e `RELY-001` para FraudService.
+4. Implementar `FLOW-020` somente no recorte de coleção exigido pela Reference Application.
+5. Implementar `EVENT-001`/`EVENT-003`/`EVENT-005`/`EVENT-007` e `FLOW-015`.
+6. Implementar `SEC-002`/`SEC-003`/`SEC-005`/`SEC-007` e fechar `API-008`.
+7. Fechar `CUSTOM-002`/`CUSTOM-003` e provar DI/layout custom no Maven gerado.
+8. Fechar `SPRING-012`/`GREEN-003`, incluindo `mvn package` e o baseline integrado.
+9. Entregar `HARNESS-001`–`HARNESS-004` com JSON e handoff determinísticos.
+10. Executar a Commerce Reference Application E2E e fechar `DOC-001` com o exemplo canônico.
 
 ## Key Scope Reductions
 

@@ -53,7 +53,25 @@ public record ApplicationOperation(
 
     /** Whether the semantic flow needs the entity identifier, independently of any binding. */
     public boolean requiresId() {
-        return flow.stream().anyMatch(instruction -> instruction.command() == FlowCommand.LOAD_BY_ID);
+        return allInstructions().stream()
+                .anyMatch(instruction -> instruction.command() == FlowCommand.LOAD_BY_ID);
+    }
+
+    /** Every instruction in source order, including instructions in conditional branches. */
+    public List<FlowInstruction> allInstructions() {
+        java.util.ArrayList<FlowInstruction> result = new java.util.ArrayList<>();
+        append(flow, result);
+        return List.copyOf(result);
+    }
+
+    private static void append(List<FlowInstruction> source, List<FlowInstruction> target) {
+        for (FlowInstruction instruction : source) {
+            target.add(instruction);
+            if (instruction.command() == FlowCommand.IF) {
+                append(instruction.whenTrue(), target);
+                append(instruction.whenFalse(), target);
+            }
+        }
     }
 
     public enum Kind {
@@ -170,6 +188,8 @@ public record ApplicationOperation(
             List<SortOrder> sort,
             boolean paged,
             Optional<TypedValue> value,
+            List<FlowInstruction> whenTrue,
+            List<FlowInstruction> whenFalse,
             SourceRef where) {
 
         /** One ordering step: a field and whether it descends. */
@@ -195,13 +215,28 @@ public record ApplicationOperation(
             }
         }
 
+        /** Every instruction but a conditional, which is the only one that carries branches. */
+        public FlowInstruction(
+                FlowCommand command,
+                Optional<String> variable,
+                Optional<String> entity,
+                List<String> fields,
+                List<SortOrder> sort,
+                boolean paged,
+                Optional<TypedValue> value,
+                SourceRef where) {
+            this(command, variable, entity, fields, sort, paged, value, List.of(), List.of(),
+                    where);
+        }
+
         /** Every instruction but {@code fail}, which is the only one that carries a guard. */
         public FlowInstruction(
                 FlowCommand command,
                 Optional<String> variable,
                 Optional<String> entity,
                 SourceRef where) {
-            this(command, variable, entity, List.of(), List.of(), false, Optional.empty(), where);
+            this(command, variable, entity, List.of(), List.of(), false, Optional.empty(),
+                    List.of(), List.of(), where);
         }
 
         public FlowInstruction {
@@ -211,6 +246,8 @@ public record ApplicationOperation(
             fields = List.copyOf(fields);
             sort = List.copyOf(sort);
             Objects.requireNonNull(value, "value");
+            whenTrue = List.copyOf(whenTrue);
+            whenFalse = List.copyOf(whenFalse);
             Objects.requireNonNull(where, "where");
             boolean valid = switch (command) {
                 case VALIDATE_INPUT -> variable.isEmpty() && entity.isEmpty();
@@ -220,10 +257,18 @@ public record ApplicationOperation(
                 // The assigned field is the value's own name, so it is not repeated in `fields`.
                 case SET_FIELD, ADD_TO, REMOVE_FROM ->
                         variable.isPresent() && fields.isEmpty() && value.isPresent();
+                case IF -> variable.isEmpty()
+                        && entity.isEmpty()
+                        && fields.isEmpty()
+                        && sort.isEmpty()
+                        && !paged
+                        && value.isPresent()
+                        && !whenTrue.isEmpty();
                 case CREATE_FROM, LOAD_BY_ID, LIST_ALL -> variable.isPresent() && entity.isPresent();
                 case UPDATE_FROM, SAVE, DELETE -> variable.isPresent() && entity.isEmpty();
                 case RETURN -> entity.isEmpty();
             };
+            valid &= command == FlowCommand.IF || whenTrue.isEmpty() && whenFalse.isEmpty();
             if (!valid) {
                 throw new IllegalArgumentException("invalid operands for flow command " + command);
             }
@@ -238,6 +283,7 @@ public record ApplicationOperation(
         SET_FIELD,
         ADD_TO,
         REMOVE_FROM,
+        IF,
         CREATE_FROM,
         LOAD_BY_ID,
         UPDATE_FROM,

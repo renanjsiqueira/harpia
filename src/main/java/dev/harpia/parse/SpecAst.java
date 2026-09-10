@@ -125,7 +125,7 @@ public final class SpecAst {
 
     public sealed interface FlowStatement
             permits ValidateInput, CreateFrom, LoadById, FindBy, UpdateFrom, SetField,
-                    ChangeCollection, ListAll, ListBy, Save, Delete, Fail, Return {
+                    ChangeCollection, Conditional, ListAll, ListBy, Save, Delete, Fail, Return {
         SourceRef where();
     }
 
@@ -164,6 +164,30 @@ public final class SpecAst {
     }
 
     public record UpdateFrom(String variable, SourceRef where) implements FlowStatement {}
+
+    /**
+     * Two branches, one of which runs.
+     *
+     * <p>A flow that says {@code fail ... when} answers a question by stopping. A conditional
+     * answers it by doing something different, which is why both exist.
+     */
+    public record Conditional(
+            String text,
+            LogicAst.Expression condition,
+            List<FlowStatement> whenTrue,
+            List<FlowStatement> whenFalse,
+            SourceRef where) implements FlowStatement {
+        public Conditional {
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(condition, "condition");
+            whenTrue = List.copyOf(whenTrue);
+            whenFalse = List.copyOf(whenFalse);
+            Objects.requireNonNull(where, "where");
+            if (whenTrue.isEmpty()) {
+                throw new IllegalArgumentException("conditional true branch must not be empty");
+            }
+        }
+    }
 
     /** Whether an element joins a collection or leaves it. */
     public enum CollectionChange {

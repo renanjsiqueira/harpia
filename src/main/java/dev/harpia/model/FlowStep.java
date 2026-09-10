@@ -12,6 +12,7 @@ public sealed interface FlowStep
                 FlowStep.UpdateFrom,
                 FlowStep.SetField,
                 FlowStep.ChangeCollection,
+                FlowStep.Conditional,
                 FlowStep.ListAll,
                 FlowStep.ListBy,
                 FlowStep.Save,
@@ -89,6 +90,25 @@ public sealed interface FlowStep
     record SortOrder(String field, boolean descending) {
         public SortOrder {
             Objects.requireNonNull(field, "field");
+        }
+    }
+
+    /** Two branches, one of which runs. */
+    record Conditional(
+            String text,
+            dev.harpia.logic.TypedExpression condition,
+            java.util.List<FlowStep> whenTrue,
+            java.util.List<FlowStep> whenFalse,
+            SourceRef where) implements FlowStep {
+        public Conditional {
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(condition, "condition");
+            whenTrue = java.util.List.copyOf(whenTrue);
+            whenFalse = java.util.List.copyOf(whenFalse);
+            Objects.requireNonNull(where, "where");
+            if (whenTrue.isEmpty()) {
+                throw new IllegalArgumentException("conditional true branch must not be empty");
+            }
         }
     }
 

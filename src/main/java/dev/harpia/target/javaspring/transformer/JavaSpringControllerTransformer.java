@@ -234,7 +234,7 @@ public final class JavaSpringControllerTransformer {
     }
 
     private static boolean validates(ApplicationOperation operation) {
-        return operation.flow().stream()
+        return operation.allInstructions().stream()
                 .anyMatch(instruction -> instruction.command()
                         == ApplicationOperation.FlowCommand.VALIDATE_INPUT);
     }

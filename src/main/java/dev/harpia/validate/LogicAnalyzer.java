@@ -110,14 +110,15 @@ public final class LogicAnalyzer {
         Map<SourceRef, TypedExpression> typed = new LinkedHashMap<>();
         for (ModuleAst module : project.modules()) {
             for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
-                boolean assigns = useCase.flow().stream().anyMatch(statement ->
+                List<SpecAst.FlowStatement> statements = flattened(useCase.flow());
+                boolean assigns = statements.stream().anyMatch(statement ->
                         statement instanceof SpecAst.SetField
                                 || statement instanceof SpecAst.ChangeCollection);
                 if (!assigns) {
                     continue;
                 }
                 Map<String, String> variables = new LinkedHashMap<>();
-                for (SpecAst.FlowStatement statement : useCase.flow()) {
+                for (SpecAst.FlowStatement statement : statements) {
                     if (statement instanceof SpecAst.CreateFrom create) {
                         variables.put(create.variable(), create.entity());
                     } else if (statement instanceof SpecAst.LoadById load) {
@@ -127,7 +128,7 @@ public final class LogicAnalyzer {
                     }
                 }
                 List<LogicModel.Parameter> scope = scopeOf(useCase.input());
-                for (SpecAst.FlowStatement statement : useCase.flow()) {
+                for (SpecAst.FlowStatement statement : statements) {
                     String variable;
                     String fieldName;
                     String text;
@@ -179,6 +180,18 @@ public final class LogicAnalyzer {
         return Map.copyOf(typed);
     }
 
+    private static List<SpecAst.FlowStatement> flattened(List<SpecAst.FlowStatement> flow) {
+        List<SpecAst.FlowStatement> result = new ArrayList<>();
+        for (SpecAst.FlowStatement statement : flow) {
+            result.add(statement);
+            if (statement instanceof SpecAst.Conditional conditional) {
+                result.addAll(flattened(conditional.whenTrue()));
+                result.addAll(flattened(conditional.whenFalse()));
+            }
+        }
+        return List.copyOf(result);
+    }
+
     /**
      * The typed guard of every {@code fail} in the project, by operation and source position.
      *
@@ -190,24 +203,8 @@ public final class LogicAnalyzer {
         Map<SourceRef, TypedExpression> typed = new LinkedHashMap<>();
         for (ModuleAst module : project.modules()) {
             for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
-                if (useCase.flow().stream().noneMatch(SpecAst.Fail.class::isInstance)) {
-                    continue;
-                }
                 List<LogicModel.Parameter> scope = scopeOf(useCase.input());
-                for (SpecAst.FlowStatement statement : useCase.flow()) {
-                    if (!(statement instanceof SpecAst.Fail fail)) {
-                        continue;
-                    }
-                    analyzeExpression(
-                            "guard '" + fail.text() + "'",
-                            scope,
-                            LogicType.BOOLEAN,
-                            fail.condition(),
-                            symbols,
-                            fail.where(),
-                            diagnostics)
-                            .ifPresent(expression -> typed.put(fail.where(), expression));
-                }
+                conditions(useCase.flow(), scope, symbols, typed, diagnostics);
             }
         }
         return Map.copyOf(typed);
@@ -231,6 +228,40 @@ public final class LogicAnalyzer {
                     field.name(), LogicType.of(field.type()), field.where()));
         }
         return List.copyOf(scope);
+    }
+
+    /** Every boolean condition a flow states, at any nesting depth. */
+    private static void conditions(
+            List<SpecAst.FlowStatement> flow,
+            List<LogicModel.Parameter> scope,
+            SymbolTable symbols,
+            Map<SourceRef, TypedExpression> typed,
+            DiagnosticCollector diagnostics) {
+        for (SpecAst.FlowStatement statement : flow) {
+            if (statement instanceof SpecAst.Fail fail) {
+                analyzeExpression(
+                        "guard '" + fail.text() + "'",
+                        scope,
+                        LogicType.BOOLEAN,
+                        fail.condition(),
+                        symbols,
+                        fail.where(),
+                        diagnostics)
+                        .ifPresent(expression -> typed.put(fail.where(), expression));
+            } else if (statement instanceof SpecAst.Conditional conditional) {
+                analyzeExpression(
+                        "condition '" + conditional.text() + "'",
+                        scope,
+                        LogicType.BOOLEAN,
+                        conditional.condition(),
+                        symbols,
+                        conditional.where(),
+                        diagnostics)
+                        .ifPresent(expression -> typed.put(conditional.where(), expression));
+                conditions(conditional.whenTrue(), scope, symbols, typed, diagnostics);
+                conditions(conditional.whenFalse(), scope, symbols, typed, diagnostics);
+            }
+        }
     }
 
     private static Map<String, List<RuleModel>> invariants(
