@@ -567,7 +567,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [ ] `EVENT-005` **Local events provider** — `TODO` · `P0` · `L` · Area: `Messaging`
   - Depends on: `EVENT-001`, `EVENT-004`.
 
-- [ ] `EVENT-007` **Contratos de Event gerados** — `TODO` · `P0` · `M` · Area: `Java/Spring Target`
+- [x] `EVENT-007` **Contratos de Event gerados** — `DONE`; cada Event declarado vira um record imutável no pacote `event` do projeto gerado, com o payload mapeado pelos mesmos tipos dos DTOs — um `Reference<T>` chega como a identidade, não como a linha. Nada é publicado nem assinado ali: o contrato existe independentemente de algum provider vir a carregá-lo · `P0` · `M` · Area: `Java/Spring Target`
+  - Evidence: [`EventContractTest`](src/test/java/dev/harpia/target/javaspring/EventContractTest.java), [`JavaSpringEventTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringEventTransformer.java).
   - Depends on: `EVENT-001`.
 
 - [x] `SEC-001` **Access `public`** — `DONE` · `P0` · `XS` · Area: `Security`

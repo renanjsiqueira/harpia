@@ -16,6 +16,7 @@ public final class JavaSpringProjectTransformer {
     private final JavaSpringBootstrapTransformer bootstrap = new JavaSpringBootstrapTransformer();
     private final JavaSpringEnumTransformer enums = new JavaSpringEnumTransformer();
     private final JavaSpringValueTransformer values = new JavaSpringValueTransformer();
+    private final JavaSpringEventTransformer events = new JavaSpringEventTransformer();
     private final JavaSpringEntityTransformer entities = new JavaSpringEntityTransformer();
     private final JavaSpringRepositoryTransformer repositories =
             new JavaSpringRepositoryTransformer();
@@ -39,6 +40,7 @@ public final class JavaSpringProjectTransformer {
         files.add(bootstrap.transform(context));
         files.addAll(enums.transform(context));
         files.addAll(values.transform(context));
+        files.addAll(events.transform(context));
         for (ApplicationEntity entity : context.application().entities()) {
             boolean hasHttpBindings = entity.operations().stream()
                     .anyMatch(operation -> operation.endpoint().isPresent());

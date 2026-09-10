@@ -532,6 +532,10 @@ ele carrega.
   processo ou atrás de um broker é decisão de um provider, e nenhum estágio do compilador nomeia
   tópico, broker ou listener.
 
+No target Java/Spring, cada Event vira um `record` imutável no pacote `event` do projeto gerado —
+um record porque um evento é um fato: aconteceu, e o que aconteceu não se edita depois. O payload
+usa os mesmos tipos dos DTOs, e um `Reference<T>` chega como a identidade, não como a linha.
+
 `languageVersion: 0` recusa `## Event` com `HRP1107`, pelo mesmo motivo de `## Integration`.
 
 ## 8.1 Rules
