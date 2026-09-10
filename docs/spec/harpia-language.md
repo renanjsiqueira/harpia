@@ -518,6 +518,28 @@ PageRequest.of(request.page(), request.size(),
 Fora do recorte: o envelope com total de registros e de páginas é `TYPE-025`/`API-010`. Hoje a
 operação devolve `List<Entity>` com os registros da página.
 
+## 8.8 set
+
+Na V1, o Flow pode atribuir um campo a partir de uma expressão:
+
+```flow
+validate input
+invoice = create Invoice from input
+set invoice.total = subtotal + fee
+save invoice
+```
+
+`update x from input` copia o que o input trouxer. `set` **computa** um valor. Os dois existem
+porque são operações diferentes, e o flow diz qual aconteceu.
+
+- a expressão é tipada contra o tipo do campo — atribuir `Boolean` a um `Decimal` é recusado;
+- o escopo é o input da operação, o mesmo de `### Rules` e de uma guarda de `fail`;
+- o campo precisa existir na entidade e **não** pode ser `generated`: um campo gerado é do banco, e
+  atribuí-lo seria uma promessa que o flow não pode cumprir;
+- a atribuição acontece onde o flow a coloca, portanto antes do `save` se for para ser armazenada.
+
+Fora do recorte: `add` e `remove` sobre coleções.
+
 ## 8.2 fail
 
 Na V1, o Flow pode levantar um erro de domínio declarado:

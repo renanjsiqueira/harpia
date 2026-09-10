@@ -169,7 +169,7 @@ public record ApplicationOperation(
             List<String> fields,
             List<SortOrder> sort,
             boolean paged,
-            Optional<Guard> guard,
+            Optional<TypedValue> value,
             SourceRef where) {
 
         /** One ordering step: a field and whether it descends. */
@@ -179,13 +179,19 @@ public record ApplicationOperation(
             }
         }
 
-        /** The declared error a {@code fail} raises and the typed condition that raises it. */
-        public record Guard(
-                String error, String text, dev.harpia.logic.TypedExpression condition) {
-            public Guard {
-                Objects.requireNonNull(error, "error");
+        /**
+         * A name, the source it was written as, and the expression it was typed to.
+         *
+         * <p>A {@code fail} names the error it raises and carries the condition that raises it; a
+         * {@code set} names the field it assigns and carries the value. The shape is the same
+         * because the question is: which thing, written how, meaning what.
+         */
+        public record TypedValue(
+                String name, String text, dev.harpia.logic.TypedExpression expression) {
+            public TypedValue {
+                Objects.requireNonNull(name, "name");
                 Objects.requireNonNull(text, "text");
-                Objects.requireNonNull(condition, "condition");
+                Objects.requireNonNull(expression, "expression");
             }
         }
 
@@ -204,13 +210,16 @@ public record ApplicationOperation(
             Objects.requireNonNull(entity, "entity");
             fields = List.copyOf(fields);
             sort = List.copyOf(sort);
-            Objects.requireNonNull(guard, "guard");
+            Objects.requireNonNull(value, "value");
             Objects.requireNonNull(where, "where");
             boolean valid = switch (command) {
                 case VALIDATE_INPUT -> variable.isEmpty() && entity.isEmpty();
-                case FAIL -> guard.isPresent() && variable.isEmpty() && entity.isEmpty();
+                case FAIL -> value.isPresent() && variable.isEmpty() && entity.isEmpty();
                 case FIND_BY, LIST_BY ->
                         variable.isPresent() && entity.isPresent() && !fields.isEmpty();
+                // The assigned field is the value's own name, so it is not repeated in `fields`.
+                case SET_FIELD ->
+                        variable.isPresent() && fields.isEmpty() && value.isPresent();
                 case CREATE_FROM, LOAD_BY_ID, LIST_ALL -> variable.isPresent() && entity.isPresent();
                 case UPDATE_FROM, SAVE, DELETE -> variable.isPresent() && entity.isEmpty();
                 case RETURN -> entity.isEmpty();
@@ -226,6 +235,7 @@ public record ApplicationOperation(
         FAIL,
         FIND_BY,
         LIST_BY,
+        SET_FIELD,
         CREATE_FROM,
         LOAD_BY_ID,
         UPDATE_FROM,

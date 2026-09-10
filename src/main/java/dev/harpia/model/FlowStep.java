@@ -10,6 +10,7 @@ public sealed interface FlowStep
                 FlowStep.LoadById,
                 FlowStep.FindBy,
                 FlowStep.UpdateFrom,
+                FlowStep.SetField,
                 FlowStep.ListAll,
                 FlowStep.ListBy,
                 FlowStep.Save,
@@ -87,6 +88,22 @@ public sealed interface FlowStep
     record SortOrder(String field, boolean descending) {
         public SortOrder {
             Objects.requireNonNull(field, "field");
+        }
+    }
+
+    /** Assigns one field of an entity from a typed expression. */
+    record SetField(
+            String variable,
+            String field,
+            String text,
+            dev.harpia.logic.TypedExpression value,
+            SourceRef where) implements FlowStep {
+        public SetField {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(field, "field");
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(value, "value");
+            Objects.requireNonNull(where, "where");
         }
     }
 

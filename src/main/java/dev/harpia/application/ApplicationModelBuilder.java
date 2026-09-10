@@ -301,7 +301,7 @@ public final class ApplicationModelBuilder {
                     java.util.List.of(),
                     java.util.List.of(),
                     false,
-                    Optional.of(new FlowInstruction.Guard(
+                    Optional.of(new FlowInstruction.TypedValue(
                             value.error(), value.text(), value.condition())),
                     value.where());
         }
@@ -339,6 +339,18 @@ public final class ApplicationModelBuilder {
                     sortOrders(value.sort()),
                     value.paged(),
                     Optional.empty(),
+                    value.where());
+        }
+        if (source instanceof FlowStep.SetField value) {
+            return new FlowInstruction(
+                    FlowCommand.SET_FIELD,
+                    Optional.of(value.variable()),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    false,
+                    Optional.of(new FlowInstruction.TypedValue(
+                            value.field(), value.text(), value.value())),
                     value.where());
         }
         if (source instanceof FlowStep.UpdateFrom value) {

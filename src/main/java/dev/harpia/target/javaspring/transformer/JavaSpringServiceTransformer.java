@@ -187,19 +187,19 @@ public final class JavaSpringServiceTransformer {
                     }
                 }
                 case FAIL -> {
-                    ApplicationOperation.FlowInstruction.Guard guard =
-                            instruction.guard().orElseThrow();
-                    String exception = dev.harpia.model.Naming.errorSymbol(guard.error())
+                    ApplicationOperation.FlowInstruction.TypedValue raised =
+                            instruction.value().orElseThrow();
+                    String exception = dev.harpia.model.Naming.errorSymbol(raised.name())
                             + "Exception";
                     explicitImports.add(names.errorPackage() + "." + exception);
                     JavaLogicWriter.Result condition = JavaLogicWriter.condition(
-                            guard.condition(),
+                            raised.expression(),
                             operation.methodName(),
                             field -> REQUEST_PARAMETER + "." + field + "()");
                     explicitImports.addAll(condition.imports());
                     statements.add("if (" + condition.body() + ") {");
                     statements.add("    throw new " + exception + "(\""
-                            + guard.text().replace("\\", "\\\\").replace("\"", "\\\"")
+                            + raised.text().replace("\\", "\\\\").replace("\"", "\\\"")
                             + "\");");
                     statements.add("}");
                 }
@@ -242,6 +242,19 @@ public final class JavaSpringServiceTransformer {
                     statements.add(listingType(operation, entityName) + " " + variable + " = "
                             + REPOSITORY_FIELD + "." + finderName(instruction) + "("
                             + arguments + ", " + pageable(entity, instruction) + ");");
+                }
+                case SET_FIELD -> {
+                    ApplicationOperation.FlowInstruction.TypedValue assigned =
+                            instruction.value().orElseThrow();
+                    String variable = instruction.variable().orElseThrow();
+                    JavaLogicWriter.Result written = JavaLogicWriter.condition(
+                            assigned.expression(),
+                            operation.methodName(),
+                            field -> REQUEST_PARAMETER + "." + field + "()");
+                    explicitImports.addAll(written.imports());
+                    statements.add(variable + "."
+                            + JavaLayout.accessor("set", assigned.name())
+                            + "(" + written.body() + ");");
                 }
                 case UPDATE_FROM ->
                         copyInput(statements, instruction.variable().orElseThrow(), operation);

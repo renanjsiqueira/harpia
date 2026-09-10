@@ -13,6 +13,7 @@ import dev.harpia.parse.SpecAst.ListBy;
 import dev.harpia.parse.SpecAst.LoadById;
 import dev.harpia.parse.SpecAst.Return;
 import dev.harpia.parse.SpecAst.Save;
+import dev.harpia.parse.SpecAst.SetField;
 import dev.harpia.parse.SpecAst.UpdateFrom;
 import dev.harpia.parse.SpecAst.ValidateInput;
 import java.util.List;
@@ -40,6 +41,8 @@ public final class FlowLineParser {
     private static final Pattern LIST_BY = Pattern.compile(
             "^" + VARIABLE + " +\\= +list +" + ENTITY
                     + " +by +([a-z][A-Za-z0-9]*(?: +and +[a-z][A-Za-z0-9]*)*)" + SORT + PAGED + "$");
+    private static final Pattern SET = Pattern.compile(
+            "^set +" + VARIABLE + "\\.([a-z][A-Za-z0-9]*) += +(\\S.*)$");
     private static final Pattern SAVE = Pattern.compile("^save +" + VARIABLE + "$");
     private static final Pattern DELETE = Pattern.compile("^delete +" + VARIABLE + "$");
     private static final Pattern RETURN = Pattern.compile("^return +(nothing|[a-z][A-Za-z0-9]*)$");
@@ -94,6 +97,15 @@ public final class FlowLineParser {
                     sortOrders(matcher.group(3)),
                     matcher.group(4) != null,
                     where));
+        }
+        matcher = SET.matcher(line);
+        if (matcher.matches()) {
+            String variable = matcher.group(1);
+            String field = matcher.group(2);
+            String text = matcher.group(3).strip();
+            return LogicLexer.tokenize(text, where, diagnostics)
+                    .flatMap(tokens -> LogicExpressionParser.parse(tokens, diagnostics))
+                    .map(value -> new SetField(variable, field, text, value, where));
         }
         matcher = LIST_BY.matcher(line);
         if (matcher.matches()) {

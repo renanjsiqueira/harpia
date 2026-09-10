@@ -25,7 +25,8 @@ public final class Resolver {
             List<ScenarioModel> scenarios,
             Map<String, List<RuleModel>> rules,
             Map<String, List<RuleModel>> invariants,
-            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards) {
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards,
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments) {
         Objects.requireNonNull(syntax, "syntax");
         Objects.requireNonNull(bindings, "bindings");
         Objects.requireNonNull(logics, "logics");
@@ -101,7 +102,8 @@ public final class Resolver {
                                 rules,
                                 declared,
                                 invariants,
-                                guards))
+                                guards,
+                                assignments))
                         .toList(),
                 logics,
                 scenarios);
@@ -130,7 +132,8 @@ public final class Resolver {
             Map<String, List<RuleModel>> rules,
             Declared declared,
             Map<String, List<RuleModel>> invariants,
-            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards) {
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards,
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments) {
         SpecAst.EntityDeclaration declaration = module.entity();
         List<FieldModel> fields = declaration.fields().stream()
                 .map(field -> field(field, declared))
@@ -144,7 +147,7 @@ public final class Resolver {
                         "Resolver requires semantic validation before resolving "
                                 + declaration.name()));
         List<UseCaseModel> useCases = operations.stream()
-                .map(useCase -> useCase(useCase, fields, bindings, rules, declared, guards))
+                .map(useCase -> useCase(useCase, fields, bindings, rules, declared, guards, assignments))
                 .toList();
         return new EntityModel(
                 declaration.name(),
@@ -206,7 +209,8 @@ public final class Resolver {
             BindingModel bindings,
             Map<String, List<RuleModel>> rules,
             Declared declared,
-            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards) {
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards,
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments) {
         Map<String, FieldModel> fieldsByName = new LinkedHashMap<>();
         entityFields.forEach(field -> fieldsByName.putIfAbsent(field.name(), field));
 
@@ -226,7 +230,7 @@ public final class Resolver {
 
         LinkedHashMap<String, FlowModel.ValueType> variables = new LinkedHashMap<>();
         List<FlowStep> steps = useCase.flow().stream()
-                .map(statement -> flowStep(statement, variables, guards))
+                .map(statement -> flowStep(statement, variables, guards, assignments))
                 .toList();
 
         OutputModel.Shape shape = new OutputModel.Shape(
@@ -282,7 +286,8 @@ public final class Resolver {
     private static FlowStep flowStep(
             SpecAst.FlowStatement statement,
             LinkedHashMap<String, FlowModel.ValueType> variables,
-            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards) {
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards,
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments) {
         if (statement instanceof SpecAst.ValidateInput value) {
             return new FlowStep.ValidateInput(value.where());
         }
@@ -301,6 +306,14 @@ public final class Resolver {
                     FlowModel.Kind.ENTITY, value.entity()));
             return new FlowStep.FindBy(
                     value.variable(), value.entity(), value.field(), value.where());
+        }
+        if (statement instanceof SpecAst.SetField value) {
+            return new FlowStep.SetField(
+                    value.variable(),
+                    value.field(),
+                    value.text(),
+                    assignments.get(value.where()),
+                    value.where());
         }
         if (statement instanceof SpecAst.UpdateFrom value) {
             return new FlowStep.UpdateFrom(value.variable(), value.where());

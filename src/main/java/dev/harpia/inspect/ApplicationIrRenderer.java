@@ -78,8 +78,13 @@ final class ApplicationIrRenderer {
                                         .reduce((left, right) -> left + " and " + right)
                                         .orElse(""))
                         .append(instruction.paged() ? " paged" : "")
-                        .append(instruction.guard()
-                                .map(guard -> " " + guard.error() + " when " + guard.text())
+                        // The shape is shared; how it reads is not. A fail raises when something
+                        // holds; a set assigns a value to a field.
+                        .append(instruction.value()
+                                .map(typed -> switch (instruction.command()) {
+                                    case FAIL -> " " + typed.name() + " when " + typed.text();
+                                    default -> " " + typed.name() + " = " + typed.text();
+                                })
                                 .orElse(""))
                         .append('\n'));
                 operation.failures().forEach(failure -> out.append("      Failure ")

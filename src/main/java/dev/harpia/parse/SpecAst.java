@@ -124,8 +124,8 @@ public final class SpecAst {
     }
 
     public sealed interface FlowStatement
-            permits ValidateInput, CreateFrom, LoadById, FindBy, UpdateFrom, ListAll, ListBy,
-                    Save, Delete, Fail, Return {
+            permits ValidateInput, CreateFrom, LoadById, FindBy, UpdateFrom, SetField, ListAll,
+                    ListBy, Save, Delete, Fail, Return {
         SourceRef where();
     }
 
@@ -164,6 +164,28 @@ public final class SpecAst {
     }
 
     public record UpdateFrom(String variable, SourceRef where) implements FlowStatement {}
+
+    /**
+     * Assigns one field of an entity from an expression.
+     *
+     * <p>{@code update ... from input} copies whatever the input carries. This computes a single
+     * value, which is the reason it exists: the two are different operations, and saying which one
+     * happened is the point.
+     */
+    public record SetField(
+            String variable,
+            String field,
+            String text,
+            LogicAst.Expression value,
+            SourceRef where) implements FlowStatement {
+        public SetField {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(field, "field");
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(value, "value");
+            Objects.requireNonNull(where, "where");
+        }
+    }
 
     /** One ordering step: a field and whether it descends. */
     public record SortOrder(String field, boolean descending) {

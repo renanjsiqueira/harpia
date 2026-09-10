@@ -297,6 +297,7 @@ public final class SemanticValidator {
         validateFailures(useCase, diagnostics);
         validateFinds(useCase, target.orElseThrow(), diagnostics);
         validatePageOutput(useCase, diagnostics);
+        validateAssignments(useCase, target.orElseThrow(), diagnostics);
         validateFlow(target.orElseThrow(), useCase, diagnostics);
     }
 
@@ -340,6 +341,33 @@ public final class SemanticValidator {
                 if (list.paged()) {
                     pageable(useCase, list.where(), diagnostics);
                 }
+            }
+        }
+    }
+
+    /**
+     * A {@code set} assigns a field the entity has and Harpia does not own.
+     *
+     * <p>A generated field is the database's to decide, so writing one would be a claim the flow
+     * cannot keep.
+     */
+    private static void validateAssignments(
+            SpecAst.UseCaseDeclaration useCase, Entity target, DiagnosticCollector diagnostics) {
+        for (SpecAst.FlowStatement statement : useCase.flow()) {
+            if (!(statement instanceof SpecAst.SetField set)) {
+                continue;
+            }
+            SpecAst.FieldDeclaration field = target.fields().get(set.field());
+            if (field == null) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_INPUT_FIELD_UNKNOWN,
+                        "entity '" + target.name() + "' has no field '" + set.field() + "'",
+                        set.where());
+            } else if (field.generated()) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_INPUT_FIELD_UNKNOWN,
+                        "'" + set.field() + "' is generated, so the flow cannot assign it",
+                        set.where());
             }
         }
     }
@@ -704,6 +732,9 @@ public final class SemanticValidator {
                 define(variables, value.variable(), ValueType.list(value.entity()), value.where(), diagnostics);
             } else if (statement instanceof SpecAst.ListBy value) {
                 define(variables, value.variable(), ValueType.list(value.entity()), value.where(), diagnostics);
+            } else if (statement instanceof SpecAst.SetField value) {
+                requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
+                createsOrUpdates = true;
             } else if (statement instanceof SpecAst.UpdateFrom value) {
                 requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
                 createsOrUpdates = true;

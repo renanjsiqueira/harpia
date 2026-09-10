@@ -17,6 +17,7 @@ import dev.harpia.model.RuleModel;
 import dev.harpia.model.ScenarioModel;
 import dev.harpia.model.TypeRef;
 import dev.harpia.parse.LogicAst;
+import dev.harpia.parse.FieldLineParser;
 import dev.harpia.parse.ModuleAst;
 import dev.harpia.parse.ProjectAst;
 import dev.harpia.symbol.Symbol;
@@ -77,7 +78,8 @@ public final class LogicAnalyzer {
                 ScenarioAnalyzer.analyze(project, symbols, diagnostics),
                 rules(project, symbols, diagnostics),
                 invariants(project, symbols, diagnostics),
-                guards(project, symbols, diagnostics));
+                guards(project, symbols, diagnostics),
+                assignments(project, symbols, diagnostics));
     }
 
     /**
@@ -87,6 +89,69 @@ public final class LogicAnalyzer {
      * over what the entity is allowed to be, so its scope is the entity's own fields and it holds
      * whichever operation ran.
      */
+    /**
+     * The typed value of every {@code set}, by source position.
+     *
+     * <p>A set assigns to a field, so the field's type is what the expression must produce. Typing
+     * it against that type is what turns "assign something" into "assign this".
+     */
+    public static Map<SourceRef, TypedExpression> assignments(
+            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+        Map<String, Map<String, SpecAst.FieldDeclaration>> entities = new LinkedHashMap<>();
+        for (ModuleAst module : project.modules()) {
+            if (!module.declaresEntity()) {
+                continue;
+            }
+            Map<String, SpecAst.FieldDeclaration> fields = new LinkedHashMap<>();
+            module.entity().fields().forEach(field -> fields.putIfAbsent(field.name(), field));
+            entities.put(module.entity().name(), fields);
+        }
+
+        Map<SourceRef, TypedExpression> typed = new LinkedHashMap<>();
+        for (ModuleAst module : project.modules()) {
+            for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
+                if (useCase.flow().stream().noneMatch(SpecAst.SetField.class::isInstance)) {
+                    continue;
+                }
+                Map<String, String> variables = new LinkedHashMap<>();
+                for (SpecAst.FlowStatement statement : useCase.flow()) {
+                    if (statement instanceof SpecAst.CreateFrom create) {
+                        variables.put(create.variable(), create.entity());
+                    } else if (statement instanceof SpecAst.LoadById load) {
+                        variables.put(load.variable(), load.entity());
+                    } else if (statement instanceof SpecAst.FindBy find) {
+                        variables.put(find.variable(), find.entity());
+                    }
+                }
+                List<LogicModel.Parameter> scope = scopeOf(useCase.input());
+                for (SpecAst.FlowStatement statement : useCase.flow()) {
+                    if (!(statement instanceof SpecAst.SetField set)) {
+                        continue;
+                    }
+                    SpecAst.FieldDeclaration field = Optional.ofNullable(
+                                    variables.get(set.variable()))
+                            .map(entities::get)
+                            .map(fields -> fields.get(set.field()))
+                            .orElse(null);
+                    if (field == null || !FieldLineParser.isScalar(field.type())) {
+                        // Nothing to type against; the structural error is reported elsewhere.
+                        continue;
+                    }
+                    analyzeExpression(
+                            "'" + set.text() + "'",
+                            scope,
+                            LogicType.of(field.type()),
+                            set.value(),
+                            symbols,
+                            set.where(),
+                            diagnostics)
+                            .ifPresent(value -> typed.put(set.where(), value));
+                }
+            }
+        }
+        return Map.copyOf(typed);
+    }
+
     /**
      * The typed guard of every {@code fail} in the project, by operation and source position.
      *
@@ -217,11 +282,13 @@ public final class LogicAnalyzer {
             List<ScenarioModel> scenarios,
             Map<String, List<RuleModel>> rules,
             Map<String, List<RuleModel>> invariants,
-            Map<SourceRef, TypedExpression> guards) {
+            Map<SourceRef, TypedExpression> guards,
+            Map<SourceRef, TypedExpression> assignments) {
         public Result {
             rules = Map.copyOf(rules);
             invariants = Map.copyOf(invariants);
             guards = Map.copyOf(guards);
+            assignments = Map.copyOf(assignments);
             logics = List.copyOf(logics);
             scenarios = List.copyOf(scenarios);
         }
