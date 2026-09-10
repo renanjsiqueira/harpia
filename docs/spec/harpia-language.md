@@ -484,6 +484,40 @@ entrada. Então a ordem declarada **refina** a ordem estável em vez de substitu
 Sort.by(Sort.Order.desc("priority"), Sort.Order.asc("title"), Sort.Order.asc("id"))
 ```
 
+## 8.6 paged
+
+Na V1, uma listagem pode devolver só uma fatia:
+
+```flow
+tickets = list Ticket by status sorted by title paged
+```
+
+`page` e `size` vêm do `### Input` da própria operação e precisam estar declarados como `Int`
+(`HRP2129`):
+
+```markdown
+### Input
+
+- status: String required
+- page: Int required
+- size: Int required
+```
+
+Eles são a **única exceção** à regra de que todo input nomeia um campo da entidade — descrevem a
+requisição, não a entidade. Declará-los em vez de inventá-los é o que faz o request model gerado
+mostrar ao chamador o que ele precisa enviar.
+
+Uma página é uma fatia de uma ordem, então a paginação se apoia na ordem estável (§8.5) em vez de
+substituí-la:
+
+```java
+PageRequest.of(request.page(), request.size(),
+        Sort.by(Sort.Order.asc("title"), Sort.Order.asc("id")))
+```
+
+Fora do recorte: o envelope com total de registros e de páginas é `TYPE-025`/`API-010`. Hoje a
+operação devolve `List<Entity>` com os registros da página.
+
 ## 8.2 fail
 
 Na V1, o Flow pode levantar um erro de domínio declarado:

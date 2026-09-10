@@ -226,21 +226,29 @@ public final class JavaSpringServiceTransformer {
                 }
                 case LIST_BY -> {
                     explicitImports.add("org.springframework.data.domain.Sort");
+                    if (instruction.paged()) {
+                        explicitImports.add("org.springframework.data.domain.PageRequest");
+                    }
                     String variable = instruction.variable().orElseThrow();
                     String arguments = instruction.fields().stream()
                             .map(field -> REQUEST_PARAMETER + "." + field + "()")
                             .collect(java.util.stream.Collectors.joining(", "));
                     statements.add("List<" + entityName + "> " + variable + " = "
                             + REPOSITORY_FIELD + "." + finderName(instruction) + "("
-                            + arguments + ", " + sort(entity, instruction) + ");");
+                            + arguments + ", " + pageable(entity, instruction) + ");");
                 }
                 case UPDATE_FROM ->
                         copyInput(statements, instruction.variable().orElseThrow(), operation);
                 case LIST_ALL -> {
                     explicitImports.add("org.springframework.data.domain.Sort");
+                    if (instruction.paged()) {
+                        explicitImports.add("org.springframework.data.domain.PageRequest");
+                    }
                     String variable = instruction.variable().orElseThrow();
                     statements.add("List<" + entityName + "> " + variable + " = "
-                            + REPOSITORY_FIELD + ".findAll(" + sort(entity, instruction) + ");");
+                            + REPOSITORY_FIELD + ".findAll("
+                            + pageable(entity, instruction) + ")"
+                            + (instruction.paged() ? ".getContent();" : ";"));
                 }
                 case SAVE -> {
                     String variable = instruction.variable().orElseThrow();
@@ -282,6 +290,21 @@ public final class JavaSpringServiceTransformer {
      * felt like, and Harpia promises the same bytes for the same input. The id goes last as the
      * tiebreaker, so a declared order refines the stable one instead of replacing it.
      */
+    /**
+     * What the listing passes to the repository: an order, or a page of that order.
+     *
+     * <p>A page without an order is a page of nothing in particular, so paging is layered on top of
+     * the same stable order rather than replacing it.
+     */
+    private static String pageable(
+            ApplicationEntity entity, ApplicationOperation.FlowInstruction instruction) {
+        String order = sort(entity, instruction);
+        return instruction.paged()
+                ? "PageRequest.of(" + REQUEST_PARAMETER + ".page(), " + REQUEST_PARAMETER
+                        + ".size(), " + order + ")"
+                : order;
+    }
+
     private static String sort(
             ApplicationEntity entity, ApplicationOperation.FlowInstruction instruction) {
         if (instruction.sort().isEmpty()) {

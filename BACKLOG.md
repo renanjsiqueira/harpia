@@ -442,7 +442,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `QUERY-004` **Sorting declarativo** — `DONE` na V1; `sorted by campo [asc|desc] [and ...]` vale para `list` com e sem filtro, e o id permanece como desempate final para que a ordem declarada **refine** a ordem estável em vez de substituí-la. Direção omitida é ascendente · `P0` · `M` · Area: `Persistence`
   - Evidence: [`FlowLineParser`](src/main/java/dev/harpia/parse/FlowLineParser.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`JavaSpringServiceTestTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTestTransformer.java), [`SortingTest`](src/test/java/dev/harpia/validate/SortingTest.java).
 
-- [ ] `QUERY-005` **Pagination offset/page** — `TODO` · `P0` · `M` · Area: `API`
+- [x] `QUERY-005` **Pagination offset/page** — `DONE` na V1; `paged` sobre `list` com ou sem filtro vira `PageRequest.of(page, size, <ordem>)`, e o repositório recebe `Pageable` em vez de `Sort`. `page` e `size` são inputs declarados (`HRP2129`) — a única exceção à regra de que todo input nomeia um campo da entidade, porque descrevem a requisição e não a entidade. O envelope com total/páginas é `TYPE-025`/`API-010` · `P0` · `M` · Area: `API`
+  - Evidence: [`FlowLineParser`](src/main/java/dev/harpia/parse/FlowLineParser.java), [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`PaginationTest`](src/test/java/dev/harpia/validate/PaginationTest.java).
 
 - [ ] `QUERY-009` **Access de Query** — `PARTIAL`; somente `public` · `P0` · `L` · Area: `Security`
   - Evidence: [`AccessRule`](src/main/java/dev/harpia/model/AccessRule.java), [`AccessParser`](src/main/java/dev/harpia/parse/AccessParser.java).
@@ -811,7 +812,7 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 Em ordem de dependência e valor para a Reference Application:
 
 1. `DOM-012` e `PERSIST-009`: relationships end-to-end sobre a referência tipada de `TYPE-023`.
-2. `QUERY-005`: paginação sobre os filtros e ordenação já prontos.
+2. `TYPE-025` e `API-010`: envelope `Page<T>` com total e páginas sobre a paginação de `QUERY-005`.
 3. `FLOW-011`–`FLOW-014`, `FLOW-019`, `FLOW-020`: mutação, precondition/failure, calls e controle.
 4. `INTEG-001`–`INTEG-004`, `INTEG-010`, `RELY-001`: FraudService HTTP tipado.
 5. `EVENT-001`, `EVENT-003`, `EVENT-005`, `EVENT-007`, `FLOW-015`: Event local e emit.
@@ -1947,7 +1948,7 @@ avançada, semantic diff, zero-downtime migration, marketplace ou plugin ecosyst
 ## Top 10 Core V1 Next Tasks
 
 1. Fechar `TYPE-023` → `DOM-012` → `PERSIST-009` para relationships reais.
-2. Implementar `QUERY-005` para SearchOrders.
+2. Implementar `TYPE-025`/`API-010` para SearchOrders.
 3. Implementar `FLOW-011`–`FLOW-013` para mutação e erros/preconditions explícitos.
 4. Implementar `FLOW-014`, `INTEG-001`–`INTEG-004` e `RELY-001` para FraudService.
 5. Implementar `FLOW-019`/`FLOW-020` somente no recorte exigido pela Reference Application.

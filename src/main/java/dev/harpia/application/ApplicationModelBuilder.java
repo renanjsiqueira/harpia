@@ -300,6 +300,7 @@ public final class ApplicationModelBuilder {
                     Optional.empty(),
                     java.util.List.of(),
                     java.util.List.of(),
+                    false,
                     Optional.of(new FlowInstruction.Guard(
                             value.error(), value.text(), value.condition())),
                     value.where());
@@ -325,6 +326,7 @@ public final class ApplicationModelBuilder {
                     Optional.of(value.entity()),
                     java.util.List.of(value.field()),
                     java.util.List.of(),
+                    false,
                     Optional.empty(),
                     value.where());
         }
@@ -335,6 +337,7 @@ public final class ApplicationModelBuilder {
                     Optional.of(value.entity()),
                     value.fields(),
                     sortOrders(value.sort()),
+                    value.paged(),
                     Optional.empty(),
                     value.where());
         }
@@ -352,6 +355,7 @@ public final class ApplicationModelBuilder {
                     Optional.of(value.entity()),
                     java.util.List.of(),
                     sortOrders(value.sort()),
+                    value.paged(),
                     Optional.empty(),
                     value.where());
         }

@@ -77,6 +77,7 @@ final class ApplicationIrRenderer {
                                                 + (order.descending() ? " desc" : " asc"))
                                         .reduce((left, right) -> left + " and " + right)
                                         .orElse(""))
+                        .append(instruction.paged() ? " paged" : "")
                         .append(instruction.guard()
                                 .map(guard -> " " + guard.error() + " when " + guard.text())
                                 .orElse(""))

@@ -72,6 +72,7 @@ public sealed interface FlowStep
             String entity,
             java.util.List<String> fields,
             java.util.List<SortOrder> sort,
+            boolean paged,
             SourceRef where) implements FlowStep {
         public ListBy {
             Objects.requireNonNull(variable, "variable");
@@ -100,6 +101,7 @@ public sealed interface FlowStep
             String variable,
             String entity,
             java.util.List<SortOrder> sort,
+            boolean paged,
             SourceRef where) implements FlowStep {
         public ListAll {
             Objects.requireNonNull(variable, "variable");

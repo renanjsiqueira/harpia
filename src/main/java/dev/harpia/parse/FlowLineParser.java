@@ -34,11 +34,12 @@ public final class FlowLineParser {
     private static final Pattern UPDATE = Pattern.compile("^update +" + VARIABLE + " +from +input$");
     private static final String SORT = "(?: +sorted +by +([a-z][A-Za-z0-9]*(?: +(?:asc|desc))?"
             + "(?: +and +[a-z][A-Za-z0-9]*(?: +(?:asc|desc))?)*))?";
+    private static final String PAGED = "( +paged)?";
     private static final Pattern LIST =
-            Pattern.compile("^" + VARIABLE + " +\\= +list +" + ENTITY + SORT + "$");
+            Pattern.compile("^" + VARIABLE + " +\\= +list +" + ENTITY + SORT + PAGED + "$");
     private static final Pattern LIST_BY = Pattern.compile(
             "^" + VARIABLE + " +\\= +list +" + ENTITY
-                    + " +by +([a-z][A-Za-z0-9]*(?: +and +[a-z][A-Za-z0-9]*)*)" + SORT + "$");
+                    + " +by +([a-z][A-Za-z0-9]*(?: +and +[a-z][A-Za-z0-9]*)*)" + SORT + PAGED + "$");
     private static final Pattern SAVE = Pattern.compile("^save +" + VARIABLE + "$");
     private static final Pattern DELETE = Pattern.compile("^delete +" + VARIABLE + "$");
     private static final Pattern RETURN = Pattern.compile("^return +(nothing|[a-z][A-Za-z0-9]*)$");
@@ -88,7 +89,11 @@ public final class FlowLineParser {
         matcher = LIST.matcher(line);
         if (matcher.matches()) {
             return Optional.of(new ListAll(
-                    matcher.group(1), matcher.group(2), sortOrders(matcher.group(3)), where));
+                    matcher.group(1),
+                    matcher.group(2),
+                    sortOrders(matcher.group(3)),
+                    matcher.group(4) != null,
+                    where));
         }
         matcher = LIST_BY.matcher(line);
         if (matcher.matches()) {
@@ -97,6 +102,7 @@ public final class FlowLineParser {
                     matcher.group(2),
                     List.of(matcher.group(3).split(" +and +")),
                     sortOrders(matcher.group(4)),
+                    matcher.group(5) != null,
                     where));
         }
         matcher = SAVE.matcher(line);

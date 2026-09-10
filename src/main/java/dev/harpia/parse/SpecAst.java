@@ -173,8 +173,11 @@ public final class SpecAst {
     }
 
     public record ListAll(
-            String variable, String entity, List<SortOrder> sort, SourceRef where)
-            implements FlowStatement {
+            String variable,
+            String entity,
+            List<SortOrder> sort,
+            boolean paged,
+            SourceRef where) implements FlowStatement {
         public ListAll {
             Objects.requireNonNull(variable, "variable");
             Objects.requireNonNull(entity, "entity");
@@ -189,6 +192,7 @@ public final class SpecAst {
             String entity,
             List<String> fields,
             List<SortOrder> sort,
+            boolean paged,
             SourceRef where)
             implements FlowStatement {
         public ListBy {

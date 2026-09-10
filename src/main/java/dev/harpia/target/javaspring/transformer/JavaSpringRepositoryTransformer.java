@@ -55,9 +55,15 @@ public final class JavaSpringRepositoryTransformer {
                 }
                 JavaTypeRef entityType = JavaTypeRef.of(domain + "." + entity.typeName());
                 if (many) {
-                    // A filtered list keeps the stable order an unfiltered one already has.
-                    parameters.add(new JavaParameterModel(
-                            "sort", JavaTypeRef.of("org.springframework.data.domain.Sort")));
+                    // A filtered list keeps the stable order an unfiltered one already has; a
+                    // paged one asks for a slice of that same order.
+                    parameters.add(instruction.paged()
+                            ? new JavaParameterModel(
+                                    "pageable",
+                                    JavaTypeRef.of("org.springframework.data.domain.Pageable"))
+                            : new JavaParameterModel(
+                                    "sort",
+                                    JavaTypeRef.of("org.springframework.data.domain.Sort")));
                 }
                 byName.putIfAbsent(method.toString(), new JavaMethodModel(
                         method.toString(),

@@ -218,17 +218,35 @@ public final class JavaSpringServiceTestTransformer {
         if (lists) {
             imports.add("java.util.List");
             imports.add("org.springframework.data.domain.Sort");
-            statements.add(MOCKITO + ".when(repository.findAll(" + MATCHERS
-                    + ".any(Sort.class)))");
-            statements.add("        .thenReturn(List.of(entity));");
+            boolean pagedList = instruction(operation, FlowCommand.LIST_ALL)
+                    .filter(ApplicationOperation.FlowInstruction::paged)
+                    .isPresent();
+            if (pagedList) {
+                imports.add("org.springframework.data.domain.Page");
+                imports.add("org.springframework.data.domain.PageImpl");
+                imports.add("org.springframework.data.domain.Pageable");
+                statements.add(MOCKITO + ".when(repository.findAll(" + MATCHERS
+                        + ".any(Pageable.class)))");
+                statements.add("        .thenReturn(new PageImpl<>(List.of(entity)));");
+            } else {
+                statements.add(MOCKITO + ".when(repository.findAll(" + MATCHERS
+                        + ".any(Sort.class)))");
+                statements.add("        .thenReturn(List.of(entity));");
+            }
         }
         // A filtered list calls the derived finder, and every argument it takes has to be matched.
         filters.ifPresent(instruction -> {
             imports.add("java.util.List");
             imports.add("org.springframework.data.domain.Sort");
+            if (instruction.paged()) {
+                imports.add("org.springframework.data.domain.Pageable");
+            }
+            String last = instruction.paged()
+                    ? MATCHERS + ".any(Pageable.class)"
+                    : MATCHERS + ".any(Sort.class)";
             String matchers = java.util.stream.Stream.concat(
                             instruction.fields().stream().map(field -> MATCHERS + ".any()"),
-                            java.util.stream.Stream.of(MATCHERS + ".any(Sort.class)"))
+                            java.util.stream.Stream.of(last))
                     .collect(java.util.stream.Collectors.joining(", "));
             statements.add(MOCKITO + ".when(repository." + finderName(instruction)
                     + "(" + matchers + "))");
@@ -280,11 +298,24 @@ public final class JavaSpringServiceTestTransformer {
         }
         if (lists) {
             statements.add(ASSERTIONS + ".assertThat(response).hasSize(1);");
-            statements.add(CAPTOR + "<Sort> order = " + CAPTOR + ".forClass(Sort.class);");
-            statements.add(MOCKITO + ".verify(repository).findAll(order.capture());");
-            statements.add(ASSERTIONS + ".assertThat(order.getValue())"
-                    + ".as(\"Harpia requires a stable order\").isEqualTo("
-                    + expectedSort(entity, operation) + ");");
+            boolean pagedList = instruction(operation, FlowCommand.LIST_ALL)
+                    .filter(ApplicationOperation.FlowInstruction::paged)
+                    .isPresent();
+            if (pagedList) {
+                // A page carries the order it was taken from, so the same claim still holds.
+                statements.add(CAPTOR + "<Pageable> order = " + CAPTOR
+                        + ".forClass(Pageable.class);");
+                statements.add(MOCKITO + ".verify(repository).findAll(order.capture());");
+                statements.add(ASSERTIONS + ".assertThat(order.getValue().getSort())"
+                        + ".as(\"Harpia requires a stable order\").isEqualTo("
+                        + expectedSort(entity, operation) + ");");
+            } else {
+                statements.add(CAPTOR + "<Sort> order = " + CAPTOR + ".forClass(Sort.class);");
+                statements.add(MOCKITO + ".verify(repository).findAll(order.capture());");
+                statements.add(ASSERTIONS + ".assertThat(order.getValue())"
+                        + ".as(\"Harpia requires a stable order\").isEqualTo("
+                        + expectedSort(entity, operation) + ");");
+            }
         } else if (loads
                 && operation.result().kind() == ApplicationOperation.ResultKind.ENTITY
                 && !updates) {

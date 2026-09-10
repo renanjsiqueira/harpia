@@ -168,6 +168,7 @@ public record ApplicationOperation(
             Optional<String> entity,
             List<String> fields,
             List<SortOrder> sort,
+            boolean paged,
             Optional<Guard> guard,
             SourceRef where) {
 
@@ -194,7 +195,7 @@ public record ApplicationOperation(
                 Optional<String> variable,
                 Optional<String> entity,
                 SourceRef where) {
-            this(command, variable, entity, List.of(), List.of(), Optional.empty(), where);
+            this(command, variable, entity, List.of(), List.of(), false, Optional.empty(), where);
         }
 
         public FlowInstruction {

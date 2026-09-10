@@ -331,8 +331,41 @@ public final class SemanticValidator {
                     searchable(target, inputs, field, false, list.where(), diagnostics);
                 }
                 sortable(target, list.sort(), list.where(), diagnostics);
+                if (list.paged()) {
+                    pageable(useCase, list.where(), diagnostics);
+                }
             } else if (statement instanceof SpecAst.ListAll list) {
                 sortable(target, list.sort(), list.where(), diagnostics);
+                if (list.paged()) {
+                    pageable(useCase, list.where(), diagnostics);
+                }
+            }
+        }
+    }
+
+    private static boolean paged(SpecAst.FlowStatement statement) {
+        return statement instanceof SpecAst.ListAll list && list.paged()
+                || statement instanceof SpecAst.ListBy filtered && filtered.paged();
+    }
+
+    /**
+     * A paged listing reads which page and how many from its own input.
+     *
+     * <p>The two values are named rather than inferred, so the request model shows them and a
+     * caller can see what it must send. Requiring them is what keeps {@code paged} from silently
+     * inventing fields nobody declared.
+     */
+    private static void pageable(
+            SpecAst.UseCaseDeclaration useCase, SourceRef where, DiagnosticCollector diagnostics) {
+        for (String required : java.util.List.of("page", "size")) {
+            boolean declared = useCase.input().stream()
+                    .anyMatch(field -> field.name().equals(required)
+                            && field.type().equals("Int"));
+            if (!declared) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_PAGED_WITHOUT_INPUT,
+                        "a paged listing needs '- " + required + ": Int required' in '### Input'",
+                        where);
             }
         }
     }
@@ -598,8 +631,17 @@ public final class SemanticValidator {
             SpecAst.UseCaseDeclaration useCase,
             Map<String, SpecAst.FieldDeclaration> fields,
             DiagnosticCollector diagnostics) {
+        // `page` and `size` describe the request, not the entity, so they are the one input a
+        // paged listing may name without a field behind it.
+        Set<String> pagination = useCase.flow().stream().anyMatch(SemanticValidator::paged)
+                ? Set.of("page", "size")
+                : Set.of();
+
         Set<String> seen = new HashSet<>();
         for (SpecAst.InputDeclaration input : useCase.input()) {
+            if (pagination.contains(input.name())) {
+                continue;
+            }
             SpecAst.FieldDeclaration field = fields.get(input.name());
             if (field == null || field.generated() || !seen.add(input.name())) {
                 diagnostics.error(

@@ -212,14 +212,15 @@ public final class Resolver {
 
         List<FieldModel> input = new ArrayList<>();
         for (SpecAst.InputDeclaration declaration : useCase.input()) {
+            // A pagination input has no entity field behind it, so it borrows nothing from one.
             FieldModel entityField = fieldsByName.get(declaration.name());
             input.add(new FieldModel(
                     declaration.name(),
                     fieldType(declaration.type(), declared),
                     declaration.required(),
-                    entityField.unique(),
+                    entityField != null && entityField.unique(),
                     false,
-                    entityField.defaultValue(),
+                    entityField == null ? Optional.empty() : entityField.defaultValue(),
                     declaration.where()));
         }
 
@@ -307,7 +308,11 @@ public final class Resolver {
             variables.put(value.variable(), new FlowModel.ValueType(
                     FlowModel.Kind.LIST, value.entity()));
             return new FlowStep.ListAll(
-                    value.variable(), value.entity(), sortOrders(value.sort()), value.where());
+                    value.variable(),
+                    value.entity(),
+                    sortOrders(value.sort()),
+                    value.paged(),
+                    value.where());
         }
         if (statement instanceof SpecAst.ListBy value) {
             variables.put(value.variable(), new FlowModel.ValueType(
@@ -317,6 +322,7 @@ public final class Resolver {
                     value.entity(),
                     value.fields(),
                     sortOrders(value.sort()),
+                    value.paged(),
                     value.where());
         }
         if (statement instanceof SpecAst.Save value) {

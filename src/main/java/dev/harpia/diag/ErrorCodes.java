@@ -132,6 +132,8 @@ public final class ErrorCodes {
     public static final String SEMANTIC_FAIL_UNDECLARED = "HRP2127";
     /** A find names a field that cannot identify a single record. */
     public static final String SEMANTIC_FIND_NOT_UNIQUE = "HRP2128";
+    /** A paged listing has no page and size to read. */
+    public static final String SEMANTIC_PAGED_WITHOUT_INPUT = "HRP2129";
 
     // --- HRP22xx: external binding semantics -------------------------------------------------
     /** A binding references an operation that is not declared. */
