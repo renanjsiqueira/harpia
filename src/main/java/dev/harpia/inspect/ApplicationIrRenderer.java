@@ -39,9 +39,21 @@ final class ApplicationIrRenderer {
                     .append(" table=").append(entity.tableName())
                     .append(" response=").append(entity.responseTypeName()).append('\n');
             for (ApplicationField field : entity.fields()) {
-                out.append("    Column ").append(field.columnName())
-                        .append(": ").append(field.type().syntax())
-                        .append(field.required() ? " required" : "")
+                if (field.isRelationship()) {
+                    dev.harpia.application.ApplicationFieldType.Relationship relationship =
+                            field.relationship().or(() -> field.relationshipElement())
+                                    .orElseThrow();
+                    out.append("    Relationship ").append(field.name())
+                            .append(": ").append(field.type().syntax())
+                            .append(" cardinality=")
+                            .append(field.relationship().isPresent() ? "ONE" : "MANY")
+                            .append(" loading=").append(relationship.loading())
+                            .append(" lifecycle=").append(relationship.lifecycle());
+                } else {
+                    out.append("    Column ").append(field.columnName())
+                            .append(": ").append(field.type().syntax());
+                }
+                out.append(field.required() ? " required" : "")
                         .append(field.unique() ? " unique" : "")
                         .append(field.generated() ? " generated" : "").append('\n');
             }

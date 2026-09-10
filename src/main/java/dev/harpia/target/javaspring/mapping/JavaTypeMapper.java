@@ -45,6 +45,9 @@ public final class JavaTypeMapper {
             // would import a fetch strategy, a cascade and a lifetime that nothing declared.
             return map(reference.idType());
         }
+        if (type instanceof ApplicationFieldType.Relationship relationship) {
+            return JavaTypeRef.of(domainPackage + "." + relationship.entity());
+        }
         if (type instanceof ApplicationFieldType.Optionality optional) {
             return JavaTypeRef.parameterized(
                     "java.util.Optional", map(optional.element(), domainPackage));
@@ -65,9 +68,14 @@ public final class JavaTypeMapper {
      */
     public static JavaTypeRef stored(ApplicationFieldType type, String domainPackage) {
         Objects.requireNonNull(type, "type");
-        return type instanceof ApplicationFieldType.Optionality optional
-                ? map(optional.element(), domainPackage)
-                : map(type, domainPackage);
+        if (type instanceof ApplicationFieldType.Optionality optional) {
+            return stored(optional.element(), domainPackage);
+        }
+        if (type instanceof ApplicationFieldType.Container container) {
+            return JavaTypeRef.parameterized(
+                    "java.util.List", stored(container.element(), domainPackage));
+        }
+        return map(type, domainPackage);
     }
 
     /** {@code awaiting_payment} names the constant {@code AWAITING_PAYMENT}. */

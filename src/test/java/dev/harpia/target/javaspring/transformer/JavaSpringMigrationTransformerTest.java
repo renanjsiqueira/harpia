@@ -24,6 +24,7 @@ class JavaSpringMigrationTransformerTest {
                     "CONSTRAINT pk_customer PRIMARY KEY (id)",
                     "CONSTRAINT uq_customer_email UNIQUE (email)");
         });
+        assertThat(migration.foreignKeys()).isEmpty();
         assertThat(migration.source()).isPresent();
     }
 }

@@ -6,6 +6,7 @@ import dev.harpia.target.javaspring.JavaLayout;
 import dev.harpia.target.javaspring.JavaSpringContext;
 import dev.harpia.target.javaspring.mapping.JavaDefaultValueMapper;
 import dev.harpia.target.javaspring.mapping.JavaTypeMapper;
+import dev.harpia.target.javaspring.mapping.SqlConstraintNames;
 import dev.harpia.target.javaspring.mapping.SpringPersistenceMapper;
 import dev.harpia.target.javaspring.mapping.SpringValidationMapper;
 import dev.harpia.target.javaspring.model.JavaAnnotationModel;
@@ -47,26 +48,33 @@ public final class JavaSpringEntityTransformer {
                 // A collection cannot live in a column of the owner's row, so it gets a table of
                 // its own, keyed back to the owner. The names match what the migration created.
                 String table = entity.tableName() + "_" + field.columnName();
-                explicitImports.add(new JavaImportModel("jakarta.persistence.CollectionTable"));
                 explicitImports.add(new JavaImportModel("jakarta.persistence.JoinColumn"));
-                explicitImports.add(new JavaImportModel("jakarta.persistence.Column"));
-                annotations.add(JavaAnnotationModel.marker(
-                        "jakarta.persistence.ElementCollection"));
-                annotations.add(JavaAnnotationModel.of(
-                        "jakarta.persistence.CollectionTable",
-                        new JavaAnnotationModel.Attribute("name", "\"" + table + "\""),
-                        new JavaAnnotationModel.Attribute(
-                                "joinColumns",
-                                "@JoinColumn(name = \"" + entity.tableName() + "_id\")")));
-                annotations.add(JavaAnnotationModel.of(
-                        "jakarta.persistence.Column",
-                        new JavaAnnotationModel.Attribute(
-                                "name", "\"" + field.columnName() + "\"")));
-                if (element instanceof dev.harpia.application.ApplicationFieldType.EnumType) {
-                    explicitImports.add(new JavaImportModel("jakarta.persistence.EnumType"));
+                if (element instanceof dev.harpia.application.ApplicationFieldType.Relationship
+                        relationship) {
+                    relationshipCollection(
+                            entity, table, relationship, annotations, explicitImports);
+                } else {
+                    explicitImports.add(
+                            new JavaImportModel("jakarta.persistence.CollectionTable"));
+                    explicitImports.add(new JavaImportModel("jakarta.persistence.Column"));
+                    annotations.add(JavaAnnotationModel.marker(
+                            "jakarta.persistence.ElementCollection"));
                     annotations.add(JavaAnnotationModel.of(
-                            "jakarta.persistence.Enumerated",
-                            new JavaAnnotationModel.Attribute("value", "EnumType.STRING")));
+                            "jakarta.persistence.CollectionTable",
+                            new JavaAnnotationModel.Attribute("name", "\"" + table + "\""),
+                            new JavaAnnotationModel.Attribute(
+                                    "joinColumns",
+                                    "@JoinColumn(name = \"" + entity.tableName() + "_id\")")));
+                    annotations.add(JavaAnnotationModel.of(
+                            "jakarta.persistence.Column",
+                            new JavaAnnotationModel.Attribute(
+                                    "name", "\"" + field.columnName() + "\"")));
+                    if (element instanceof dev.harpia.application.ApplicationFieldType.EnumType) {
+                        explicitImports.add(new JavaImportModel("jakarta.persistence.EnumType"));
+                        annotations.add(JavaAnnotationModel.of(
+                                "jakarta.persistence.Enumerated",
+                                new JavaAnnotationModel.Attribute("value", "EnumType.STRING")));
+                    }
                 }
             });
             field.valueType().ifPresent(value -> {
@@ -140,6 +148,38 @@ public final class JavaSpringEntityTransformer {
                 JavaLayout.sourcePath(context.layout().packagePath(JavaLayout.DOMAIN), entity.typeName()),
                 type,
                 Optional.of(entity.where()));
+    }
+
+    /** A non-owned collection is shared and keeps the target's lifecycle independent. */
+    private static void relationshipCollection(
+            ApplicationEntity entity,
+            String table,
+            dev.harpia.application.ApplicationFieldType.Relationship relationship,
+            List<JavaAnnotationModel> annotations,
+            List<JavaImportModel> imports) {
+        String ownerColumn = entity.tableName() + "_id";
+        String targetColumn = dev.harpia.application.SqlNaming.identifier(relationship.entity())
+                + "_id";
+        imports.add(new JavaImportModel("jakarta.persistence.FetchType"));
+        imports.add(new JavaImportModel("jakarta.persistence.ForeignKey"));
+        imports.add(new JavaImportModel("jakarta.persistence.JoinTable"));
+        annotations.add(JavaAnnotationModel.of(
+                "jakarta.persistence.ManyToMany",
+                new JavaAnnotationModel.Attribute(
+                        "fetch", "FetchType." + relationship.loading().name())));
+        annotations.add(JavaAnnotationModel.of(
+                "jakarta.persistence.JoinTable",
+                new JavaAnnotationModel.Attribute("name", "\"" + table + "\""),
+                new JavaAnnotationModel.Attribute(
+                        "joinColumns",
+                        "@JoinColumn(name = \"" + ownerColumn
+                                + "\", foreignKey = @ForeignKey(name = \""
+                                + SqlConstraintNames.foreignKey(table, ownerColumn) + "\"))"),
+                new JavaAnnotationModel.Attribute(
+                        "inverseJoinColumns",
+                        "@JoinColumn(name = \"" + targetColumn
+                                + "\", foreignKey = @ForeignKey(name = \""
+                                + SqlConstraintNames.foreignKey(table, targetColumn) + "\"))")));
     }
 
     /**

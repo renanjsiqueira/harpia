@@ -261,6 +261,7 @@ sealed interface TypeRef {
     record ListOf(TypeRef element) implements TypeRef {}
     record OptionalOf(TypeRef element) implements TypeRef {}
     record ReferenceTo(SymbolId entity) implements TypeRef {}
+    record RelationshipTo(SymbolId entity, Loading loading, Lifecycle lifecycle) implements TypeRef {}
     record PageOf(TypeRef element) implements TypeRef {}
     record FileType(FileConstraints constraints) implements TypeRef {}
 }
@@ -280,8 +281,9 @@ Entity ValueObject Enum EventPayload IntegrationInput IntegrationOutput
 
 Regras de superfície:
 
-- um nome de Entity em campo singular resolve internamente para `ReferenceTo`;
-- `List<Entity>` é relação múltipla, não generic Java arbitrário;
+- `Reference<Entity>` resolve para `ReferenceTo` e preserva somente a identidade tipada;
+- um nome de Entity em campo singular resolve para `RelationshipTo` lazy e independente;
+- `List<Entity>` é uma relação múltipla lazy e independente, não generic Java arbitrário;
 - `Optional<T>`, `List<T>` e `Page<T>` são os únicos containers inicialmente planejados;
 - ausência de `required` em input continua significando opcional para compatibilidade V0;
 - o formatter V1 não introduz a keyword redundante `optional`;

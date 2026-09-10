@@ -200,9 +200,8 @@ public final class SemanticValidator {
                 return;
             }
             if (symbols.entity(element.orElseThrow()).isPresent()) {
-                // A collection of entities is a relationship, which needs a foreign key and a
-                // lifecycle Harpia has not specified yet.
-                UnsupportedFeatureDetector.reportRelationship(diagnostics, where);
+                // A collection names a real association. Its non-owned V1 defaults are lazy
+                // loading, independent lifecycle and no cascade; `owned` is DOM-013.
                 return;
             }
             // A collection is stored as rows of its element, so a value or another collection
@@ -222,6 +221,12 @@ public final class SemanticValidator {
         if (FieldLineParser.isScalar(type)
                 || symbols.enumType(type).isPresent()
                 || symbols.valueType(type).isPresent()) {
+            return;
+        }
+        if (symbols.entity(type).isPresent()) {
+            if (languageVersion == LanguageVersion.V0) {
+                UnsupportedFeatureDetector.reportRelationship(diagnostics, where);
+            }
             return;
         }
         diagnostics.error(

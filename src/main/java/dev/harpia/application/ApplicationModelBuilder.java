@@ -134,12 +134,6 @@ public final class ApplicationModelBuilder {
     }
 
     private static ApplicationFieldType nominal(dev.harpia.model.FieldType type) {
-        if (type instanceof dev.harpia.model.FieldType.Container container) {
-            return ApplicationFieldType.list(fieldType(container.element()));
-        }
-        if (type instanceof dev.harpia.model.FieldType.Optionality optional) {
-            return ApplicationFieldType.optional(fieldType(optional.element()));
-        }
         dev.harpia.model.FieldType.Nominal declared =
                 (dev.harpia.model.FieldType.Nominal) type;
         return switch (declared.kind()) {
@@ -158,10 +152,25 @@ public final class ApplicationModelBuilder {
 
     private static ApplicationFieldType fieldType(
             dev.harpia.model.FieldType type, Map<String, ApplicationScalarType> identities) {
+        if (type instanceof dev.harpia.model.FieldType.Container container) {
+            return ApplicationFieldType.list(fieldType(container.element(), identities));
+        }
+        if (type instanceof dev.harpia.model.FieldType.Optionality optional) {
+            return ApplicationFieldType.optional(fieldType(optional.element(), identities));
+        }
         if (type instanceof dev.harpia.model.FieldType.Reference reference) {
             return ApplicationFieldType.reference(
                     reference.entity(),
                     identities.getOrDefault(reference.entity(), ApplicationScalarType.UUID));
+        }
+        if (type instanceof dev.harpia.model.FieldType.Relationship relationship) {
+            return ApplicationFieldType.relationship(
+                    relationship.entity(),
+                    identities.getOrDefault(relationship.entity(), ApplicationScalarType.UUID),
+                    ApplicationFieldType.RelationshipLoading.valueOf(
+                            relationship.loading().name()),
+                    ApplicationFieldType.RelationshipLifecycle.valueOf(
+                            relationship.lifecycle().name()));
         }
         return type.scalarKind()
                 .<ApplicationFieldType>map(scalar ->
@@ -178,8 +187,9 @@ public final class ApplicationModelBuilder {
         ApplicationFieldType type = fieldType(source.type(), identities);
         return new ApplicationField(
                 source.name(),
-                // A reference stores an identity, and the column says so.
+                // A reference stores an identity and a direct relationship joins through one.
                 type instanceof ApplicationFieldType.Reference
+                                || type instanceof ApplicationFieldType.Relationship
                         ? SqlNaming.identifier(source.name()) + "_id"
                         : SqlNaming.identifier(source.name()),
                 type,

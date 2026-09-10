@@ -129,8 +129,8 @@ Estado atual do cenário:
 
 | Já suportado | Ainda necessário |
 |---|---|
-| Entity, campos, Enum, ValueObject, Rule/Invariant e Logic | referências/relationships entre entidades |
-| Command/Query CRUD e binding HTTP básico | Flow rico, filtros/sort/page |
+| Entity, campos, Enum, ValueObject, Rule/Invariant, Logic, Reference e relationships | owned relationship e Aggregate |
+| Command/Query CRUD, filtros/sort/page e binding HTTP básico | Flow com preconditions, calls e loop |
 | PostgreSQL, JPA e migration Flyway inicial | FraudService HTTP client e timeout básico |
 | Java/Spring Maven com testes gerados | Event/emit, JWT/role e package gate |
 | código developer-owned e source mapping | custom DI/layout, JSON e handoff manifest |
@@ -298,8 +298,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `DOM-007` **Campo `default`** — `DONE` para literais escalares V0 · `P0` · `M` · Area: `Domain`
   - Evidence: [`JavaDefaultValueMapper`](src/main/java/dev/harpia/target/javaspring/mapping/JavaDefaultValueMapper.java), [`PersistenceEmitterTest`](src/test/java/dev/harpia/target/javaspring/PersistenceEmitterTest.java).
 
-- [ ] `DOM-012` **Relationships e referências** — `PARTIAL`; `Reference<T>` entrega integridade referencial declarada (`TYPE-023`); falta a associação com carregamento, cascade, ciclo de vida e coleções de entidade · `P0` · `XL` · Area: `Domain`
-  - Depends on: `TYPE-023` (pronto), `CORE-009`, `PERSIST-005`.
+- [x] `DOM-012` **Relationships e referências** — `DONE` na V1; um Entity usado como tipo vira associação singular e `List<Entity>` vira associação múltipla compartilhável. Ambos carregam metadata explícita `LAZY`/`INDEPENDENT`, sem cascade; `Reference<T>` permanece identidade tipada sem carregamento. O Application IR expõe cardinalidade, loading e ciclo de vida · `P0` · `XL` · Area: `Domain`
+  - Evidence: [`FieldType`](src/main/java/dev/harpia/model/FieldType.java), [`ApplicationFieldType`](src/main/java/dev/harpia/application/ApplicationFieldType.java), [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java), [`RelationshipFieldTest`](src/test/java/dev/harpia/validate/RelationshipFieldTest.java).
 
 - [ ] `DOM-013` **Owned relationship** — `TODO` · `P0` · `L` · Area: `Domain`
   - Depends on: `DOM-012`.
@@ -525,8 +525,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [ ] `PERSIST-008` **Transactions declarativas** — `PARTIAL`; transação Spring é inferida para mutações CRUD · `P0` · `M` · Area: `Persistence`
   - Evidence: [`ApplicationOperation`](src/main/java/dev/harpia/application/ApplicationOperation.java), [`ApplicationLayerTransformerTest`](src/test/java/dev/harpia/target/javaspring/transformer/ApplicationLayerTransformerTest.java).
 
-- [ ] `PERSIST-009` **Relationships persistentes** — `TODO` · `P0` · `XL` · Area: `Persistence`
-  - Depends on: `DOM-012`.
+- [x] `PERSIST-009` **Relationships persistentes** — `DONE` no target Java/Spring; relação singular gera `@ManyToOne`/`@JoinColumn` e FK, coleção independente gera `@ManyToMany`/join table com PK composta e duas FKs. Loading é lazy e nenhum cascade é inferido · `P0` · `XL` · Area: `Persistence`
+  - Evidence: [`SpringPersistenceMapper`](src/main/java/dev/harpia/target/javaspring/mapping/SpringPersistenceMapper.java), [`JavaSpringEntityTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringEntityTransformer.java), [`JavaSpringMigrationTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringMigrationTransformer.java), [`RelationshipFieldTest`](src/test/java/dev/harpia/validate/RelationshipFieldTest.java).
 
 - [ ] `PERSIST-010` **Constraints e índices gerais** — `PARTIAL`; PK, nullability e unique existem, índices configuráveis não · `P0` · `L` · Area: `Persistence`
   - Evidence: [`JavaSpringMigrationTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringMigrationTransformer.java), [`PersistenceEmitterTest`](src/test/java/dev/harpia/target/javaspring/PersistenceEmitterTest.java).
@@ -813,7 +813,7 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 
 Em ordem de dependência e valor para a Reference Application:
 
-1. `DOM-012` e `PERSIST-009`: relationships end-to-end sobre a referência tipada de `TYPE-023`.
+1. `DOM-013`: ciclo de vida dependente para `List<OrderItem> owned`.
 2. `FLOW-012`, `FLOW-014` e `FLOW-020`: precondition, calls e iteração controlada.
 3. `INTEG-001`–`INTEG-004`, `INTEG-010`, `RELY-001`: FraudService HTTP tipado.
 4. `EVENT-001`, `EVENT-003`, `EVENT-005`, `EVENT-007`, `FLOW-015`: Event local e emit.
@@ -1889,11 +1889,11 @@ deliberados não têm meta de 100%.
 
 | Horizon | Total | Done | Partial | Todo | Other | Completion |
 |---|---:|---:|---:|---:|---:|---:|
-| Core V1 | 213 | 168 | 16 | 29 | 0 | 82,6% |
+| Core V1 | 213 | 170 | 15 | 28 | 0 | 83,3% |
 | Next / Upstream | 183 | 1 | 11 | 169 | 2 | 3,6% |
 | Labs / Research | 134 | 0 | 1 | 69 | 64 | N/A |
 | Custom / Non-goals | 20 | 0 | 0 | 0 | 20 | N/A |
-| **Canonical total** | **550** | **169** | **28** | **267** | **86** | — |
+| **Canonical total** | **550** | **171** | **27** | **266** | **86** | — |
 
 `Other` reúne `RESEARCH`, `NOT_SUPPORTED`, `CUSTOM` e `WONT_DO`. Ele não mascara trabalho do Core:
 a seleção Core contém apenas itens implementáveis `DONE`, `PARTIAL` ou `TODO`.
@@ -1911,14 +1911,14 @@ a seleção Core contém apenas itens implementáveis `DONE`, `PARTIAL` ou `TODO
 
 ## Audit Snapshot
 
-Baseline auditada no ciclo que fecha `FLOW-019`:
+Baseline auditada no ciclo que fecha `DOM-012` e `PERSIST-009`:
 
 | Métrica | Resultado |
 |---|---:|
-| Produção Java | 210 arquivos / 20.849 linhas |
-| Testes Java | 81 arquivos / 11.383 linhas |
+| Produção Java | 210 arquivos / 21.194 linhas |
+| Testes Java | 82 arquivos / 11.597 linhas |
 | Gate | `mvn -o clean test` — **BUILD SUCCESS** |
-| Testes executados | 421; 0 failures, 0 errors, 0 skipped |
+| Testes executados | 424; 0 failures, 0 errors, 0 skipped |
 
 # Core V1 Completion Criteria
 
@@ -1948,7 +1948,7 @@ avançada, semantic diff, zero-downtime migration, marketplace ou plugin ecosyst
 
 ## Top 10 Core V1 Next Tasks
 
-1. Fechar `DOM-012` → `PERSIST-009` para relationships reais sobre `Reference<T>`.
+1. Implementar `DOM-013` para `List<OrderItem> owned` e ciclo de vida dependente.
 2. Implementar `FLOW-012` para preconditions reutilizáveis.
 3. Implementar `FLOW-014`, `INTEG-001`–`INTEG-004` e `RELY-001` para FraudService.
 4. Implementar `FLOW-020` somente no recorte de coleção exigido pela Reference Application.

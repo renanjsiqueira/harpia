@@ -74,6 +74,25 @@ public record ApplicationField(
                 : Optional.empty();
     }
 
+    /** The entity this field loads, when it is a direct association. */
+    public Optional<ApplicationFieldType.Relationship> relationship() {
+        return present() instanceof ApplicationFieldType.Relationship declared
+                ? Optional.of(declared)
+                : Optional.empty();
+    }
+
+    /** The entity this collection loads, when its elements are associations. */
+    public Optional<ApplicationFieldType.Relationship> relationshipElement() {
+        return elementType()
+                .filter(ApplicationFieldType.Relationship.class::isInstance)
+                .map(ApplicationFieldType.Relationship.class::cast);
+    }
+
+    /** Whether this field is either a to-one or to-many entity association. */
+    public boolean isRelationship() {
+        return relationship().isPresent() || relationshipElement().isPresent();
+    }
+
     /** The type this field may be absent of, when absence is declared. */
     public Optional<ApplicationFieldType> optionalType() {
         return type instanceof ApplicationFieldType.Optionality optional

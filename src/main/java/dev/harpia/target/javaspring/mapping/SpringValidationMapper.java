@@ -31,9 +31,9 @@ public final class SpringValidationMapper {
             }
             return List.copyOf(annotations);
         }
-        if (field.reference().isPresent()) {
-            // A reference is an identity: whether it must be present is all this layer can say.
-            // Whether the row exists is the foreign key's job, at the moment of the write.
+        if (field.reference().isPresent() || field.relationship().isPresent()) {
+            // For both an identity reference and an association, presence is the only validation
+            // local to the field. Whether the row exists is the foreign key's job.
             if (field.required() && !field.generated()) {
                 annotations.add(
                         JavaAnnotationModel.marker("jakarta.validation.constraints.NotNull"));

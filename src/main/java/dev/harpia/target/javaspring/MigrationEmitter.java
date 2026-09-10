@@ -45,6 +45,9 @@ public final class MigrationEmitter implements Emitter {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("header", GeneratedHeader.sqlComment());
         view.put("tables", tables);
+        view.put("foreignKeys", migration.foreignKeys().stream()
+                .map(MigrationEmitter::foreignKeyView)
+                .toList());
         output.put(new GeneratedFile(
                 PATH,
                 OutputNormalizer.normalize(templates.render("migration.sql.mustache", view)),
@@ -54,7 +57,12 @@ public final class MigrationEmitter implements Emitter {
 
     private static Map<String, Object> tableView(SqlMigrationModel.Table table) {
         List<Map<String, Object>> columns = new ArrayList<>();
-        table.columns().forEach(column -> columns.add(Map.of("definition", column)));
+        for (int index = 0; index < table.columns().size(); index++) {
+            columns.add(Map.of(
+                    "definition", table.columns().get(index),
+                    "last", table.constraints().isEmpty()
+                            && index == table.columns().size() - 1));
+        }
 
         List<Map<String, Object>> constraintViews = new ArrayList<>();
         for (int index = 0; index < table.constraints().size(); index++) {
@@ -67,6 +75,17 @@ public final class MigrationEmitter implements Emitter {
         view.put("tableName", table.name());
         view.put("columns", columns);
         view.put("constraints", constraintViews);
+        return view;
+    }
+
+    private static Map<String, Object> foreignKeyView(
+            SqlMigrationModel.ForeignKey foreignKey) {
+        Map<String, Object> view = new LinkedHashMap<>();
+        view.put("table", foreignKey.table());
+        view.put("name", foreignKey.name());
+        view.put("column", foreignKey.column());
+        view.put("targetTable", foreignKey.targetTable());
+        view.put("targetColumn", foreignKey.targetColumn());
         return view;
     }
 }

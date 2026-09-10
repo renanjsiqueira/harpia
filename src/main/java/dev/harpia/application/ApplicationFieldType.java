@@ -94,8 +94,49 @@ public sealed interface ApplicationFieldType {
         }
     }
 
+    /**
+     * An independently-lived entity association.
+     *
+     * <p>The target identity type is retained for relational schema generation. The field itself
+     * holds the target entity, unlike {@link Reference}, which holds only that identity.
+     */
+    record Relationship(
+            String entity,
+            ApplicationScalarType idType,
+            RelationshipLoading loading,
+            RelationshipLifecycle lifecycle)
+            implements ApplicationFieldType {
+        public Relationship {
+            Objects.requireNonNull(entity, "entity");
+            Objects.requireNonNull(idType, "idType");
+            Objects.requireNonNull(loading, "loading");
+            Objects.requireNonNull(lifecycle, "lifecycle");
+        }
+
+        @Override
+        public String syntax() {
+            return entity;
+        }
+    }
+
+    enum RelationshipLoading {
+        LAZY
+    }
+
+    enum RelationshipLifecycle {
+        INDEPENDENT
+    }
+
     static ApplicationFieldType reference(String entity, ApplicationScalarType idType) {
         return new Reference(entity, idType);
+    }
+
+    static ApplicationFieldType relationship(
+            String entity,
+            ApplicationScalarType idType,
+            RelationshipLoading loading,
+            RelationshipLifecycle lifecycle) {
+        return new Relationship(entity, idType, loading, lifecycle);
     }
 
     static ApplicationFieldType optional(ApplicationFieldType element) {

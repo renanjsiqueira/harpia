@@ -16,17 +16,48 @@ public final class JavaSpringMigrationTransformer {
 
     public SqlMigrationModel transform(ApplicationProject application) {
         List<SqlMigrationModel.Table> tables = new ArrayList<>();
+        List<SqlMigrationModel.ForeignKey> foreignKeys = new ArrayList<>();
         for (ApplicationEntity entity : application.entities()) {
             tables.add(table(entity));
+            for (ApplicationField field : entity.fields()) {
+                field.reference().ifPresent(reference -> foreignKeys.add(foreignKey(
+                        entity.tableName(),
+                        field.columnName(),
+                        SqlNaming.identifier(reference.entity()),
+                        "id")));
+                field.relationship().ifPresent(relationship -> foreignKeys.add(foreignKey(
+                        entity.tableName(),
+                        field.columnName(),
+                        SqlNaming.identifier(relationship.entity()),
+                        "id")));
+            }
             // A collection has as many rows per owner as it has elements, so it cannot share the
             // owner's row. It gets its own table, keyed back to the owner.
             for (ApplicationField field : entity.fields()) {
-                field.elementType().ifPresent(element ->
-                        tables.add(collectionTable(entity, field, element)));
+                field.elementType().ifPresent(element -> {
+                    SqlMigrationModel.Table collection = collectionTable(entity, field, element);
+                    tables.add(collection);
+                    String owner = entity.tableName() + "_id";
+                    foreignKeys.add(foreignKey(
+                            collection.name(),
+                            owner,
+                            entity.tableName(),
+                            entity.idField().columnName()));
+                    if (element instanceof
+                            dev.harpia.application.ApplicationFieldType.Relationship relationship) {
+                        String targetTable = SqlNaming.identifier(relationship.entity());
+                        foreignKeys.add(foreignKey(
+                                collection.name(),
+                                targetTable + "_id",
+                                targetTable,
+                                "id"));
+                    }
+                });
             }
         }
         return new SqlMigrationModel(
                 tables,
+                foreignKeys,
                 application.entities().isEmpty()
                         ? Optional.empty()
                         : Optional.of(application.entities().getFirst().where()));
@@ -36,6 +67,10 @@ public final class JavaSpringMigrationTransformer {
             ApplicationEntity entity,
             ApplicationField field,
             dev.harpia.application.ApplicationFieldType element) {
+        if (element instanceof dev.harpia.application.ApplicationFieldType.Relationship
+                relationship) {
+            return relationshipTable(entity, field, relationship);
+        }
         String owner = entity.tableName() + "_id";
         String elementColumn = element instanceof
                 dev.harpia.application.ApplicationFieldType.EnumType
@@ -47,11 +82,27 @@ public final class JavaSpringMigrationTransformer {
                         owner + " " + PostgresTypes.column(entity.idField().scalarType())
                                 + " NOT NULL",
                         field.columnName() + " " + elementColumn + " NOT NULL"),
-                List.of("CONSTRAINT "
-                        + SqlConstraintNames.foreignKey(
-                                entity.tableName() + "_" + field.columnName(), owner)
-                        + " FOREIGN KEY (" + owner + ") REFERENCES "
-                        + entity.tableName() + " (" + entity.idField().columnName() + ")"));
+                List.of());
+    }
+
+    private static SqlMigrationModel.Table relationshipTable(
+            ApplicationEntity entity,
+            ApplicationField field,
+            dev.harpia.application.ApplicationFieldType.Relationship relationship) {
+        String table = entity.tableName() + "_" + field.columnName();
+        String owner = entity.tableName() + "_id";
+        String targetTable = SqlNaming.identifier(relationship.entity());
+        String target = targetTable + "_id";
+        return new SqlMigrationModel.Table(
+                table,
+                List.of(
+                        owner + " " + PostgresTypes.column(entity.idField().scalarType())
+                                + " NOT NULL",
+                        target + " " + PostgresTypes.column(relationship.idType())
+                                + " NOT NULL"),
+                List.of(
+                        "CONSTRAINT " + SqlConstraintNames.primaryKey(table)
+                                + " PRIMARY KEY (" + owner + ", " + target + ")"));
     }
 
     private static String columnType(ApplicationField field) {
@@ -60,6 +111,8 @@ public final class JavaSpringMigrationTransformer {
         }
         return field.reference()
                 .map(reference -> PostgresTypes.column(reference.idType()))
+                .or(() -> field.relationship()
+                        .map(relationship -> PostgresTypes.column(relationship.idType())))
                 .orElseGet(() -> PostgresTypes.column(field.scalarType()));
     }
 
@@ -90,13 +143,6 @@ public final class JavaSpringMigrationTransformer {
         constraints.add("CONSTRAINT "
                 + SqlConstraintNames.primaryKey(entity.tableName())
                 + " PRIMARY KEY (" + entity.idField().columnName() + ")");
-        // Referential integrity is the one thing a reference does promise, so the schema states it.
-        for (ApplicationField field : entity.fields()) {
-            field.reference().ifPresent(reference -> constraints.add("CONSTRAINT "
-                    + SqlConstraintNames.foreignKey(entity.tableName(), field.columnName())
-                    + " FOREIGN KEY (" + field.columnName() + ") REFERENCES "
-                    + SqlNaming.identifier(reference.entity()) + " (id)"));
-        }
         entity.fields().stream()
                 .filter(ApplicationField::unique)
                 .map(ApplicationField::columnName)
@@ -105,5 +151,15 @@ public final class JavaSpringMigrationTransformer {
                         + SqlConstraintNames.unique(entity.tableName(), column)
                         + " UNIQUE (" + column + ")"));
         return new SqlMigrationModel.Table(entity.tableName(), columns, constraints);
+    }
+
+    private static SqlMigrationModel.ForeignKey foreignKey(
+            String table, String column, String targetTable, String targetColumn) {
+        return new SqlMigrationModel.ForeignKey(
+                SqlConstraintNames.foreignKey(table, column),
+                table,
+                column,
+                targetTable,
+                targetColumn);
     }
 }

@@ -346,6 +346,8 @@ The current language deliberately has a narrow, validated surface:
 - HTTP methods: `GET`, `POST`, `PUT`, and `DELETE`;
 - access mode: `public`;
 - output forms: `Entity`, `List<Entity>`, and `nothing` with a 2xx status;
+- V1 entity relationships: `customer: Customer` and shared `items: List<Item>`, both lazy with
+  independent lifecycle; `Reference<Customer>` remains an identity-only foreign key;
 - declared errors: invalid input (400), duplicate field (409), and not found (404).
 
 Flow V0 accepts these operation shapes:
@@ -362,7 +364,7 @@ return x|nothing
 ```
 
 Normal Markdown prose remains documentation. It never silently becomes executable behavior.
-Relationships, arbitrary Java, authentication, events, integrations, and unrecognized Flow
+Owned relationships, arbitrary Java, authentication, events, integrations, and unrecognized Flow
 sentences are rejected instead of guessed.
 
 ### CLI

@@ -60,6 +60,9 @@ public final class JavaSampleValues {
         if (field.reference().isPresent()) {
             return sampleOf(field.reference().orElseThrow().idType());
         }
+        if (field.relationship().isPresent()) {
+            return "new " + field.relationship().orElseThrow().entity() + "()";
+        }
         Optional<String> declared = field.enumTypeName();
         if (declared.isPresent()) {
             return declared.orElseThrow() + "." + enumSample(field);
@@ -106,6 +109,9 @@ public final class JavaSampleValues {
         if (field.reference().isPresent()) {
             return jsonOf(field.reference().orElseThrow().idType());
         }
+        if (field.relationship().isPresent()) {
+            return "{}";
+        }
         if (field.enumTypeName().isPresent()) {
             return "\\\"" + enumSample(field) + "\\\"";
         }
@@ -128,6 +134,12 @@ public final class JavaSampleValues {
      */
     public static String plain(ApplicationField field) {
         Objects.requireNonNull(field, "field");
+        if (field.relationship().isPresent()) {
+            return plainOf(field.relationship().orElseThrow().idType());
+        }
+        if (field.reference().isPresent()) {
+            return plainOf(field.reference().orElseThrow().idType());
+        }
         return switch (field.scalarType()) {
             case STRING, TEXT, EMAIL -> text(field);
             case INT, LONG -> "1";
@@ -165,10 +177,13 @@ public final class JavaSampleValues {
                 .forEach(component -> imports.addAll(requiredImports(component, domainPackage))));
         field.reference().ifPresent(reference ->
                 requiredImport(reference.idType()).ifPresent(imports::add));
+        field.relationship().ifPresent(relationship ->
+                imports.add(domainPackage + "." + relationship.entity()));
         if (field.declaredType().isEmpty()
                 && field.elementType().isEmpty()
                 && field.optionalType().isEmpty()
-                && field.reference().isEmpty()) {
+                && field.reference().isEmpty()
+                && field.relationship().isEmpty()) {
             requiredImport(field.scalarType()).ifPresent(imports::add);
         }
         return java.util.List.copyOf(imports);
@@ -239,5 +254,17 @@ public final class JavaSampleValues {
         return field.scalarType() == ApplicationScalarType.EMAIL
                 ? field.name() + "@example.com"
                 : field.name();
+    }
+
+    private static String plainOf(ApplicationScalarType type) {
+        return switch (type) {
+            case STRING, TEXT, EMAIL -> "value";
+            case INT, LONG -> "1";
+            case DECIMAL -> "1.00";
+            case BOOLEAN -> "true";
+            case UUID -> UUID_VALUE;
+            case DATE -> DATE_VALUE;
+            case DATE_TIME -> DATE_TIME_VALUE;
+        };
     }
 }

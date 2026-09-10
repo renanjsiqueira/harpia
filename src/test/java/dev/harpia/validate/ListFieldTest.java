@@ -76,13 +76,17 @@ class ListFieldTest {
     }
 
     @Test
-    void aCollectionOfEntitiesIsStillARelationship() throws IOException {
+    void aCollectionOfEntitiesIsARelationship() throws IOException {
         project("- related: List<Product>", 1);
 
-        assertThat(compile().diagnostics())
-                .filteredOn(diagnostic ->
-                        diagnostic.code().equals(ErrorCodes.UNSUPPORTED_RELATIONSHIP))
-                .isNotEmpty();
+        CompileResult result = compile();
+        assertThat(result.diagnostics()).isEmpty();
+        assertThat(Inspector.render(result, Stage.APPLICATION_IR).orElseThrow())
+                .contains("Relationship related: List<Product> cardinality=MANY "
+                        + "loading=LAZY lifecycle=INDEPENDENT");
+        assertThat(result.tree().orElseThrow().files().get(ENTITY))
+                .contains("@ManyToMany(fetch = FetchType.LAZY)")
+                .contains("private List<Product> related = new ArrayList<>();");
     }
 
     @Test

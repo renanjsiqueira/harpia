@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Objects;
+import java.util.Set;
 
 /** Converts a semantically valid syntax tree into the complete emitter-facing model. */
 public final class Resolver {
@@ -42,7 +43,11 @@ public final class Resolver {
                         source.values().stream().map(SpecAst.EnumValue::name).toList());
             }
         }
-        Declared declared = new Declared(enums, values);
+        Set<String> entities = syntax.modules().stream()
+                .filter(ModuleAst::declaresEntity)
+                .map(module -> module.entity().name())
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        Declared declared = new Declared(enums, values, entities);
         // A value's own fields are scalars or enums, never another value: nesting is `DOM-014`.
         for (ModuleAst module : syntax.modules()) {
             for (SpecAst.ValueDeclaration source : module.values()) {
@@ -180,6 +185,9 @@ public final class Resolver {
         if (FieldLineParser.isScalar(syntax)) {
             return FieldType.scalar(TypeRef.fromSyntax(syntax));
         }
+        if (declared.entities().contains(syntax)) {
+            return FieldType.relationship(syntax);
+        }
         if (declared.values().containsKey(syntax)) {
             return FieldType.value(syntax, declared.values().get(syntax));
         }
@@ -188,7 +196,9 @@ public final class Resolver {
 
     /** The nominal types the project declares, resolved once for the whole run. */
     private record Declared(
-            Map<String, List<String>> enums, Map<String, List<FieldModel>> values) {
+            Map<String, List<String>> enums,
+            Map<String, List<FieldModel>> values,
+            Set<String> entities) {
     }
 
     private static FieldModel field(

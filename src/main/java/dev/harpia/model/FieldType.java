@@ -92,8 +92,44 @@ public sealed interface FieldType {
         }
     }
 
+    /**
+     * An association to another entity.
+     *
+     * <p>Unlike {@link Reference}, this field holds and loads the entity itself. A bare entity name
+     * declares an independent to-one association; wrapping it in {@link Container} declares an
+     * independent collection association. Ownership and dependent lifecycle are separate syntax.
+     */
+    record Relationship(
+            String entity,
+            RelationshipLoading loading,
+            RelationshipLifecycle lifecycle) implements FieldType {
+        public Relationship {
+            Objects.requireNonNull(entity, "entity");
+            Objects.requireNonNull(loading, "loading");
+            Objects.requireNonNull(lifecycle, "lifecycle");
+        }
+
+        @Override
+        public String syntax() {
+            return entity;
+        }
+    }
+
+    enum RelationshipLoading {
+        LAZY
+    }
+
+    enum RelationshipLifecycle {
+        INDEPENDENT
+    }
+
     static FieldType reference(String entity) {
         return new Reference(entity);
+    }
+
+    static FieldType relationship(String entity) {
+        return new Relationship(
+                entity, RelationshipLoading.LAZY, RelationshipLifecycle.INDEPENDENT);
     }
 
     static FieldType optional(FieldType element) {

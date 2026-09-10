@@ -248,7 +248,7 @@ O status deve estar entre 200 e 299. O valor retornado pelo flow deve ter a mesm
 
 ## 7.0 Coleções
 
-Na V1, um campo pode ser `List<T>`, onde `T` é um escalar ou um `Enum` declarado:
+Na V1, um campo pode ser `List<T>`, onde `T` é um escalar, um `Enum` declarado ou uma entidade:
 
 ```markdown
 - tags: List<String> required
@@ -262,8 +262,9 @@ dono por chave estrangeira, e a entidade que a declara não tem coluna para ela.
 `required` numa coleção significa **não-vazia**: uma coleção que precisa existir mas pode estar
 vazia é o mesmo que uma coleção ausente.
 
-Fora do recorte: `List<Entity>` é relacionamento (`DOM-012`); `List<Value>` e `List<List<...>>` são
-recusados. Coleção como parâmetro ou retorno de Logic é `LOGIC-006`.
+Quando `T` é escalar ou Enum, a tabela guarda valores. Quando `T` é Entity, a coleção é um
+relacionamento conforme a seção 7.0.3. `List<Value>` e `List<List<...>>` são recusados. Coleção como
+parâmetro ou retorno de Logic é `LOGIC-006`.
 
 ### 7.0.2 Reference
 
@@ -273,8 +274,8 @@ Na V1, `Reference<Entidade>` declara que o campo aponta para outra entidade:
 - buyer: Reference<Customer> required
 ```
 
-É um **tipo**, não um relacionamento. Ele diz qual entidade é a alvo e qual linha, e não diz nada
-sobre carregá-la, cascatear até ela ou possuir seu ciclo de vida — isso é `DOM-012`.
+É um **tipo**, não um relacionamento. Ele diz qual entidade é a alvo e qual linha, e não carrega,
+cascateia nem possui o ciclo de vida dela.
 
 | | Resultado |
 |---|---|
@@ -285,6 +286,33 @@ sobre carregá-la, cascatear até ela ou possuir seu ciclo de vida — isso é `
 O alvo precisa ser uma entidade declarada: uma referência aponta para algo que tem identidade.
 Integridade referencial é a única promessa que ela faz, e por isso o esquema a declara enquanto o
 mapeamento não importa estratégia de fetch nenhuma.
+
+### 7.0.3 Relationships
+
+Um nome de Entity usado diretamente como tipo declara uma associação carregável; uma lista desse
+tipo declara uma associação múltipla:
+
+```markdown
+- buyer: Customer required
+- items: List<OrderItem> required
+```
+
+Os defaults fazem parte da semântica V1, e aparecem na Application IR para não dependerem de uma
+escolha implícita do target:
+
+| Forma | Cardinalidade | Loading | Ciclo de vida | Cascade |
+|---|---|---|---|---|
+| `Customer` | uma | lazy | independente | nenhum |
+| `List<OrderItem>` | muitas, compartilháveis | lazy | independente | nenhum |
+
+No target Java/Spring, a forma singular usa uma coluna `<campo>_id`, `@ManyToOne` e `@JoinColumn`.
+A forma múltipla usa `@ManyToMany` e uma join table `<dono>_<campo>` com chave primária composta e
+chaves estrangeiras para dono e alvo. A migration cria primeiro todas as tabelas e só então adiciona
+as FKs, portanto ordem reversa, autorreferência e ciclos são válidos. Em ambos os casos, remover ou
+salvar o dono não remove nem salva o alvo por cascade. Dependência de ciclo de vida será declarada
+por `owned` em `DOM-013`.
+
+Por contraste, `Reference<Customer>` guarda só a identidade e nunca carrega um `Customer`.
 
 ### 7.0.1 Optional
 
