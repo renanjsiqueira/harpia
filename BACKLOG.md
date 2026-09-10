@@ -758,8 +758,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `SPRING-011` **Projeto convencional sem Harpia runtime** — `DONE` para o recorte gerado · `P0` · `M` · Area: `Ownership`
   - Evidence: [`pom.xml.mustache`](src/main/resources/targets/java-spring/templates/pom.xml.mustache), [`JavaSpringGoldenTest`](src/test/java/dev/harpia/target/javaspring/JavaSpringGoldenTest.java).
 
-- [ ] `SPRING-012` **Executable JAR verificado** — `PARTIAL`; plugin é emitido e `mvn test` passa, mas o gate `mvn package` do projeto gerado não é automatizado · `P0` · `S` · Area: `Java/Spring Target`
-  - Evidence: [`pom.xml.mustache`](src/main/resources/targets/java-spring/templates/pom.xml.mustache), [`GeneratedMavenProjectTest`](src/test/java/dev/harpia/target/javaspring/GeneratedMavenProjectTest.java).
+- [x] `SPRING-012` **Executable JAR verificado** — `DONE`; o gate do projeto gerado passou de `mvn test` para `mvn -o package`, que roda os testes e constrói o artefato numa invocação só, e o teste abre o jar: `Main-Class` é o `JarLauncher`, `Start-Class` é a aplicação gerada e `BOOT-INF/lib/` carrega as dependências · `P0` · `S` · Area: `Java/Spring Target`
+  - Evidence: [`GeneratedMavenProjectTest`](src/test/java/dev/harpia/target/javaspring/GeneratedMavenProjectTest.java), [`pom.xml.mustache`](src/main/resources/targets/java-spring/templates/pom.xml.mustache).
 
 
 ## CLI, Ownership and Harness
@@ -821,7 +821,7 @@ Em ordem de dependência e valor para a Reference Application:
 3. `EVENT-001`, `EVENT-003`, `EVENT-005`, `EVENT-007`, `FLOW-015`: Event local e emit.
 4. `SEC-002`, `SEC-003`, `SEC-005`, `SEC-007`, `API-008`: authenticated/role/JWT.
 5. `CUSTOM-002`, `CUSTOM-003`: contract, DI e layout custom protegido.
-6. `SPRING-012` e `GREEN-003`: `mvn package` e baseline integrada verificável.
+6. `GREEN-003`: baseline integrada verificável (`SPRING-012` fechado: `mvn package` e jar executável são gate).
 7. `HARNESS-001`–`HARNESS-004`: JSON estável e handoff consumível por agentes.
 8. `DOC-001`: catálogo compacto e exemplos canônicos para humanos e agentes.
 9. Reference Application end-to-end cobrindo o conjunto acima.
@@ -832,7 +832,7 @@ Em ordem de dependência e valor para a Reference Application:
 - `JAVA-004` ainda traduz Command/Query apenas pelas formas CRUD conhecidas.
 - `CUSTOM-003` precisa de layout que compile offline sem tornar o código do usuário descartável.
 - O source map está no resultado em memória; o contrato externo depende de `HARNESS-001/002`.
-- O gate atual testa o projeto gerado, mas `SPRING-012` ainda não automatiza `mvn package`.
+- `GREEN-003` ainda não tem baseline integrada de integration/messaging/security a verificar.
 
 ## Explicitly Deferred from Core V1
 
