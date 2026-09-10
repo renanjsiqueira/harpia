@@ -57,6 +57,11 @@ final class BusinessIrRenderer {
         project.logics().forEach(logic -> out.append("Logic ").append(logic.name())
                 .append(logic.customContract().map(contract -> " custom " + contract).orElse(""))
                 .append('\n'));
+        project.integrations().forEach(integration -> {
+            out.append("Integration ").append(integration.name()).append('\n');
+            integration.operations().forEach(operation -> out.append("  Port ")
+                    .append(operation.name()).append('\n'));
+        });
         return out.toString();
     }
 

@@ -6,6 +6,8 @@ Namespace operations
   ListCustomers  [specs/customer.harpia.md]
   UpdateCustomer  [specs/customer.harpia.md]
   DeleteCustomer  [specs/customer.harpia.md]
+Namespace integrations
+  (empty)
 Namespace computations
   (empty)
 Namespace tests

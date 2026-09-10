@@ -52,6 +52,12 @@ final class SymbolRenderer {
                     .reduce((left, right) -> left + ", " + right)
                     .orElse("") + ")";
         }
+        if (symbol instanceof Symbol.Integration integration) {
+            return " operations(" + integration.operations().stream()
+                    .map(dev.harpia.parse.IntegrationAst.Operation::name)
+                    .reduce((left, right) -> left + ", " + right)
+                    .orElse("") + ")";
+        }
         if (symbol instanceof Symbol.Scenario scenario) {
             return " -> " + scenario.computation();
         }

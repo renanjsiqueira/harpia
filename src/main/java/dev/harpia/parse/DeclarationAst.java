@@ -9,6 +9,7 @@ public sealed interface DeclarationAst
                 SpecAst.ValueDeclaration,
                 SpecAst.InvariantDeclaration,
                 SpecAst.UseCaseDeclaration,
+                IntegrationAst.Declaration,
                 LogicAst.Declaration,
                 LogicAst.Scenario {
 

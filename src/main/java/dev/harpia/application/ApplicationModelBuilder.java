@@ -58,6 +58,15 @@ public final class ApplicationModelBuilder {
                                         .toList(),
                                 source.where()))
                         .toList(),
+                business.integrations().stream()
+                        .map(source -> new ApplicationIntegration(
+                                source.name(),
+                                source.operations().stream()
+                                        .map(operation -> new ApplicationIntegration.Operation(
+                                                operation.name(), operation.where()))
+                                        .toList(),
+                                source.where()))
+                        .toList(),
                 business.entities().stream()
                         .map(source -> entity(source, identities(business)))
                         .toList(),

@@ -14,7 +14,8 @@ recriar Java e sem invalidar specs existentes antes de haver migração e format
 - estabelecer Type System nominal;
 - separar Business IR, requirements de capabilities e Application IR;
 - permitir Event como primeiro slice de comportamento além de CRUD;
-- preparar ValueObject, Enum, Integration e Custom Java sem fingir suporte;
+- introduzir ValueObject, Enum e Integration incrementalmente, sem fingir suporte aos slices
+  ainda ausentes;
 - manter gramática pequena, formal e determinística.
 
 Não são objetivos da V1 inicial: loops gerais, async, workflow, cloud providers, outras linguagens
@@ -326,9 +327,9 @@ menores. O `DeclarationParserRegistry` despacha `Data`, `Logic`, `Scenario` e o 
 por `DeclarationKind`, permitindo adicionar os kinds V1 sem transformar `SpecParser` em um parser
 monolítico.
 
-A forma alvo ainda acrescentará `LanguageVersion`, `SourceIndex`, nomes tipados e os nós V1
-`ValueObjectAst`, `EnumAst`, `CommandAst`, `QueryAst`, `EventAst`, `IntegrationAst` e
-`CustomContractAst` conforme cada slice for implementado.
+A forma alvo ainda acrescentará `SourceIndex`, nomes tipados e os nós V1 de Event e Custom Contract
+conforme cada slice for implementado. `LanguageVersion`, Value, Enum, Command, Query e
+`IntegrationAst` já atravessam o Project AST incremental.
 
 ## 10. SymbolTable
 
@@ -351,7 +352,8 @@ Namespaces iniciais:
 types       Entity, ValueObject, Enum
 operations  Command, Query
 messages    Event, Email
-ports       Integration, Custom Contract
+integrations Integration e suas Operation ports
+ports        Custom Contract
 tests       Scenario
 policies    Policy
 ```

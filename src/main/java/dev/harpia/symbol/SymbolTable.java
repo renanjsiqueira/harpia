@@ -107,6 +107,20 @@ public final class SymbolTable {
                         reportedFirst,
                         diagnostics);
             }
+            for (dev.harpia.parse.IntegrationAst.Declaration integration
+                    : module.integrations()) {
+                declare(
+                        symbols,
+                        new Symbol.Integration(
+                                integration.name(),
+                                module.file(),
+                                integration.operations(),
+                                integration.where()),
+                        ErrorCodes.SEMANTIC_DUPLICATE_INTEGRATION,
+                        "integration",
+                        reportedFirst,
+                        diagnostics);
+            }
             for (LogicAst.Declaration logic : module.logics()) {
                 computation(logic, module.file(), diagnostics)
                         .ifPresent(symbol -> declare(
@@ -215,6 +229,12 @@ public final class SymbolTable {
         return lookup(Namespace.TYPES, name)
                 .filter(Symbol.Entity.class::isInstance)
                 .map(Symbol.Entity.class::cast);
+    }
+
+    public Optional<Symbol.Integration> integration(String name) {
+        return lookup(Namespace.INTEGRATIONS, name)
+                .filter(Symbol.Integration.class::isInstance)
+                .map(Symbol.Integration.class::cast);
     }
 
     /** Declaration order inside each namespace, which is discovery order and therefore stable. */

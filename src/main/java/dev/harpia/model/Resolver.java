@@ -99,6 +99,16 @@ public final class Resolver {
                                 declaration.where()))
                         .toList(),
                 syntax.modules().stream()
+                        .flatMap(module -> module.integrations().stream())
+                        .map(declaration -> new IntegrationModel(
+                                declaration.name(),
+                                declaration.operations().stream()
+                                        .map(operation -> new IntegrationModel.Operation(
+                                                operation.name(), operation.where()))
+                                        .toList(),
+                                declaration.where()))
+                        .toList(),
+                syntax.modules().stream()
                         .filter(ModuleAst::declaresEntity)
                         .map(module -> entity(
                                 module,

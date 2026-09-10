@@ -47,6 +47,8 @@ public final class ErrorCodes {
     public static final String SYNTAX_VALUE_FIELD = "HRP1109";
     /** An invariant list is malformed. */
     public static final String SYNTAX_INVARIANT = "HRP1110";
+    /** An Integration heading or one of its Operation ports is malformed. */
+    public static final String SYNTAX_INTEGRATION = "HRP1111";
     /** Indentation inside a {@code logic} block is not a multiple of four spaces. */
     public static final String SYNTAX_LOGIC_INDENT = "HRP1102";
     /** A character or word that does not belong to the Harpia Logic lexicon. */
@@ -138,6 +140,8 @@ public final class ErrorCodes {
     public static final String SEMANTIC_FLOW_BRANCH_SCOPE = "HRP2130";
     /** The owned modifier is attached to something that is not an entity relationship. */
     public static final String SEMANTIC_OWNED_RELATIONSHIP = "HRP2131";
+    /** Two integrations share a name in the integration namespace. */
+    public static final String SEMANTIC_DUPLICATE_INTEGRATION = "HRP2132";
 
     // --- HRP22xx: external binding semantics -------------------------------------------------
     /** A binding references an operation that is not declared. */

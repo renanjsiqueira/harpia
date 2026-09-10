@@ -431,6 +431,34 @@ A diferença para `### Rules` (§8.1) é de escopo e de momento:
 
 A verificação acontece antes do `save` porque depois dele o estado proibido já está armazenado.
 
+## 7.4 Integration e Operation
+
+Na V1, uma dependência externa começa como uma porta de negócio, sem escolher HTTP, biblioteca ou
+configuração de ambiente:
+
+```markdown
+## Integration FraudService
+
+Análise externa usada no checkout.
+
+### Operation CheckOrder
+
+### Operation CheckCustomer
+```
+
+- o nome da Integration e de cada Operation é PascalCase;
+- uma Integration declara ao menos uma Operation e não pode repetir nomes localmente;
+- nomes de Integration são únicos no projeto e vivem no namespace `integrations`, separado de
+  types, operações da aplicação e computations;
+- AST, SymbolTable, Business IR e Application IR preservam a fronteira como outbound port;
+- declarar a porta não escolhe transporte nem exige capability. O provider só é necessário quando
+  um Flow chama a operação;
+- input, output e errors tipados são adicionados por `INTEG-002`; até lá, subseções de contrato são
+  recusadas em vez de ignoradas.
+
+`languageVersion: 0` recusa `## Integration` com `HRP1107`: nunca a interpreta como um caso de uso
+legado cujo título começaria com “Integration”.
+
 ## 8.1 Rules
 
 Na V1, cada item de lista sob `### Rules` é uma condição booleana sobre o input da operação:

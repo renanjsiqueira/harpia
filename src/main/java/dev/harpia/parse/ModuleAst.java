@@ -43,6 +43,10 @@ public record ModuleAst(
         return declarations(SpecAst.UseCaseDeclaration.class);
     }
 
+    public List<IntegrationAst.Declaration> integrations() {
+        return declarations(IntegrationAst.Declaration.class);
+    }
+
     public List<LogicAst.Declaration> logics() {
         return declarations(LogicAst.Declaration.class);
     }

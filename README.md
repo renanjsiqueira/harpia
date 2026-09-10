@@ -348,6 +348,7 @@ The current language deliberately has a narrow, validated surface:
 - output forms: `Entity`, `List<Entity>`, and `nothing` with a 2xx status;
 - V1 entity relationships: `customer: Customer`, shared `items: List<Item>`, and dependent
   `items: List<Item> owned`; `Reference<Customer>` remains an identity-only foreign key;
+- V1 outbound ports: `## Integration FraudService` with named `### Operation CheckOrder` entries;
 - declared errors: invalid input (400), duplicate field (409), and not found (404).
 
 Flow V0 accepts these operation shapes:

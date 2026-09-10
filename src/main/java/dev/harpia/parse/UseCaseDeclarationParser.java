@@ -42,7 +42,12 @@ final class UseCaseDeclarationParser implements DeclarationParser {
      * a use case called {@code CommandRegisterCustomer} would be a silent misunderstanding.
      */
     private static final Map<String, String> LATER_KINDS =
-            Map.of("Command", "1", "Query", "1", "Enum", "1", "Value", "1");
+            Map.of(
+                    "Command", "1",
+                    "Query", "1",
+                    "Enum", "1",
+                    "Value", "1",
+                    "Integration", "1");
     private static final Map<String, String> LATER_SECTIONS = Map.of("Invariants", "1");
 
     /** The legacy V0 form: any heading, kind inferred later, `### Rules` documentary. */

@@ -9,6 +9,7 @@ public enum DeclarationKind {
     USE_CASE,
     COMMAND,
     QUERY,
+    INTEGRATION,
     LOGIC,
     SCENARIO;
 

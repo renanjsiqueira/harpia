@@ -9,6 +9,7 @@ package dev.harpia.symbol;
 public enum Namespace {
     TYPES("types", "Entity and Enum, and later Value"),
     OPERATIONS("operations", "use cases, and later Command and Query"),
+    INTEGRATIONS("integrations", "outbound ports and their operations"),
     COMPUTATIONS("computations", "Logic, and later Formula and Decision"),
     TESTS("tests", "Scenario");
 
