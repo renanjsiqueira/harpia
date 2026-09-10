@@ -111,6 +111,30 @@ public sealed interface Symbol {
         }
     }
 
+    /**
+     * Something that happened, and the payload that announces it.
+     *
+     * <p>An event has no operations because nobody calls it: it is published and read, so the
+     * whole declaration is what it carries.
+     */
+    record Event(
+            String name,
+            String module,
+            List<dev.harpia.parse.SpecAst.InputDeclaration> payload,
+            SourceRef where) implements Symbol {
+        public Event {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(module, "module");
+            payload = List.copyOf(payload);
+            Objects.requireNonNull(where, "where");
+        }
+
+        @Override
+        public Namespace namespace() {
+            return Namespace.EVENTS;
+        }
+    }
+
     /** A pure computation, with the signature every call and scenario is checked against. */
     record Computation(
             String name,

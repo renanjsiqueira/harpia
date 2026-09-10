@@ -72,6 +72,7 @@ public final class SemanticValidator {
         }
 
         validateIntegrations(project, symbols, diagnostics);
+        validateEvents(project, symbols, diagnostics);
 
         Set<String> targeted = new java.util.LinkedHashSet<>();
         for (ModuleAst module : project.modules()) {
@@ -240,6 +241,77 @@ public final class SemanticValidator {
                 }
             }
         }
+    }
+
+    /**
+     * What an event is allowed to announce.
+     *
+     * <p>An event says that something happened to a specific record, so it has to say which one: a
+     * {@code Reference<T>} is that identity and nothing more. An entity is the row itself, whose
+     * lifetime the reader does not share — by the time anyone reads the event the row may have
+     * changed or gone — so what would arrive is a copy pretending to be the record.
+     */
+    private static void validateEvents(
+            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+        for (ModuleAst module : project.modules()) {
+            for (dev.harpia.parse.EventAst.Declaration event : module.events()) {
+                Map<String, SpecAst.InputDeclaration> payload = new LinkedHashMap<>();
+                for (SpecAst.InputDeclaration field : event.payload()) {
+                    SpecAst.InputDeclaration first = payload.putIfAbsent(field.name(), field);
+                    if (first != null) {
+                        diagnostics.error(
+                                ErrorCodes.SEMANTIC_DUPLICATE_EVENT_FIELD,
+                                "event '" + event.name() + "' repeats payload field '"
+                                        + field.name() + "'",
+                                field.where(),
+                                "first declared here",
+                                first.where());
+                    }
+                    validateEventType(field.type(), field.where(), symbols, diagnostics);
+                    validateOptionality(
+                            field.type(), field.required(), field.where(), diagnostics);
+                }
+            }
+        }
+    }
+
+    private static void validateEventType(
+            String type, SourceRef where, SymbolTable symbols, DiagnosticCollector diagnostics) {
+        Optional<String> wrapped = FieldLineParser.optionalOf(type)
+                .or(() -> FieldLineParser.elementOf(type));
+        if (wrapped.isPresent()) {
+            validateEventType(wrapped.orElseThrow(), where, symbols, diagnostics);
+            return;
+        }
+        Optional<String> reference = FieldLineParser.referenceOf(type);
+        if (reference.isPresent()) {
+            if (symbols.entity(reference.orElseThrow()).isEmpty()) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_UNKNOWN_TYPE,
+                        "'" + type + "' does not name a declared entity; a reference points at "
+                                + "something with an identity",
+                        where);
+            }
+            return;
+        }
+        if (FieldLineParser.isScalar(type)
+                || symbols.enumType(type).isPresent()
+                || symbols.valueType(type).isPresent()) {
+            return;
+        }
+        if (symbols.entity(type).isPresent()) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_EVENT_PAYLOAD_TYPE,
+                    "event payload type '" + type + "' is an entity, whose lifetime the reader "
+                            + "does not share; announce 'Reference<" + type + ">' instead",
+                    where);
+            return;
+        }
+        diagnostics.error(
+                ErrorCodes.SEMANTIC_UNKNOWN_TYPE,
+                "unknown event payload type '" + type
+                        + "'; no scalar, Enum, Value or entity declaration provides it",
+                where);
     }
 
     private static void validateIntegrationType(

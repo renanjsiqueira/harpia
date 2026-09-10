@@ -10,6 +10,7 @@ public sealed interface DeclarationAst
                 SpecAst.InvariantDeclaration,
                 SpecAst.UseCaseDeclaration,
                 IntegrationAst.Declaration,
+                EventAst.Declaration,
                 LogicAst.Declaration,
                 LogicAst.Scenario {
 

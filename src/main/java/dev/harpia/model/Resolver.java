@@ -109,6 +109,19 @@ public final class Resolver {
                                 declaration.where()))
                         .toList(),
                 syntax.modules().stream()
+                        .flatMap(module -> module.events().stream())
+                        .map(declaration -> new EventModel(
+                                declaration.name(),
+                                declaration.payload().stream()
+                                        .map(field -> new EventModel.Field(
+                                                field.name(),
+                                                fieldType(field.type(), declared),
+                                                field.required(),
+                                                field.where()))
+                                        .toList(),
+                                declaration.where()))
+                        .toList(),
+                syntax.modules().stream()
                         .filter(ModuleAst::declaresEntity)
                         .map(module -> entity(
                                 module,

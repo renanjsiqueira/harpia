@@ -161,7 +161,7 @@ class IntegrationDeclarationTest {
                         diagnostic.code().equals(ErrorCodes.SYNTAX_DECLARATION_TOO_NEW))
                 .singleElement()
                 .satisfies(diagnostic -> assertThat(diagnostic.message())
-                        .contains("declares a Integration")
+                        .contains("declares an Integration")
                         .contains("languageVersion 1"));
     }
 

@@ -43,6 +43,12 @@ final class AstRenderer {
                 useCase.flow().forEach(statement -> out.append("    Flow ")
                         .append(statement.getClass().getSimpleName()).append('\n'));
             }
+            for (dev.harpia.parse.EventAst.Declaration event : module.events()) {
+                out.append("  Event ").append(event.name()).append('\n');
+                event.payload().forEach(field -> out.append("    Payload ")
+                        .append(field.name()).append(": ").append(field.type())
+                        .append(field.required() ? " required" : "").append('\n'));
+            }
             for (dev.harpia.parse.IntegrationAst.Declaration integration
                     : module.integrations()) {
                 out.append("  Integration ").append(integration.name()).append('\n');

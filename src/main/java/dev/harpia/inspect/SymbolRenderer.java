@@ -58,6 +58,13 @@ final class SymbolRenderer {
                     .reduce((left, right) -> left + ", " + right)
                     .orElse("") + ")";
         }
+        if (symbol instanceof Symbol.Event event) {
+            return " payload(" + event.payload().stream()
+                    .map(field -> field.name() + ": " + field.type()
+                            + (field.required() ? " required" : ""))
+                    .reduce((left, right) -> left + ", " + right)
+                    .orElse("") + ")";
+        }
         if (symbol instanceof Symbol.Scenario scenario) {
             return " -> " + scenario.computation();
         }

@@ -8,6 +8,8 @@ Namespace operations
   DeleteCustomer  [specs/customer.harpia.md]
 Namespace integrations
   (empty)
+Namespace events
+  (empty)
 Namespace computations
   (empty)
 Namespace tests

@@ -499,6 +499,41 @@ Boolean
 `languageVersion: 0` recusa `## Integration` com `HRP1107`: nunca a interpreta como um caso de uso
 legado cujo título começaria com “Integration”.
 
+## 7.5 Event
+
+Na V1, um fato consumado é declarado como Event. Um Event não é uma chamada: ninguém espera por ele
+e ninguém responde, então ele não tem `#### Output` nem `#### Errors` — a declaração inteira é o que
+ele carrega.
+
+```markdown
+## Event PurchasePlaced
+
+### Payload
+
+- purchase: Reference<Purchase> required
+- status: Status required
+- total: Decimal required
+```
+
+- o nome é PascalCase e vive no namespace `events`, separado de types, operações, integrations e
+  computations; nomes de Event não se repetem no projeto (`HRP2139`);
+- um Event declara exatamente uma `### Payload`, e só ela (`HRP1112`); um Event sem payload anuncia
+  que algo aconteceu sem dizer a quê, e é recusado;
+- os campos do payload usam a gramática de `### Input`, com `required` opcional, e não se repetem
+  (`HRP2140`);
+- o payload aceita escalares, Enum, Value, `List<T>`, `Optional<T>` e `Reference<Entity>`;
+- uma Entity **não** atravessa o payload (`HRP2141`). Um evento diz que algo aconteceu a um registro
+  específico, então precisa dizer a qual: `Reference<T>` é essa identidade e nada mais. A entidade
+  seria a linha em si, cuja vida o leitor não compartilha — quando alguém lê o evento, a linha pode
+  já ter mudado, e o que chegaria seria uma cópia se passando pelo registro. É por isso que a regra
+  do Event difere da de Integration (`HRP2133`), que recusa também a referência: ali o contrato sai
+  do processo para um serviço que não tem a tabela;
+- declarar o Event não escolhe transporte nem exige capability. Se os assinantes estão neste
+  processo ou atrás de um broker é decisão de um provider, e nenhum estágio do compilador nomeia
+  tópico, broker ou listener.
+
+`languageVersion: 0` recusa `## Event` com `HRP1107`, pelo mesmo motivo de `## Integration`.
+
 ## 8.1 Rules
 
 Na V1, cada item de lista sob `### Rules` é uma condição booleana sobre o input da operação:

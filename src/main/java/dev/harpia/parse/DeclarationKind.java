@@ -10,6 +10,7 @@ public enum DeclarationKind {
     COMMAND,
     QUERY,
     INTEGRATION,
+    EVENT,
     LOGIC,
     SCENARIO;
 

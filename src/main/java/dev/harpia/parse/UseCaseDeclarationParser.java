@@ -47,7 +47,8 @@ final class UseCaseDeclarationParser implements DeclarationParser {
                     "Query", "1",
                     "Enum", "1",
                     "Value", "1",
-                    "Integration", "1");
+                    "Integration", "1",
+                    "Event", "1");
     private static final Map<String, String> LATER_SECTIONS = Map.of("Invariants", "1");
 
     /** The legacy V0 form: any heading, kind inferred later, `### Rules` documentary. */
@@ -110,8 +111,9 @@ final class UseCaseDeclarationParser implements DeclarationParser {
                 if (useCase.name().startsWith(later.getKey() + " ")) {
                     diagnostics.error(
                             ErrorCodes.SYNTAX_DECLARATION_TOO_NEW,
-                            "'## " + useCase.name() + "' declares a "
-                                    + later.getKey() + ", which needs harpia.languageVersion "
+                            "'## " + useCase.name() + "' declares "
+                                    + article(later.getKey()) + " " + later.getKey()
+                                    + ", which needs harpia.languageVersion "
                                     + later.getValue(),
                             useCase.heading().raw().where(),
                             "set harpia.languageVersion to " + later.getValue()
@@ -416,5 +418,10 @@ final class UseCaseDeclarationParser implements DeclarationParser {
         private ParseItems {
             items = List.copyOf(items);
         }
+    }
+
+    /** Enum, Event and Integration all start with a vowel, and "a Enum" reads like a typo. */
+    private static String article(String kind) {
+        return "AEIOU".indexOf(kind.charAt(0)) >= 0 ? "an" : "a";
     }
 }

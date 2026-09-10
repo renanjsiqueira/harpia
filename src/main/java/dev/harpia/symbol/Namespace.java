@@ -10,6 +10,7 @@ public enum Namespace {
     TYPES("types", "Entity and Enum, and later Value"),
     OPERATIONS("operations", "use cases, and later Command and Query"),
     INTEGRATIONS("integrations", "outbound ports and their operations"),
+    EVENTS("events", "domain events and the payload they announce"),
     COMPUTATIONS("computations", "Logic, and later Formula and Decision"),
     TESTS("tests", "Scenario");
 

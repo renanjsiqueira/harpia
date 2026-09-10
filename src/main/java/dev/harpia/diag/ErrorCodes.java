@@ -49,6 +49,8 @@ public final class ErrorCodes {
     public static final String SYNTAX_INVARIANT = "HRP1110";
     /** An Integration heading or one of its Operation ports is malformed. */
     public static final String SYNTAX_INTEGRATION = "HRP1111";
+    /** The structure of a `## Event` declaration is not what the grammar admits. */
+    public static final String SYNTAX_EVENT = "HRP1112";
     /** Indentation inside a {@code logic} block is not a multiple of four spaces. */
     public static final String SYNTAX_LOGIC_INDENT = "HRP1102";
     /** A character or word that does not belong to the Harpia Logic lexicon. */
@@ -140,6 +142,12 @@ public final class ErrorCodes {
     public static final String SEMANTIC_FLOW_BRANCH_SCOPE = "HRP2130";
     /** The owned modifier is attached to something that is not an entity relationship. */
     public static final String SEMANTIC_OWNED_RELATIONSHIP = "HRP2131";
+    /** Two events share a name in the event namespace. */
+    public static final String SEMANTIC_DUPLICATE_EVENT = "HRP2139";
+    /** An event declares the same payload field more than once. */
+    public static final String SEMANTIC_DUPLICATE_EVENT_FIELD = "HRP2140";
+    /** An event payload carries an entity instead of the identity of one. */
+    public static final String SEMANTIC_EVENT_PAYLOAD_TYPE = "HRP2141";
     /** Two integrations share a name in the integration namespace. */
     public static final String SEMANTIC_DUPLICATE_INTEGRATION = "HRP2132";
     /** An integration contract exposes an entity or identity-bearing reference as a value. */

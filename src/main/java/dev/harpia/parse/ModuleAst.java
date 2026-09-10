@@ -47,6 +47,10 @@ public record ModuleAst(
         return declarations(IntegrationAst.Declaration.class);
     }
 
+    public List<EventAst.Declaration> events() {
+        return declarations(EventAst.Declaration.class);
+    }
+
     public List<LogicAst.Declaration> logics() {
         return declarations(LogicAst.Declaration.class);
     }

@@ -558,8 +558,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [ ] `INTEG-010` **Autenticação básica e response validation de integração** — `TODO`; o Core cobre API key/bearer e validação básica de resposta. OAuth e políticas avançadas ficam em `BIND-008` no Next · `P0` · `L` · Area: `Integration`
   - Depends on: `INTEG-001`, `INTEG-002`.
 
-- [ ] `EVENT-001` **Event e payload tipado** — `TODO`; seção Events é rejeitada em V0 · `P0` · `L` · Area: `Messaging`
-  - Depends on: `CORE-009`, `CORE-018`.
+- [x] `EVENT-001` **Event e payload tipado** — `DONE`; `## Event <Nome>` com `### Payload` declara um fato consumado, entra no namespace próprio `events` e atravessa AST, SymbolTable, Business IR e Application IR sem escolher transporte — nenhum estágio nomeia tópico, broker ou listener. O payload aceita escalares, Enum, Value, `List<T>`, `Optional<T>` e `Reference<Entity>`; uma Entity é `HRP2141`, porque o evento diz a **qual** registro algo aconteceu e não carrega a linha cuja vida o leitor não compartilha. V0 recusa com `HRP1107` · `P0` · `L` · Area: `Messaging`
+  - Evidence: [`EventDeclarationTest`](src/test/java/dev/harpia/validate/EventDeclarationTest.java), [`EventAst`](src/main/java/dev/harpia/parse/EventAst.java), [`EventDeclarationParser`](src/main/java/dev/harpia/parse/EventDeclarationParser.java), [`EventModel`](src/main/java/dev/harpia/model/EventModel.java), [`ApplicationEvent`](src/main/java/dev/harpia/application/ApplicationEvent.java).
 
 - [ ] `EVENT-003` **Emit Event** — `TODO` · `P0` · `M` · Area: `Messaging`
   - Depends on: `EVENT-001`, `FLOW-015`.

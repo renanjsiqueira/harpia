@@ -12,6 +12,7 @@ public record ProjectModel(
         List<EnumModel> enums,
         List<ValueModel> values,
         List<IntegrationModel> integrations,
+        List<EventModel> events,
         List<EntityModel> entities,
         List<LogicModel> logics,
         List<ScenarioModel> scenarios) {
@@ -19,6 +20,7 @@ public record ProjectModel(
         enums = List.copyOf(enums);
         values = List.copyOf(values);
         integrations = List.copyOf(integrations);
+        events = List.copyOf(events);
         entities = List.copyOf(entities);
         logics = List.copyOf(logics);
         scenarios = List.copyOf(scenarios);

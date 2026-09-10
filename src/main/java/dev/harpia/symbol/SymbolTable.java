@@ -121,6 +121,19 @@ public final class SymbolTable {
                         reportedFirst,
                         diagnostics);
             }
+            for (dev.harpia.parse.EventAst.Declaration event : module.events()) {
+                declare(
+                        symbols,
+                        new Symbol.Event(
+                                event.name(),
+                                module.file(),
+                                event.payload(),
+                                event.where()),
+                        ErrorCodes.SEMANTIC_DUPLICATE_EVENT,
+                        "event",
+                        reportedFirst,
+                        diagnostics);
+            }
             for (LogicAst.Declaration logic : module.logics()) {
                 computation(logic, module.file(), diagnostics)
                         .ifPresent(symbol -> declare(
@@ -229,6 +242,12 @@ public final class SymbolTable {
         return lookup(Namespace.TYPES, name)
                 .filter(Symbol.Entity.class::isInstance)
                 .map(Symbol.Entity.class::cast);
+    }
+
+    public Optional<Symbol.Event> event(String name) {
+        return lookup(Namespace.EVENTS, name)
+                .filter(Symbol.Event.class::isInstance)
+                .map(Symbol.Event.class::cast);
     }
 
     public Optional<Symbol.Integration> integration(String name) {

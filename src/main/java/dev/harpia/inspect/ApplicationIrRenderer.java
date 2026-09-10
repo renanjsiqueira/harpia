@@ -112,6 +112,12 @@ final class ApplicationIrRenderer {
                 .append(" -> ").append(logic.returnType().display())
                 .append(logic.customContract().map(contract -> " custom " + contract).orElse(""))
                 .append('\n'));
+        project.events().forEach(event -> {
+            out.append("  Event ").append(event.name()).append('\n');
+            event.payload().forEach(field -> out.append("    Payload ")
+                    .append(field.name()).append(": ").append(field.type().syntax())
+                    .append(field.required() ? " required" : "").append('\n'));
+        });
         project.integrations().forEach(integration -> {
             out.append("  OutboundPort ").append(integration.name()).append('\n');
             integration.operations().forEach(operation -> {

@@ -62,6 +62,7 @@ final class DeclarationParserRegistry {
                             new UseCaseDeclarationParser(DeclarationKind.COMMAND, "Command"),
                             new UseCaseDeclarationParser(DeclarationKind.QUERY, "Query"),
                             new IntegrationDeclarationParser(),
+                            new EventDeclarationParser(),
                             new LogicDeclarationParser(),
                             new ScenarioDeclarationParser()),
                     new UseCaseDeclarationParser(DeclarationKind.USE_CASE, null, true));

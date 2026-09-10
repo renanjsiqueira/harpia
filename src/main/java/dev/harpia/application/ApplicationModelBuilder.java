@@ -86,6 +86,18 @@ public final class ApplicationModelBuilder {
                                         .toList(),
                                 source.where()))
                         .toList(),
+                business.events().stream()
+                        .map(source -> new ApplicationEvent(
+                                source.name(),
+                                source.payload().stream()
+                                        .map(field -> new ApplicationEvent.Field(
+                                                field.name(),
+                                                fieldType(field.type()),
+                                                field.required(),
+                                                field.where()))
+                                        .toList(),
+                                source.where()))
+                        .toList(),
                 business.entities().stream()
                         .map(source -> entity(source, identities(business)))
                         .toList(),
