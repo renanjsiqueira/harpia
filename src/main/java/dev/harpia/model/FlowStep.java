@@ -20,12 +20,31 @@ public sealed interface FlowStep
                 FlowStep.Fail,
                 FlowStep.Require,
                 FlowStep.Call,
+                FlowStep.IntegrationCall,
                 FlowStep.Return {
 
     SourceRef where();
 
     record ValidateInput(SourceRef where) implements FlowStep {
         public ValidateInput {
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
+    /** An invocation of one operation on a typed outbound Integration port. */
+    record IntegrationCall(
+            java.util.Optional<String> variable,
+            String integration,
+            String operation,
+            java.util.List<IntegrationCallModel.Argument> arguments,
+            java.util.Optional<dev.harpia.logic.LogicType> resultType,
+            SourceRef where) implements FlowStep {
+        public IntegrationCall {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(integration, "integration");
+            Objects.requireNonNull(operation, "operation");
+            arguments = java.util.List.copyOf(arguments);
+            Objects.requireNonNull(resultType, "resultType");
             Objects.requireNonNull(where, "where");
         }
     }

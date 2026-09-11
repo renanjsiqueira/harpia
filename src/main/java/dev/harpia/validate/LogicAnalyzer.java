@@ -12,6 +12,7 @@ import dev.harpia.logic.TypedStatement;
 import dev.harpia.logic.UnaryOperator;
 import dev.harpia.model.LogicModel;
 import dev.harpia.model.FlowCallModel;
+import dev.harpia.model.IntegrationCallModel;
 import dev.harpia.parse.SpecAst;
 import dev.harpia.model.Naming;
 import dev.harpia.model.RuleModel;
@@ -74,7 +75,7 @@ public final class LogicAnalyzer {
         }
 
         reportCycles(callGraph, symbols, diagnostics);
-        Map<SourceRef, FlowCallModel> flowCalls = flowCalls(project, symbols, diagnostics);
+        FlowCalls flowCalls = flowCalls(project, symbols, diagnostics);
         return new Result(
                 List.copyOf(models),
                 ScenarioAnalyzer.analyze(project, symbols, diagnostics),
@@ -82,13 +83,15 @@ public final class LogicAnalyzer {
                 invariants(project, symbols, diagnostics),
                 guards(project, symbols, diagnostics),
                 assignments(project, symbols, diagnostics),
-                flowCalls);
+                flowCalls.logics(),
+                flowCalls.integrations());
     }
 
     /** Resolves simple Flow calls to pure Logic signatures. Command and Integration follow next. */
-    private static Map<SourceRef, FlowCallModel> flowCalls(
+    private static FlowCalls flowCalls(
             ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
         Map<SourceRef, FlowCallModel> resolved = new LinkedHashMap<>();
+        Map<SourceRef, IntegrationCallModel> integrations = new LinkedHashMap<>();
         Set<String> customLogics = project.modules().stream()
                 .flatMap(module -> module.logics().stream())
                 .filter(declaration -> declaration.custom().isPresent())
@@ -102,14 +105,12 @@ public final class LogicAnalyzer {
                         continue;
                     }
                     if (call.operation().isPresent()) {
-                        String target = call.displayTarget();
-                        String reason = symbols.integration(call.target()).isPresent()
-                                ? "Integration calls are completed by INTEG-003"
-                                : "no Integration named '" + call.target() + "' is declared";
-                        diagnostics.error(
-                                ErrorCodes.SEMANTIC_FLOW_CALL_TARGET,
-                                "cannot call '" + target + "': " + reason,
-                                call.where());
+                        resolveIntegrationCall(
+                                        call,
+                                        scopeOfBoundaryValues(useCase.input(), symbols),
+                                        symbols,
+                                        diagnostics)
+                                .ifPresent(model -> integrations.put(call.where(), model));
                         continue;
                     }
 
@@ -156,7 +157,163 @@ public final class LogicAnalyzer {
                 }
             }
         }
-        return Map.copyOf(resolved);
+        return new FlowCalls(Map.copyOf(resolved), Map.copyOf(integrations));
+    }
+
+    private static Optional<IntegrationCallModel> resolveIntegrationCall(
+            SpecAst.Call call,
+            List<LogicModel.Parameter> scope,
+            SymbolTable symbols,
+            DiagnosticCollector diagnostics) {
+        Optional<Symbol.Integration> integration = symbols.integration(call.target());
+        if (integration.isEmpty()) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_FLOW_CALL_TARGET,
+                    "cannot call '" + call.displayTarget() + "': no Integration named '"
+                            + call.target() + "' is declared",
+                    call.where());
+            return Optional.empty();
+        }
+        String operationName = call.operation().orElseThrow();
+        Optional<dev.harpia.parse.IntegrationAst.Operation> operation =
+                integration.orElseThrow().operation(operationName);
+        if (operation.isEmpty()) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_FLOW_CALL_TARGET,
+                    "Integration '" + call.target() + "' has no operation '"
+                            + operationName + "'",
+                    call.where(),
+                    "Integration declared here",
+                    integration.orElseThrow().where());
+            return Optional.empty();
+        }
+
+        dev.harpia.parse.IntegrationAst.Operation signature = operation.orElseThrow();
+        boolean returnsNothing = signature.output().returnsNothing();
+        if (returnsNothing && call.variable().isPresent()) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_FLOW_CALL_RESULT,
+                    "Integration operation '" + call.displayTarget()
+                            + "' returns nothing and cannot be assigned",
+                    call.where());
+            return Optional.empty();
+        }
+        if (!returnsNothing && call.variable().isEmpty()) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_FLOW_CALL_RESULT,
+                    "Integration operation '" + call.displayTarget()
+                            + "' returns a value; assign it as '<name> = call ...'",
+                    call.where());
+            return Optional.empty();
+        }
+
+        Map<String, LogicAst.NamedArgument> supplied = new LinkedHashMap<>();
+        boolean valid = true;
+        for (LogicAst.NamedArgument argument : call.arguments()) {
+            LogicAst.NamedArgument first = supplied.putIfAbsent(argument.name(), argument);
+            if (first != null) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_ARGUMENT,
+                        "call to Integration operation '" + call.displayTarget()
+                                + "' repeats argument '" + argument.name() + "'",
+                        argument.where(),
+                        "first supplied here",
+                        first.where());
+                valid = false;
+            } else if (signature.input().stream()
+                    .noneMatch(parameter -> parameter.name().equals(argument.name()))) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_ARGUMENT,
+                        "Integration operation '" + call.displayTarget()
+                                + "' has no parameter '" + argument.name() + "'",
+                        argument.where());
+                valid = false;
+            }
+        }
+
+        List<IntegrationCallModel.Argument> arguments = new ArrayList<>();
+        for (SpecAst.InputDeclaration parameter : signature.input()) {
+            LogicAst.NamedArgument suppliedArgument = supplied.get(parameter.name());
+            if (suppliedArgument == null) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_ARGUMENT,
+                        "call to Integration operation '" + call.displayTarget()
+                                + "' is missing argument '" + parameter.name() + "'",
+                        call.where());
+                valid = false;
+                continue;
+            }
+            Optional<LogicType> parameterType = boundaryType(parameter.type(), symbols);
+            if (parameterType.isEmpty()) {
+                valid = false;
+                continue;
+            }
+            Optional<TypedExpression> value = analyzeExpression(
+                    "argument '" + parameter.name() + "' of Integration "
+                            + call.displayTarget(),
+                    scope,
+                    parameterType.orElseThrow(),
+                    suppliedArgument.value(),
+                    symbols,
+                    suppliedArgument.where(),
+                    diagnostics);
+            if (value.isEmpty()) {
+                valid = false;
+                continue;
+            }
+            arguments.add(new IntegrationCallModel.Argument(
+                    parameter.name(),
+                    value.orElseThrow(),
+                    parameterType.orElseThrow(),
+                    suppliedArgument.where()));
+        }
+        Optional<LogicType> resultType = returnsNothing
+                ? Optional.empty()
+                : boundaryType(signature.output().type(), symbols);
+        valid &= returnsNothing || resultType.isPresent();
+        return valid
+                ? Optional.of(new IntegrationCallModel(
+                        call.variable(),
+                        call.target(),
+                        operationName,
+                        arguments,
+                        resultType,
+                        call.where()))
+                : Optional.empty();
+    }
+
+    private static List<LogicModel.Parameter> scopeOfBoundaryValues(
+            List<SpecAst.InputDeclaration> input, SymbolTable symbols) {
+        List<LogicModel.Parameter> scope = new ArrayList<>();
+        for (SpecAst.InputDeclaration field : input) {
+            boundaryType(field.type(), symbols).ifPresent(type -> scope.add(
+                    new LogicModel.Parameter(field.name(), type, field.where())));
+        }
+        return List.copyOf(scope);
+    }
+
+    /** Translates a validated Integration type without introducing a target language type. */
+    private static Optional<LogicType> boundaryType(String syntax, SymbolTable symbols) {
+        Optional<String> optional = FieldLineParser.optionalOf(syntax);
+        if (optional.isPresent()) {
+            return boundaryType(optional.orElseThrow(), symbols).map(LogicType.Optionality::new);
+        }
+        Optional<String> element = FieldLineParser.elementOf(syntax);
+        if (element.isPresent()) {
+            return boundaryType(element.orElseThrow(), symbols).map(LogicType.Container::new);
+        }
+        if (FieldLineParser.isScalar(syntax)) {
+            return Optional.of(LogicType.of(syntax));
+        }
+        if (symbols.enumType(syntax).isPresent() || symbols.valueType(syntax).isPresent()) {
+            return Optional.of(new LogicType.Nominal(syntax));
+        }
+        return Optional.empty();
+    }
+
+    private record FlowCalls(
+            Map<SourceRef, FlowCallModel> logics,
+            Map<SourceRef, IntegrationCallModel> integrations) {
     }
 
     private static Optional<FlowCallModel> resolveLogicCall(
@@ -498,13 +655,15 @@ public final class LogicAnalyzer {
             Map<String, List<RuleModel>> invariants,
             Map<SourceRef, TypedExpression> guards,
             Map<SourceRef, TypedExpression> assignments,
-            Map<SourceRef, FlowCallModel> flowCalls) {
+            Map<SourceRef, FlowCallModel> flowCalls,
+            Map<SourceRef, IntegrationCallModel> integrationCalls) {
         public Result {
             rules = Map.copyOf(rules);
             invariants = Map.copyOf(invariants);
             guards = Map.copyOf(guards);
             assignments = Map.copyOf(assignments);
             flowCalls = Map.copyOf(flowCalls);
+            integrationCalls = Map.copyOf(integrationCalls);
             logics = List.copyOf(logics);
             scenarios = List.copyOf(scenarios);
         }

@@ -54,6 +54,16 @@ public final class JavaSpringTarget implements HarpiaTarget {
             for (ApplicationField field : entity.fields()) {
                 reserved(field.name(), "field", field.where(), diagnostics);
             }
+            entity.operations().stream()
+                    .flatMap(operation -> operation.allInstructions().stream())
+                    .filter(instruction -> instruction.command()
+                            == dev.harpia.application.ApplicationOperation.FlowCommand
+                                    .CALL_INTEGRATION)
+                    .forEach(instruction -> diagnostics.error(
+                            ErrorCodes.TARGET_CONSTRUCT_UNSUPPORTED,
+                            "target `java-spring` does not yet implement Integration calls; "
+                                    + "the HTTP client provider is INTEG-004",
+                            instruction.where()));
         }
         for (ApplicationLogic logic : application.logics()) {
             for (ApplicationLogic.Parameter parameter : logic.parameters()) {

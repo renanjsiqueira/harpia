@@ -111,6 +111,18 @@ final class BusinessIrRenderer {
                                 .reduce((left, right) -> left + ", " + right)
                                 .orElse(""))
                         .append(')');
+            } else if (step instanceof FlowStep.IntegrationCall call) {
+                call.variable().ifPresent(variable -> out.append(' ')
+                        .append(variable).append(" ="));
+                out.append(' ').append(call.integration()).append('.')
+                        .append(call.operation()).append('(')
+                        .append(call.arguments().stream()
+                                .map(argument -> argument.name() + ": "
+                                        + argument.parameterType().display())
+                                .reduce((left, right) -> left + ", " + right)
+                                .orElse(""))
+                        .append(')');
+                call.resultType().ifPresent(type -> out.append(" -> ").append(type.display()));
             }
             out.append('\n');
             if (step instanceof FlowStep.Conditional conditional) {

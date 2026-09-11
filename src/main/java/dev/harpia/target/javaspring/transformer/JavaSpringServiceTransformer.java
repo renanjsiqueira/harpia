@@ -270,6 +270,8 @@ public final class JavaSpringServiceTransformer {
                             + JavaSpringLogicTransformer.METHOD_NAME + "("
                             + String.join(", ", arguments) + ");");
                 }
+                case CALL_INTEGRATION -> throw new IllegalStateException(
+                        "Integration calls require target validation and INTEG-004");
                 case CREATE_FROM -> {
                     String variable = instruction.variable().orElseThrow();
                     statements.add(entityName + " " + variable + " = new " + entityName + "();");

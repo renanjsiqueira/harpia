@@ -178,6 +178,22 @@ final class ApplicationIrRenderer {
                                             .orElse("")
                                     + ") -> " + invocation.resultType().display())
                             .orElse(""))
+                    .append(instruction.integrationInvocation()
+                            .map(invocation -> " "
+                                    + instruction.variable()
+                                            .map(variable -> variable + " = ")
+                                            .orElse("")
+                                    + invocation.target() + "("
+                                    + invocation.arguments().stream()
+                                            .map(argument -> argument.name() + ": "
+                                                    + argument.parameterType().display())
+                                            .reduce((left, right) -> left + ", " + right)
+                                            .orElse("")
+                                    + ")"
+                                    + invocation.resultType()
+                                            .map(type -> " -> " + type.display())
+                                            .orElse(" -> nothing"))
+                            .orElse(""))
                     // The shape is shared; how it reads is not. Fail raises when a condition
                     // holds, require raises unless it holds, and set assigns a value.
                     .append(instruction.value()

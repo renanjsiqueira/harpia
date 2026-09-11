@@ -204,6 +204,7 @@ public record ApplicationOperation(
             boolean paged,
             Optional<TypedValue> value,
             Optional<Invocation> invocation,
+            Optional<IntegrationInvocation> integrationInvocation,
             List<FlowInstruction> whenTrue,
             List<FlowInstruction> whenFalse,
             SourceRef where) {
@@ -254,6 +255,35 @@ public record ApplicationOperation(
             }
         }
 
+        /** A provider-independent call to one operation of an outbound Integration. */
+        public record IntegrationInvocation(
+                String integration,
+                String operation,
+                List<Argument> arguments,
+                Optional<LogicType> resultType) {
+            public IntegrationInvocation {
+                Objects.requireNonNull(integration, "integration");
+                Objects.requireNonNull(operation, "operation");
+                arguments = List.copyOf(arguments);
+                Objects.requireNonNull(resultType, "resultType");
+            }
+
+            public String target() {
+                return integration + "." + operation;
+            }
+
+            public record Argument(
+                    String name,
+                    TypedExpression value,
+                    LogicType parameterType) {
+                public Argument {
+                    Objects.requireNonNull(name, "name");
+                    Objects.requireNonNull(value, "value");
+                    Objects.requireNonNull(parameterType, "parameterType");
+                }
+            }
+        }
+
         /** Every instruction but a conditional, which is the only one that carries branches. */
         public FlowInstruction(
                 FlowCommand command,
@@ -265,7 +295,7 @@ public record ApplicationOperation(
                 Optional<TypedValue> value,
                 SourceRef where) {
             this(command, variable, entity, fields, sort, paged, value, Optional.empty(),
-                    List.of(), List.of(), where);
+                    Optional.empty(), List.of(), List.of(), where);
         }
 
         /** An instruction that carries neither a typed expression nor conditional branches. */
@@ -275,7 +305,7 @@ public record ApplicationOperation(
                 Optional<String> entity,
                 SourceRef where) {
             this(command, variable, entity, List.of(), List.of(), false, Optional.empty(),
-                    Optional.empty(), List.of(), List.of(), where);
+                    Optional.empty(), Optional.empty(), List.of(), List.of(), where);
         }
 
         public FlowInstruction {
@@ -286,6 +316,7 @@ public record ApplicationOperation(
             sort = List.copyOf(sort);
             Objects.requireNonNull(value, "value");
             Objects.requireNonNull(invocation, "invocation");
+            Objects.requireNonNull(integrationInvocation, "integrationInvocation");
             whenTrue = List.copyOf(whenTrue);
             whenFalse = List.copyOf(whenFalse);
             Objects.requireNonNull(where, "where");
@@ -304,6 +335,14 @@ public record ApplicationOperation(
                         && !paged
                         && value.isEmpty()
                         && invocation.isPresent();
+                case CALL_INTEGRATION -> entity.isEmpty()
+                        && fields.isEmpty()
+                        && sort.isEmpty()
+                        && !paged
+                        && value.isEmpty()
+                        && integrationInvocation.isPresent()
+                        && (variable.isPresent()
+                                == integrationInvocation.orElseThrow().resultType().isPresent());
                 case IF -> variable.isEmpty()
                         && entity.isEmpty()
                         && fields.isEmpty()
@@ -316,6 +355,7 @@ public record ApplicationOperation(
                 case RETURN -> entity.isEmpty();
             };
             valid &= command == FlowCommand.CALL_LOGIC || invocation.isEmpty();
+            valid &= command == FlowCommand.CALL_INTEGRATION || integrationInvocation.isEmpty();
             valid &= command == FlowCommand.IF || whenTrue.isEmpty() && whenFalse.isEmpty();
             if (!valid) {
                 throw new IllegalArgumentException("invalid operands for flow command " + command);
@@ -328,6 +368,7 @@ public record ApplicationOperation(
         FAIL,
         REQUIRE,
         CALL_LOGIC,
+        CALL_INTEGRATION,
         FIND_BY,
         LIST_BY,
         SET_FIELD,
@@ -353,7 +394,8 @@ public record ApplicationOperation(
     public enum VariableKind {
         ENTITY,
         LIST,
-        SCALAR
+        SCALAR,
+        VALUE
     }
 
     public record Result(int status, ResultKind kind, Optional<String> responseTypeName) {

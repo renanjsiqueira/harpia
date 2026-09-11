@@ -9,7 +9,8 @@ import java.util.Objects;
  *
  * <p>No Java or database type names appear here.
  */
-public sealed interface LogicType {
+public sealed interface LogicType
+        permits LogicType.Scalar, LogicType.Nominal, LogicType.Container, LogicType.Optionality {
 
     /** Human-facing name used by diagnostics. It is always Harpia syntax, never a Java name. */
     String display();
@@ -22,6 +23,42 @@ public sealed interface LogicType {
         @Override
         public String display() {
             return kind.syntax();
+        }
+    }
+
+    /** A project-declared Enum or Value, kept nominal across a typed Flow invocation. */
+    record Nominal(String name) implements LogicType {
+        public Nominal {
+            Objects.requireNonNull(name, "name");
+        }
+
+        @Override
+        public String display() {
+            return name;
+        }
+    }
+
+    /** A homogeneous value collection carried through an application boundary. */
+    record Container(LogicType element) implements LogicType {
+        public Container {
+            Objects.requireNonNull(element, "element");
+        }
+
+        @Override
+        public String display() {
+            return "List<" + element.display() + ">";
+        }
+    }
+
+    /** Explicit absence in a typed application boundary. */
+    record Optionality(LogicType element) implements LogicType {
+        public Optionality {
+            Objects.requireNonNull(element, "element");
+        }
+
+        @Override
+        public String display() {
+            return "Optional<" + element.display() + ">";
         }
     }
 

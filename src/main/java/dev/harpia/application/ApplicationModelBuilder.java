@@ -386,6 +386,32 @@ public final class ApplicationModelBuilder {
                                             argument.parameterType()))
                                     .toList(),
                             value.resultType())),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    value.where());
+        }
+        if (source instanceof FlowStep.IntegrationCall value) {
+            return new FlowInstruction(
+                    FlowCommand.CALL_INTEGRATION,
+                    value.variable(),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    false,
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(new FlowInstruction.IntegrationInvocation(
+                            value.integration(),
+                            value.operation(),
+                            value.arguments().stream()
+                                    .map(argument ->
+                                            new FlowInstruction.IntegrationInvocation.Argument(
+                                                    argument.name(),
+                                                    argument.value(),
+                                                    argument.parameterType()))
+                                    .toList(),
+                            value.resultType())),
                     java.util.List.of(),
                     java.util.List.of(),
                     value.where());
@@ -436,6 +462,7 @@ public final class ApplicationModelBuilder {
                     false,
                     Optional.of(new FlowInstruction.TypedValue(
                             "if", value.text(), value.condition())),
+                    Optional.empty(),
                     Optional.empty(),
                     value.whenTrue().stream()
                             .map(ApplicationModelBuilder::instruction)
@@ -519,6 +546,7 @@ public final class ApplicationModelBuilder {
                             case ENTITY -> VariableKind.ENTITY;
                             case LIST -> VariableKind.LIST;
                             case SCALAR -> VariableKind.SCALAR;
+                            case VALUE -> VariableKind.VALUE;
                         },
                         type.entity())));
         return result;

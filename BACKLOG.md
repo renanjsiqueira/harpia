@@ -550,7 +550,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `INTEG-002` **Typed Input/Output/Errors de integração** — `DONE`; cada Operation exige `#### Output`, aceita `#### Input` tipado e variantes PascalCase em `#### Errors`. Escalares, Enum, Value, `List<T>` e `Optional<T>` atravessam AST, SymbolTable, Business IR e Application IR; Entity/`Reference<Entity>` são recusados para não vazar persistência pela porta. Binding, transporte e política de falha continuam separados · `P0` · `L` · Area: `Integration`
   - Evidence: [`IntegrationOperationParser`](src/main/java/dev/harpia/parse/IntegrationOperationParser.java), [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java), [`IntegrationModel`](src/main/java/dev/harpia/model/IntegrationModel.java), [`ApplicationIntegration`](src/main/java/dev/harpia/application/ApplicationIntegration.java), [`IntegrationContractTest`](src/test/java/dev/harpia/validate/IntegrationContractTest.java).
 
-- [ ] `INTEG-003` **Flow call integration** — `TODO` · `P0` · `M` · Area: `Integration`
+- [x] `INTEG-003` **Flow call integration** — `DONE`; `call Integration.Operation(...)` resolve a porta e a operação em namespaces próprios, ordena argumentos nomeados pela assinatura, valida escalares/Enum/Value/`List`/`Optional`, exige atribuição exatamente quando há resultado e preserva a invocação nos AST/Business IR/Application IR. O Core permanece independente de transporte; enquanto `INTEG-004` não existe, `java-spring` recusa a construção explicitamente com `HRP7008` · `P0` · `M` · Area: `Integration`
+  - Evidence: [`LogicAnalyzer`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`IntegrationCallModel`](src/main/java/dev/harpia/model/IntegrationCallModel.java), [`ApplicationOperation`](src/main/java/dev/harpia/application/ApplicationOperation.java), [`JavaSpringTarget`](src/main/java/dev/harpia/target/javaspring/JavaSpringTarget.java), [`IntegrationFlowCallTest`](src/test/java/dev/harpia/validate/IntegrationFlowCallTest.java).
   - Depends on: `INTEG-001`, `FLOW-014`.
 
 - [ ] `INTEG-004` **HTTP/REST client provider** — `TODO` · `P0` · `L` · Area: `Integration`
@@ -1896,11 +1897,11 @@ deliberados não têm meta de 100%.
 
 | Horizon | Total | Done | Partial | Todo | Other | Completion |
 |---|---:|---:|---:|---:|---:|---:|
-| Core V1 | 213 | 174 | 16 | 23 | 0 | 85,4% |
+| Core V1 | 213 | 175 | 16 | 22 | 0 | 85,9% |
 | Next / Upstream | 183 | 1 | 12 | 168 | 2 | 3,8% |
 | Labs / Research | 134 | 0 | 1 | 69 | 64 | N/A |
 | Custom / Non-goals | 20 | 0 | 0 | 0 | 20 | N/A |
-| **Canonical total** | **550** | **175** | **29** | **260** | **86** | — |
+| **Canonical total** | **550** | **176** | **29** | **259** | **86** | — |
 
 `Other` reúne `RESEARCH`, `NOT_SUPPORTED`, `CUSTOM` e `WONT_DO`. Ele não mascara trabalho do Core:
 a seleção Core contém apenas itens implementáveis `DONE`, `PARTIAL` ou `TODO`.
@@ -1918,14 +1919,14 @@ a seleção Core contém apenas itens implementáveis `DONE`, `PARTIAL` ou `TODO
 
 ## Audit Snapshot
 
-Baseline auditada na primeira fatia de `FLOW-014`:
+Baseline auditada no fechamento de `INTEG-003`:
 
 | Métrica | Resultado |
 |---|---:|
-| Produção Java | 225 arquivos / 23.962 linhas |
-| Testes Java | 97 arquivos / 14.737 linhas |
+| Produção Java | 226 arquivos / 24.359 linhas |
+| Testes Java | 98 arquivos / 14.967 linhas |
 | Gate | `mvn -o test` — **BUILD SUCCESS** |
-| Testes executados | 511; 0 failures, 0 errors, 0 skipped |
+| Testes executados | 516; 0 failures, 0 errors, 0 skipped |
 
 # Core V1 Completion Criteria
 
