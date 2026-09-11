@@ -662,6 +662,206 @@ return product
 - invalid input -> 400
 ````
 
+## Access: authenticated
+
+`### Access` says who reaches the endpoint. `authenticated` demands that the request carry an
+identity, and says nothing about how it proves one: that is a provider's choice.
+
+````harpia
+# Customer
+
+## Data
+
+- id: UUID generated
+- name: String required
+
+## Query List Customers
+
+### Endpoint
+
+GET /customers
+
+### Access
+
+public
+
+### Flow
+
+```flow
+customers = list Customer
+return customers
+```
+
+### Output
+
+200 List<Customer>
+
+## Command Delete Customer
+
+### Endpoint
+
+DELETE /customers/{id}
+
+### Access
+
+authenticated
+
+### Flow
+
+```flow
+customer = load Customer by id
+delete customer
+return nothing
+```
+
+### Output
+
+204 nothing
+
+### Errors
+
+- not found -> 404
+````
+
+Each operation becomes its own rule, keyed by method and path, so the `GET` above stays public even
+though it shares a path with something protected. Anything nobody declared is denied.
+
+V0 has only `public`:
+
+````harpia v0 HRP4001
+# Customer
+
+## Data
+
+- id: UUID generated
+- name: String required
+
+## Delete Customer
+
+### Endpoint
+
+DELETE /customers/{id}
+
+### Access
+
+authenticated
+
+### Flow
+
+```flow
+customer = load Customer by id
+delete customer
+return nothing
+```
+
+### Output
+
+204 nothing
+
+### Errors
+
+- not found -> 404
+````
+
+## Access: role and scope
+
+`role` asks for a kind of person; `scope` asks for a permission. Several are written with `or`, and
+the check is "any of them".
+
+````harpia
+# Customer
+
+## Data
+
+- id: UUID generated
+- name: String required
+
+## Query List Customers
+
+### Endpoint
+
+GET /customers
+
+### Access
+
+role admin or auditor
+
+### Flow
+
+```flow
+customers = list Customer
+return customers
+```
+
+### Output
+
+200 List<Customer>
+````
+
+A scope comes from a token, so this entry declares `jwt`. With `security.provider: basic` there
+would be no scope to carry, the rule would match nothing, and the endpoint would refuse every
+request — which is why that combination is `HRP6002` rather than a silent closed door.
+
+````harpia jwt
+# Customer
+
+## Data
+
+- id: UUID generated
+- name: String required
+
+## Query List Customers
+
+### Endpoint
+
+GET /customers
+
+### Access
+
+scope customers:read or customers:admin
+
+### Flow
+
+```flow
+customers = list Customer
+return customers
+```
+
+### Output
+
+200 List<Customer>
+````
+
+````harpia HRP6002
+# Customer
+
+## Data
+
+- id: UUID generated
+- name: String required
+
+## Query List Customers
+
+### Endpoint
+
+GET /customers
+
+### Access
+
+scope customers:read
+
+### Flow
+
+```flow
+customers = list Customer
+return customers
+```
+
+### Output
+
+200 List<Customer>
+````
+
 ## Logic
 
 Logic is a pure computation. It belongs to the project rather than to an entity, has no effects,

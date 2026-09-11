@@ -36,7 +36,7 @@ class CatalogTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("entries")
     void everyExampleMeansWhatTheCatalogueSaysItMeans(Entry entry) throws IOException {
-        write(entry.spec(), entry.languageVersion());
+        write(entry.spec(), entry.languageVersion(), entry.securityProvider());
         List<Diagnostic> diagnostics = new HarpiaCompiler()
                 .compile(new CompileRequest(projectRoot, CompileRequest.Mode.VALIDATE))
                 .diagnostics();
@@ -90,15 +90,22 @@ class CatalogTest {
             }
             if (line.startsWith("````")) {
                 String[] parts = info.isEmpty() ? new String[0] : info.split("\\s+");
+                List<String> tokens = List.of(parts);
                 entries.add(new Entry(
                         title,
                         String.join("\n", spec) + "\n",
-                        parts.length > 0 && parts[0].startsWith("v")
-                                ? Integer.parseInt(parts[0].substring(1))
-                                : 1,
-                        parts.length > 0 && parts[parts.length - 1].startsWith("HRP")
-                                ? parts[parts.length - 1]
-                                : ""));
+                        tokens.stream()
+                                .filter(token -> token.matches("v[0-9]+"))
+                                .findFirst()
+                                .map(token -> Integer.parseInt(token.substring(1)))
+                                .orElse(1),
+                        // An entry that needs a token to be meaningful says so, because what
+                        // proves an identity is a deployment choice and not part of the example.
+                        tokens.contains("jwt") ? "jwt" : "basic",
+                        tokens.stream()
+                                .filter(token -> token.startsWith("HRP"))
+                                .findFirst()
+                                .orElse("")));
                 spec = null;
                 info = "";
                 continue;
@@ -111,8 +118,13 @@ class CatalogTest {
         return entries.stream();
     }
 
-    /** Title, whole specification, the language version it needs, and the code it must produce. */
-    record Entry(String title, String spec, int languageVersion, String refusedWith) {
+    /** Title, whole specification, what it needs to compile, and the code it must produce. */
+    record Entry(
+            String title,
+            String spec,
+            int languageVersion,
+            String securityProvider,
+            String refusedWith) {
         @Override
         public String toString() {
             return refusedWith.isEmpty() ? title : title + " -> " + refusedWith;
@@ -126,7 +138,8 @@ class CatalogTest {
      * one, so an HTML comment naming a file splits the block: invisible when the catalogue is read,
      * unambiguous when it is compiled.
      */
-    private void write(String spec, int languageVersion) throws IOException {
+    private void write(String spec, int languageVersion, String securityProvider)
+            throws IOException {
         Files.createDirectories(projectRoot.resolve("specs"));
         String name = "catalog.harpia.md";
         StringBuilder content = new StringBuilder();
@@ -166,6 +179,9 @@ class CatalogTest {
                   options:
                     springBootVersion: "3.3.6"
 
+                security:
+                  provider: %s
+
                 database:
                   vendor: postgres
 
@@ -176,7 +192,7 @@ class CatalogTest {
                 generation:
                   migrations: true
                   tests: true
-                """.formatted(languageVersion), StandardCharsets.UTF_8);
+                """.formatted(languageVersion, securityProvider), StandardCharsets.UTF_8);
     }
 
     private static String read() {
