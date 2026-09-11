@@ -66,12 +66,70 @@ final class HandoffManifest {
                         .map(HandoffManifest::capability)
                         .toList())
                 .putObjects("customContracts", customContracts(application))
+                .putObjects("gates", gates(outputDirectory, target))
+                .put("next", next(outputDirectory, application, target))
                 .put("ownership", new Json.Object()
                         .put("generated", "listed in " + OutputWriter.MANIFEST
                                 + "; rewritten on every build")
                         .put("yours", "any file the manifest does not list, including custom "
                                 + "contract implementations; never overwritten and never cleaned"))
                 .render();
+    }
+
+    /**
+     * The four gates, and who runs each.
+     *
+     * <p>Harpia performed the first two, so it reports them as facts. It cannot perform the other
+     * two: they run in the toolchain of the language it generated. Saying "pending" and giving the
+     * command is the whole of what an honest report can do there — claiming they passed would be
+     * inventing a result nobody produced.
+     */
+    private static List<Json.Object> gates(String outputDirectory, TargetId target) {
+        List<Json.Object> gates = new java.util.ArrayList<>();
+        gates.add(gate("validate", "harpia", "passed", Optional.empty()));
+        gates.add(gate("build", "harpia", "passed", Optional.empty()));
+        TargetCatalog.find(target).ifPresent(descriptor -> descriptor.gates().forEach(declared ->
+                gates.add(gate(
+                        declared.name(),
+                        "you",
+                        "pending",
+                        Optional.of(declared.commandFor(outputDirectory))))));
+        return List.copyOf(gates);
+    }
+
+    private static Json.Object gate(
+            String name, String runBy, String status, Optional<String> command) {
+        Json.Object object = new Json.Object()
+                .put("gate", name)
+                .put("runBy", runBy)
+                .put("status", status);
+        command.ifPresent(present -> object.put("command", present));
+        return object;
+    }
+
+    /**
+     * The one thing to do next.
+     *
+     * <p>An unimplemented contract comes before any gate: the generated project compiles without
+     * the bean and does not start with it missing, so running the tests first would only produce a
+     * failure that says less than this sentence does.
+     */
+    private static String next(
+            String outputDirectory, ApplicationProject application, TargetId target) {
+        List<String> missing = application.logics().stream()
+                .filter(logic -> logic.customContract().isPresent())
+                .map(logic -> application.settings().namespace() + ".logic."
+                        + logic.customContract().orElseThrow())
+                .toList();
+        if (!missing.isEmpty()) {
+            return "implement " + String.join(", ", missing)
+                    + ", then run the pending gates in " + outputDirectory;
+        }
+        return TargetCatalog.find(target)
+                .flatMap(descriptor -> descriptor.gates().stream().findFirst())
+                .map(first -> "continue in " + outputDirectory + "; run: "
+                        + first.commandFor(outputDirectory))
+                .orElse("continue in " + outputDirectory);
     }
 
     private static Json.Object target(TargetId id) {

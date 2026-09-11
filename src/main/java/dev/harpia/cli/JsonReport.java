@@ -40,7 +40,8 @@ final class JsonReport {
             int exitCode,
             List<Diagnostic> diagnostics,
             String outputDirectory,
-            WriteReport report) {
+            WriteReport report,
+            String handoff) {
         return envelope(command, exitCode, diagnostics)
                 .put("output", new Json.Object()
                         .put("directory", outputDirectory)
@@ -51,6 +52,9 @@ final class JsonReport {
                         .putStrings("stale", report.stale())
                         .putStrings("deleted", report.deleted())
                         .putStrings("unknown", report.unknown()))
+                // The gates and what to do next live in the handoff manifest, which outlives this
+                // invocation; repeating them here would create a second copy that can disagree.
+                .put("handoff", handoff)
                 .render();
     }
 

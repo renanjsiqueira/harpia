@@ -95,6 +95,74 @@ class HandoffManifestTest {
     }
 
     @Test
+    void itSaysWhichGatesPassedAndWhichAreStillYours() throws IOException {
+        writeValidProject();
+        execute("build", "--dir", projectRoot.toString());
+
+        assertThat(handoff())
+                .as("Harpia ran these two, so it reports them as facts")
+                .contains("{\"gate\":\"validate\",\"runBy\":\"harpia\",\"status\":\"passed\"}")
+                .contains("{\"gate\":\"build\",\"runBy\":\"harpia\",\"status\":\"passed\"}")
+                .as("claiming these passed would invent a result nobody produced")
+                .contains("{\"gate\":\"test\",\"runBy\":\"you\",\"status\":\"pending\","
+                        + "\"command\":\"mvn -f generated test\"}")
+                .contains("{\"gate\":\"package\",\"runBy\":\"you\",\"status\":\"pending\","
+                        + "\"command\":\"mvn -f generated package\"}");
+    }
+
+    @Test
+    void theNextStepIsTheFirstPendingGate() throws IOException {
+        writeValidProject();
+        execute("build", "--dir", projectRoot.toString());
+
+        assertThat(handoff())
+                .contains("\"next\":\"continue in generated; run: mvn -f generated test\"");
+    }
+
+    @Test
+    void anUnimplementedContractComesBeforeAnyGate() throws IOException {
+        writeValidConfig();
+        writeSpec("""
+                # Pricing
+
+                ## Logic CalculateRisk
+
+                ### Input
+
+                - total: Decimal
+
+                ### Output
+
+                Decimal
+
+                ### Implementation
+
+                custom RiskCalculator
+                """);
+        execute("build", "--dir", projectRoot.toString());
+
+        // Running the tests first would only produce a failure that says less than this does.
+        assertThat(handoff())
+                .contains("\"next\":\"implement com.example.customer.logic.RiskCalculator, "
+                        + "then run the pending gates in generated\"");
+    }
+
+    @Test
+    void theJsonBuildReportPointsAtTheHandoffRatherThanRepeatingIt() throws IOException {
+        writeValidProject();
+        StringWriter stdout = new StringWriter();
+        CommandLine commandLine = new CommandLine(new HarpiaCommand());
+        commandLine.setOut(new PrintWriter(stdout, true));
+        commandLine.setErr(new PrintWriter(new StringWriter(), true));
+        commandLine.execute("build", "--json", "--dir", projectRoot.toString());
+
+        assertThat(stdout.toString())
+                .as("a second copy of the gates could disagree with the first")
+                .contains("\"handoff\":\".harpia/handoff.json\"")
+                .doesNotContain("\"gate\":");
+    }
+
+    @Test
     void twoIdenticalBuildsLeaveIdenticalBytes() throws IOException {
         writeValidProject();
         execute("build", "--dir", projectRoot.toString());

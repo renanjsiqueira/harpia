@@ -481,6 +481,13 @@ file list that could disagree with the first — and every `custom` Logic whose 
 but whose implementation is still yours. It carries no timestamp: two identical builds leave
 identical bytes.
 
+It also reports the four gates. Harpia runs `validate` and `build` itself, so it states those as
+facts. It cannot run `test` and `package`: those happen in the toolchain of the language it
+generated, so they are reported as `pending` with the command that runs them — claiming they passed
+would invent a result nobody produced. `next` names the one thing to do, and an unimplemented
+contract comes before any gate, because the project will not start without the bean and running the
+tests first would only produce a failure that says less.
+
 `capabilities` answers the other half of `targets`: what these specifications actually asked for.
 Each entry names the capability, who supplies it — `<target>` when the target implements it itself
 rather than choosing a provider — and every declaration that required it, with its location.

@@ -816,7 +816,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
   - Evidence: [`HandoffManifestTest`](src/test/java/dev/harpia/cli/HandoffManifestTest.java), [`HandoffManifest`](src/main/java/dev/harpia/cli/HandoffManifest.java), [`BuildCommand`](src/main/java/dev/harpia/cli/BuildCommand.java).
   - Depends on: `HARNESS-001`, `CORE-027`, `CUSTOM-002`.
 
-- [ ] `HARNESS-004` **Resultado de verificação e instruções de handoff** — `TODO`; resposta estruturada deve informar os gates `validate`, `build`, `test` e `package` e quando continuar no código target · `P0` · `M` · Area: `CLI/DX`
+- [x] `HARNESS-004` **Resultado de verificação e instruções de handoff** — `DONE`; o handoff reporta os quatro gates e quem roda cada um. Harpia executou `validate` e `build`, então os afirma; `test` e `package` rodam na toolchain da linguagem gerada, então saem como `pending` com o comando que os roda — dizer que passaram inventaria um resultado que ninguém produziu. Os comandos vêm do próprio target (`TargetDescriptor.Gate`), porque como se testa o que `java-spring` gera é um fato do target. `next` nomeia a única coisa a fazer, e um contrato custom sem implementação vem antes de qualquer gate · `P0` · `M` · Area: `CLI/DX`
+  - Evidence: [`HandoffManifestTest`](src/test/java/dev/harpia/cli/HandoffManifestTest.java), [`TargetDescriptor.Gate`](src/main/java/dev/harpia/target/TargetDescriptor.java), [`TargetCatalog`](src/main/java/dev/harpia/target/TargetCatalog.java).
   - Depends on: `HARNESS-002`, `HARNESS-003`, `SPRING-012`.
 
 ## Core V1 Blockers
@@ -829,7 +830,7 @@ Em ordem de dependência e valor para a Reference Application:
 4. `SEC-002`, `SEC-003`, `SEC-005`, `SEC-007`, `API-008`: authenticated/role/JWT.
 5. `CUSTOM-002`, `CUSTOM-003`: contract, DI e layout custom protegido.
 6. `GREEN-003`: baseline integrada verificável (`SPRING-012` fechado: `mvn package` e jar executável são gate).
-7. `HARNESS-001`–`HARNESS-004`: JSON estável e handoff consumível por agentes.
+7. `HARNESS-001`–`HARNESS-004`: fechados — contrato Java versionado, JSON dos cinco comandos, `.harpia/handoff.json` e os quatro gates.
 8. `DOC-001`: catálogo compacto e exemplos canônicos para humanos e agentes.
 9. Reference Application end-to-end cobrindo o conjunto acima.
 10. `PERSIST-008` e demais parciais P0 após o baseline integrado revelar o recorte necessário.

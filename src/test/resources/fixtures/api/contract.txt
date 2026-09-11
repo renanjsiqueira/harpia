@@ -183,6 +183,8 @@ dev.harpia.target.TargetCatalog
 dev.harpia.target.TargetDescriptor
   new TargetDescriptor(TargetId, String, String, String, TargetStatus, String, int, Set)
   new TargetDescriptor(TargetId, String, String, String, TargetStatus, String, int, Set, String, String, int)
+  new TargetDescriptor(TargetId, String, String, String, TargetStatus, String, int, Set, String, String, int, List)
+  public List gates()
   public Set capabilities()
   public Set orderedCapabilities()
   public String displayName()
@@ -201,6 +203,14 @@ dev.harpia.target.TargetDescriptor
   public int minimumLanguageVersion()
   public int templateVersion()
   public static TargetDescriptor planned(String, String, String, String)
+dev.harpia.target.TargetDescriptor$Gate
+  new TargetDescriptor$Gate(String, String)
+  public String command()
+  public String commandFor(String)
+  public String name()
+  public final String toString()
+  public final boolean equals(Object)
+  public final int hashCode()
 dev.harpia.target.TargetId
   new TargetId(String)
   public String toString()

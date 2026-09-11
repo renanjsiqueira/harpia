@@ -81,7 +81,8 @@ public final class BuildCommand implements Callable<Integer> {
                     ExitCode.SUCCESS,
                     diagnostics,
                     result.outputDirectory().orElseThrow(),
-                    written.orElseThrow()));
+                    written.orElseThrow(),
+                    HandoffManifest.PATH));
             spec.commandLine().getOut().flush();
             return ExitCode.SUCCESS;
         }

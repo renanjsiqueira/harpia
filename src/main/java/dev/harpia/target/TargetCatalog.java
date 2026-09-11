@@ -36,7 +36,15 @@ public final class TargetCatalog {
                 TargetStatus.SUPPORTED,
                 "Java >= 21",
                 21,
-                Set.of(Capability.HTTP, Capability.PERSISTENCE)));
+                Set.of(Capability.HTTP, Capability.PERSISTENCE),
+                "1",
+                "default",
+                1,
+                // `package` runs the tests and then builds the artifact, so the two gates overlap
+                // on purpose: one says the code is right, the other that it can be started.
+                List.of(
+                        new TargetDescriptor.Gate("test", "mvn -f {output} test"),
+                        new TargetDescriptor.Gate("package", "mvn -f {output} package"))));
         put(catalogue, TargetDescriptor.planned(
                 "kotlin-spring", "Kotlin + Spring Boot", "kotlin", "spring"));
         put(catalogue, TargetDescriptor.planned(

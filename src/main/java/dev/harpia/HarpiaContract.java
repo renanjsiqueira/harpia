@@ -55,6 +55,7 @@ public final class HarpiaContract {
                 dev.harpia.capability.Capability.class,
                 dev.harpia.target.TargetCatalog.class,
                 dev.harpia.target.TargetDescriptor.class,
+                dev.harpia.target.TargetDescriptor.Gate.class,
                 dev.harpia.target.TargetId.class,
                 dev.harpia.target.TargetStatus.class);
     }
