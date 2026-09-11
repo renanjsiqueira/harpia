@@ -184,8 +184,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [ ] `CORE-010` **Escopos léxicos** — `PARTIAL`; existem em Logic, não no conjunto futuro da linguagem · `P0` · `M` · Area: `Language Core`
   - Evidence: [`LogicAnalyzer`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`LogicAnalyzerTest`](src/test/java/dev/harpia/logic/LogicAnalyzerTest.java).
 
-- [ ] `CORE-011` **Referências cross-file** — `PARTIAL`; a partir da V1 uma operação pertence à entidade que seu flow nomeia, podendo viver em módulo próprio; faltam os tipos nominais (`TYPE-*`) como referência de campo · `P0` · `L` · Area: `Language Core`
-  - Evidence: [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java), [`Resolver`](src/main/java/dev/harpia/model/Resolver.java), [`CrossModuleReferenceTest`](src/test/java/dev/harpia/validate/CrossModuleReferenceTest.java).
+- [x] `CORE-011` **Referências cross-file** — `DONE`; uma operação pertence à entidade que seu flow nomeia mesmo vivendo em módulo próprio, e um tipo nominal declarado num arquivo — `Enum`, `Value` ou `Reference<Entity>` — é tipo de campo em outro. A tabela de símbolos é uma só para o projeto, então onde um nome foi escrito não faz parte do que ele significa; pela mesma razão um nome que ninguém declarou falta em todo lugar, não só ali · `P0` · `L` · Area: `Language Core`
+  - Evidence: [`CrossModuleReferenceTest`](src/test/java/dev/harpia/validate/CrossModuleReferenceTest.java), [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java), [`SymbolTable`](src/main/java/dev/harpia/symbol/SymbolTable.java).
 
 - [x] `CORE-012` **Semantic Analyzer V0** — `DONE` para o recorte executável atual · `P0` · `L` · Area: `Language Core`
   - Evidence: [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java), [`SemanticValidatorTest`](src/test/java/dev/harpia/validate/SemanticValidatorTest.java).

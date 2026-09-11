@@ -80,6 +80,169 @@ class CrossModuleReferenceTest {
     }
 
     @Test
+    void aNominalTypeDeclaredInOneModuleIsAFieldTypeInAnother() throws IOException {
+        project(1, Map.of(
+                "00-types", """
+                        # Catalog
+
+                        ## Enum Status
+
+                        - active
+                        - blocked
+
+                        ## Value Address
+
+                        - street: String required
+                        - city: String required
+                        """,
+                "01-customer", """
+                        # Customer
+
+                        ## Data
+
+                        - id: UUID generated
+                        - status: Status required
+                        - address: Address required
+
+                        ## Query List Customers
+
+                        ### Endpoint
+
+                        GET /customers
+
+                        ### Access
+
+                        public
+
+                        ### Flow
+
+                        ```flow
+                        customers = list Customer
+                        return customers
+                        ```
+
+                        ### Output
+
+                        200 List<Customer>
+                        """));
+
+        // The symbol table is one table for the project, so where a type was written down is not
+        // part of what it means.
+        CompileResult result = compile();
+        assertThat(result.diagnostics()).isEmpty();
+        assertThat(Inspector.render(result, Stage.APPLICATION_IR).orElseThrow())
+                .contains("Column status: Status required")
+                .contains("Column address: Address required");
+    }
+
+    @Test
+    void aReferenceCrossesModulesTheSameWay() throws IOException {
+        project(1, Map.of(
+                "00-customer", """
+                        # Customer
+
+                        ## Data
+
+                        - id: UUID generated
+                        - name: String required
+
+                        ## Query List Customers
+
+                        ### Endpoint
+
+                        GET /customers
+
+                        ### Access
+
+                        public
+
+                        ### Flow
+
+                        ```flow
+                        customers = list Customer
+                        return customers
+                        ```
+
+                        ### Output
+
+                        200 List<Customer>
+                        """,
+                "01-invoice", """
+                        # Invoice
+
+                        ## Data
+
+                        - id: UUID generated
+                        - customer: Reference<Customer> required
+
+                        ## Query List Invoices
+
+                        ### Endpoint
+
+                        GET /invoices
+
+                        ### Access
+
+                        public
+
+                        ### Flow
+
+                        ```flow
+                        invoices = list Invoice
+                        return invoices
+                        ```
+
+                        ### Output
+
+                        200 List<Invoice>
+                        """));
+
+        assertThat(compile().diagnostics()).isEmpty();
+    }
+
+    @Test
+    void aNominalTypeNobodyDeclaresIsStillRefused() throws IOException {
+        project(1, Map.of(
+                "00-customer", """
+                        # Customer
+
+                        ## Data
+
+                        - id: UUID generated
+                        - status: Status required
+
+                        ## Query List Customers
+
+                        ### Endpoint
+
+                        GET /customers
+
+                        ### Access
+
+                        public
+
+                        ### Flow
+
+                        ```flow
+                        customers = list Customer
+                        return customers
+                        ```
+
+                        ### Output
+
+                        200 List<Customer>
+                        """));
+
+        // One table for the project also means a name nobody wrote down is missing everywhere,
+        // not merely missing here.
+        assertThat(compile().diagnostics())
+                .filteredOn(diagnostic ->
+                        diagnostic.code().equals(ErrorCodes.SEMANTIC_UNKNOWN_TYPE)
+                                || diagnostic.code().equals(ErrorCodes.SYNTAX_UNKNOWN_TYPE))
+                .isNotEmpty();
+    }
+
+    @Test
     void theSymbolKeepsTheModuleThatDeclaredIt() throws IOException {
         project(1, Map.of("customer", CUSTOMER, "registration", REGISTRATION));
 
