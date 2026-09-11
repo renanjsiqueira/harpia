@@ -133,6 +133,29 @@ class IntegrationHttpClientTest {
     }
 
     @Test
+    void aResponseIsCheckedAgainstTheContractThePortDeclared(@TempDir Path classes)
+            throws IOException {
+        bindings(validBindings());
+
+        CompileResult result = compile();
+        assertThat(result.diagnostics()).isEmpty();
+        SortedMap<String, String> files = result.tree().orElseThrow().files();
+
+        // A body that does not satisfy the declaration is not a smaller answer; it is not an
+        // answer. Without this a missing required field arrives as null and the flow carries on.
+        assertThat(files.get(CLIENT))
+                .contains("private void check(String operation, Object body) {")
+                .contains("throw new FraudServiceException(operation, "
+                        + "\"the response carried no body\");")
+                .as("the same bad response has to produce the same message every time")
+                .contains(".sorted()")
+                .contains("check(\"checkOrder\", answer);")
+                .contains("return answer;");
+
+        GeneratedJava.compiles(files, classes);
+    }
+
+    @Test
     void everyCallCarriesADeadlineWithoutMakingTheClientUntestable(@TempDir Path classes)
             throws IOException {
         bindings(validBindings());
@@ -214,7 +237,7 @@ class IntegrationHttpClientTest {
                         + "\"https://fraud.example/checks/{orderId}\")")
                 .contains(".buildAndExpand(orderId)")
                 .contains("body.put(\"context\", context);")
-                .contains("return client.post()")
+                .contains("Boolean answer = client.post()")
                 .contains(".body(Boolean.class);")
                 .contains("public void notify(UUID orderId)")
                 .contains(".toBodilessEntity();")

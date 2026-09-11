@@ -427,6 +427,11 @@ with the other side rather than anything the specification said, so it is read f
 `10s`. It is applied by a generated `RestClientCustomizer` rather than inside each client, so a test
 can still install its own request factory the way `MockRestServiceServer` does.
 
+A response is checked against the contract the port declared: a body that omits something the
+declaration called required is not a smaller answer, it is not an answer, and it raises the port's
+exception instead of arriving as `null` for the flow to carry on with. The violations are sorted, so
+the same bad response always says the same thing.
+
 A failed call raises the port's own exception — `<Integration>Exception` — carrying the operation
 and, when there was a response, its status. An Integration exists so the caller does not have to
 know how the other side is reached, and an exception is part of what a caller has to know: without

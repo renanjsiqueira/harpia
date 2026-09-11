@@ -196,6 +196,20 @@ public final class JavaSpringIntegrationClientTransformer {
                                         new JavaParameterModel(
                                                 "operation", JavaTypeRef.of("java.lang.String")),
                                         new JavaParameterModel(
+                                                "reason", JavaTypeRef.of("java.lang.String"))),
+                                List.of(
+                                        "super(\"" + javaString(integration.name())
+                                                + ".\" + operation + \": \" + reason);",
+                                        "this.operation = operation;",
+                                        "this.status = null;"),
+                                Optional.of(integration.where())),
+                        new JavaConstructorModel(
+                                JavaVisibility.PUBLIC,
+                                List.of(),
+                                List.of(
+                                        new JavaParameterModel(
+                                                "operation", JavaTypeRef.of("java.lang.String")),
+                                        new JavaParameterModel(
                                                 "cause", JavaTypeRef.of("java.lang.Throwable"))),
                                 List.of(
                                         "super(\"" + javaString(integration.name())
@@ -246,11 +260,15 @@ public final class JavaSpringIntegrationClientTransformer {
         imports.add("java.net.URI");
         imports.add("org.springframework.web.util.UriComponentsBuilder");
 
-        List<JavaMethodModel> methods = integration.operations().stream()
+        List<JavaMethodModel> methods = new ArrayList<>(integration.operations().stream()
                 .filter(operation -> operation.http().isPresent())
                 .map(operation -> method(
                         operation, domainPackage, failureTypeName(integration.name()), imports))
-                .toList();
+                .toList());
+        if (returnsAnything(integration)) {
+            imports.add("java.util.stream.Collectors");
+            methods.add(checker(integration, failureTypeName(integration.name())));
+        }
         JavaTypeModel type = new JavaTypeModel(
                 JavaTypeModel.Kind.CLASS,
                 packageName,
@@ -262,14 +280,7 @@ public final class JavaSpringIntegrationClientTransformer {
                 List.of(JavaAnnotationModel.marker("org.springframework.stereotype.Component")),
                 imports.stream().map(JavaImportModel::new).toList(),
                 List.of(),
-                List.of(new JavaFieldModel(
-                        CLIENT_FIELD,
-                        JavaTypeRef.of("org.springframework.web.client.RestClient"),
-                        JavaVisibility.PRIVATE,
-                        Set.of(JavaModifier.FINAL),
-                        List.of(),
-                        Optional.empty(),
-                        Optional.of(integration.where()))),
+                fields(integration),
                 List.of(constructor(integration)),
                 methods,
                 Optional.of(integration.where()));
@@ -289,13 +300,94 @@ public final class JavaSpringIntegrationClientTransformer {
      * lives one file over.
      */
     private static JavaConstructorModel constructor(ApplicationIntegration integration) {
+        if (!returnsAnything(integration)) {
+            return new JavaConstructorModel(
+                    JavaVisibility.PUBLIC,
+                    List.of(),
+                    List.of(new JavaParameterModel(
+                            "builder",
+                            JavaTypeRef.of("org.springframework.web.client.RestClient.Builder"))),
+                    List.of("this.client = builder.build();"),
+                    Optional.of(integration.where()));
+        }
         return new JavaConstructorModel(
                 JavaVisibility.PUBLIC,
                 List.of(),
-                List.of(new JavaParameterModel(
-                        "builder",
-                        JavaTypeRef.of("org.springframework.web.client.RestClient.Builder"))),
-                List.of("this.client = builder.build();"),
+                List.of(
+                        new JavaParameterModel(
+                                "builder",
+                                JavaTypeRef.of(
+                                        "org.springframework.web.client.RestClient.Builder")),
+                        new JavaParameterModel(
+                                "validator", JavaTypeRef.of("jakarta.validation.Validator"))),
+                List.of(
+                        "this.client = builder.build();",
+                        "this.validator = validator;"),
+                Optional.of(integration.where()));
+    }
+
+    private static List<JavaFieldModel> fields(ApplicationIntegration integration) {
+        List<JavaFieldModel> fields = new ArrayList<>();
+        fields.add(new JavaFieldModel(
+                CLIENT_FIELD,
+                JavaTypeRef.of("org.springframework.web.client.RestClient"),
+                JavaVisibility.PRIVATE,
+                Set.of(JavaModifier.FINAL),
+                List.of(),
+                Optional.empty(),
+                Optional.of(integration.where())));
+        if (returnsAnything(integration)) {
+            fields.add(new JavaFieldModel(
+                    "validator",
+                    JavaTypeRef.of("jakarta.validation.Validator"),
+                    JavaVisibility.PRIVATE,
+                    Set.of(JavaModifier.FINAL),
+                    List.of(),
+                    Optional.empty(),
+                    Optional.of(integration.where())));
+        }
+        return List.copyOf(fields);
+    }
+
+    private static boolean returnsAnything(ApplicationIntegration integration) {
+        return integration.operations().stream()
+                .filter(operation -> operation.http().isPresent())
+                .anyMatch(operation -> operation.output().type().isPresent());
+    }
+
+    /**
+     * Checks the response against the contract the port declared.
+     *
+     * <p>The declaration says what comes back, and a body that does not satisfy it is not a
+     * smaller answer — it is not an answer. Without this a missing required field arrives as
+     * {@code null} and the flow carries on as if the other side had agreed.
+     *
+     * <p>The violations are sorted so the same bad response always produces the same message.
+     */
+    private static JavaMethodModel checker(
+            ApplicationIntegration integration, String failureType) {
+        return new JavaMethodModel(
+                "check",
+                JavaTypeRef.of("void"),
+                JavaVisibility.PRIVATE,
+                Set.of(),
+                List.of(),
+                List.of(
+                        new JavaParameterModel("operation", JavaTypeRef.of("java.lang.String")),
+                        new JavaParameterModel("body", JavaTypeRef.of("java.lang.Object"))),
+                List.of(
+                        "if (body == null) {",
+                        "    throw new " + failureType
+                                + "(operation, \"the response carried no body\");",
+                        "}",
+                        "String violations = validator.validate(body).stream()",
+                        "        .map(violation -> violation.getPropertyPath() + \" \" "
+                                + "+ violation.getMessage())",
+                        "        .sorted()",
+                        "        .collect(Collectors.joining(\", \"));",
+                        "if (!violations.isEmpty()) {",
+                        "    throw new " + failureType + "(operation, violations);",
+                        "}"),
                 Optional.of(integration.where()));
     }
 
@@ -355,7 +447,11 @@ public final class JavaSpringIntegrationClientTransformer {
         // Both failure paths are wrapped: a response that says no, and a call that never got
         // one. Either way the caller catches the port's exception and not Spring's.
         statements.add("try {");
-        String prefix = operation.output().type().isPresent() ? "    return " : "    ";
+        // A body that does not satisfy the declared contract is not a smaller answer; it is not
+        // an answer. So it is named, checked, and only then returned.
+        String prefix = operation.output().type().isPresent()
+                ? "    " + result.sourceName() + " answer = "
+                : "    ";
         statements.add(prefix + "client."
                 + http.method().name().toLowerCase(Locale.ROOT) + "()");
         statements.add("            .uri(uri)");
@@ -384,6 +480,11 @@ public final class JavaSpringIntegrationClientTransformer {
             imports.add("org.springframework.core.ParameterizedTypeReference");
             statements.add("            .body(new ParameterizedTypeReference<"
                     + result.sourceName() + ">() {});");
+        }
+        if (operation.output().type().isPresent()) {
+            statements.add("    check(\"" + javaString(lowerFirst(operation.name()))
+                    + "\", answer);");
+            statements.add("    return answer;");
         }
         statements.add("} catch (ResourceAccessException exception) {");
         statements.add("    throw new " + failureType + "(\""
