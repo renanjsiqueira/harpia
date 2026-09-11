@@ -406,6 +406,14 @@ FraudResult
 `Integration` exchanges scalar, `Enum`, and `Value` data. It deliberately does not name HTTP,
 Spring, URLs, credentials, or persistence entities; bindings and providers supply those details.
 
+### Catalog
+
+[`docs/catalog.md`](docs/catalog.md) is the short answer to "how do I say X". Every entry is a whole
+specification rather than a fragment, so one can be copied into `specs/` and built as-is, and every
+entry is compiled by `CatalogTest` on each run: an example that stops working fails the build
+instead of misleading a reader. Entries marked with a diagnostic code show what is refused, and the
+refusal is verified too.
+
 ### CLI
 
 ```bash

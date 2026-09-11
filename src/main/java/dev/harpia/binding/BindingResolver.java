@@ -39,7 +39,11 @@ public final class BindingResolver {
                                         HttpBinding.HttpMethod.valueOf(endpoint.method()),
                                         "",
                                         endpoint.path(),
-                                        endpoint.path().endsWith("/{id}"),
+                                        // Since a path takes {name} in any segment, the record the
+                                        // flow loads can sit anywhere: /accounts/{id}/withdrawals
+                                        // names it as plainly as /accounts/{id} does.
+                                        dev.harpia.parse.EndpointParser.parameters(endpoint.path())
+                                                .contains("id"),
                                         AccessRule.valueOf(
                                                 operation.access().orElseThrow().name()),
                                         inferredRequest(operation, endpoint.where()),
@@ -72,7 +76,9 @@ public final class BindingResolver {
                                                 binding.endpoint().method()),
                                         file.baseUrl().map(BindingAst.BaseUrl::path).orElse(""),
                                         binding.endpoint().path(),
-                                        binding.endpoint().path().endsWith("/{id}"),
+                                        dev.harpia.parse.EndpointParser
+                                                .parameters(binding.endpoint().path())
+                                                .contains("id"),
                                         AccessRule.valueOf(binding.access().name()),
                                         binding.request().stream()
                                                 .map(BindingResolver::request)

@@ -77,6 +77,21 @@ class PathParameterTest {
         GeneratedJava.compiles(result.tree().orElseThrow().files(), classes);
     }
 
+    @Test
+    void theRecordTheFlowLoadsCanSitAnywhereInThePath(@TempDir Path classes) throws IOException {
+        project("GET /items/{id}/summary", "");
+
+        CompileResult result = compile();
+        assertThat(result.diagnostics())
+                .as("'{id}' names the loaded record wherever it is written, not only last")
+                .isEmpty();
+        assertThat(result.tree().orElseThrow().files().get(CONTROLLER))
+                .contains("@GetMapping(\"/items/{id}/summary\")")
+                .contains("@PathVariable(\"id\") UUID id");
+
+        GeneratedJava.compiles(result.tree().orElseThrow().files(), classes);
+    }
+
     private CompileResult compile() {
         return new HarpiaCompiler().compile(new CompileRequest(projectRoot));
     }
