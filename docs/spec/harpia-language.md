@@ -886,6 +886,26 @@ public record PageResponse<T>(
 - uma listagem paginada pode continuar respondendo `List<...>` quando o chamador não precisa dos
   metadados, e aí nenhum envelope é gerado.
 
+## 8.8 call
+
+Na V1 um flow chama uma Logic ou uma Operation de Integration. Os argumentos são nomeados, porque
+a ordem em que alguém os digitou não é o que dá sentido a eles:
+
+```flow
+discount = call CalculateDiscount(total = total, vip = vip)
+approved = call FraudService.CheckOrder(total = total)
+```
+
+- o alvo simples é uma Logic; o alvo pontilhado é `Integration.Operation`;
+- a chamada multilinha significa o mesmo, e existe para quando a lista de argumentos é longa;
+- os argumentos são conferidos por nome, completude e tipo contra a assinatura declarada, que é uma
+  só no projeto inteiro;
+- um alvo que ninguém declarou é recusado ali, e não deixado para o Java gerado descobrir;
+- uma chamada que devolve valor precisa ser atribuída, e uma que devolve `nothing` não pode ser: a
+  presença do resultado é parte do contrato, não preferência de quem chama;
+- declarar uma Integration é livre, mas **chamá-la** exige o binding que diz como ela é alcançada —
+  sem ele o código gerado não teria para onde mandar a requisição.
+
 ## 8.9 Parâmetros de path
 
 Na V1, um path aceita `{nome}` em qualquer segmento e em qualquer quantidade:

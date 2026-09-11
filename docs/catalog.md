@@ -907,6 +907,275 @@ CalculateDiscount
 - result: 20.00
 ````
 
+## call a Logic
+
+A flow names a Logic and binds its arguments by name. The result is a value, so it has to be
+assigned to something.
+
+````harpia
+# Purchase
+
+## Data
+
+- id: UUID generated
+- total: Decimal required
+- vip: Boolean required
+
+## Logic CalculateDiscount
+
+### Input
+
+- total: Decimal
+- vip: Boolean
+
+### Output
+
+Decimal
+
+```logic
+if vip
+    return total * 0.20
+
+return 0
+```
+
+## Scenario No discount without vip
+
+### Given
+
+- total: 100
+- vip: false
+
+### When
+
+CalculateDiscount
+
+### Then
+
+- result: 0
+
+## Command Place Purchase
+
+### Endpoint
+
+POST /purchases
+
+### Access
+
+public
+
+### Input
+
+- total: Decimal required
+- vip: Boolean required
+
+### Flow
+
+```flow
+validate input
+discount = call CalculateDiscount(total = total, vip = vip)
+purchase = create Purchase from input
+save purchase
+return purchase
+```
+
+### Output
+
+201 Purchase
+
+### Errors
+
+- invalid input -> 400
+````
+
+A call that spans several lines means the same thing, which is worth having when the argument list
+is long:
+
+```flow
+discount = call CalculateDiscount(
+    total = total,
+    vip = vip
+)
+```
+
+Dropping the result is refused: the Logic was asked a question and the answer has nowhere to go.
+
+````harpia HRP2144
+# Purchase
+
+## Data
+
+- id: UUID generated
+- total: Decimal required
+
+## Logic CalculateDiscount
+
+### Input
+
+- total: Decimal
+
+### Output
+
+Decimal
+
+```logic
+return total
+```
+
+## Scenario Identity
+
+### Given
+
+- total: 100
+
+### When
+
+CalculateDiscount
+
+### Then
+
+- result: 100
+
+## Command Place Purchase
+
+### Endpoint
+
+POST /purchases
+
+### Access
+
+public
+
+### Input
+
+- total: Decimal required
+
+### Flow
+
+```flow
+validate input
+call CalculateDiscount(total = total)
+purchase = create Purchase from input
+save purchase
+return purchase
+```
+
+### Output
+
+201 Purchase
+
+### Errors
+
+- invalid input -> 400
+````
+
+## call an Integration operation
+
+The target is dotted: the Integration and the Operation on it. An operation that returns `nothing`
+is called without assignment, because there is nothing to assign.
+
+````harpia
+# Purchase
+
+## Data
+
+- id: UUID generated
+- total: Decimal required
+
+## Integration FraudService
+
+### Operation CheckOrder
+
+#### Input
+
+- total: Decimal required
+
+#### Output
+
+Boolean
+
+### Operation Notify
+
+#### Input
+
+- total: Decimal required
+
+#### Output
+
+nothing
+
+## Command Place Purchase
+
+### Endpoint
+
+POST /purchases
+
+### Access
+
+public
+
+### Input
+
+- total: Decimal required
+
+### Flow
+
+```flow
+validate input
+approved = call FraudService.CheckOrder(total = total)
+call FraudService.Notify(total = total)
+purchase = create Purchase from input
+save purchase
+return purchase
+```
+
+### Output
+
+201 Purchase
+
+### Errors
+
+- invalid input -> 400
+
+<!-- bindings/http.harpia.md -->
+# HTTP Bindings
+
+## Base URL
+
+https://fraud.example
+
+## Bind FraudService.CheckOrder
+
+### Endpoint
+
+POST /checks
+
+### Request
+
+- input: body
+
+### Response
+
+output: body
+
+## Bind FraudService.Notify
+
+### Endpoint
+
+POST /notifications
+
+### Request
+
+- input: body
+
+### Response
+
+none
+````
+
+Calling a port needs a binding that says how it is reached: declaring the port is free, but a call
+without one is refused, because the generated code would have nowhere to send the request.
+
 ## Integration
 
 An outbound dependency starts as a business port: no HTTP, no library, no environment. Entities and

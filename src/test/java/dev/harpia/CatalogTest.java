@@ -134,33 +134,27 @@ class CatalogTest {
     /**
      * Writes the entry as a project.
      *
-     * <p>Most entries are one file. A few need a second entity to point at, and a module declares
-     * one, so an HTML comment naming a file splits the block: invisible when the catalogue is read,
-     * unambiguous when it is compiled.
+     * <p>Most entries are one file. A few need a second entity to point at, or a binding that says
+     * how an outbound port is reached, so an HTML comment naming a project-relative path splits the
+     * block: invisible when the catalogue is read, unambiguous when it is compiled.
      */
     private void write(String spec, int languageVersion, String securityProvider)
             throws IOException {
         Files.createDirectories(projectRoot.resolve("specs"));
-        String name = "catalog.harpia.md";
+        String name = "specs/catalog.harpia.md";
         StringBuilder content = new StringBuilder();
         for (String line : spec.split("\n", -1)) {
-            if (line.startsWith("<!-- specs/") && line.endsWith(" -->")) {
+            if (line.startsWith("<!-- ") && line.endsWith(".harpia.md -->")) {
                 if (!content.isEmpty()) {
-                    Files.writeString(
-                            projectRoot.resolve("specs").resolve(name),
-                            content.toString(),
-                            StandardCharsets.UTF_8);
+                    writeFile(name, content.toString());
                     content.setLength(0);
                 }
-                name = line.substring("<!-- specs/".length(), line.length() - " -->".length());
+                name = line.substring("<!-- ".length(), line.length() - " -->".length());
                 continue;
             }
             content.append(line).append('\n');
         }
-        Files.writeString(
-                projectRoot.resolve("specs").resolve(name),
-                content.toString(),
-                StandardCharsets.UTF_8);
+        writeFile(name, content.toString());
         Files.writeString(projectRoot.resolve("harpia.yaml"), """
                 harpia:
                   schemaVersion: 1
@@ -193,6 +187,12 @@ class CatalogTest {
                   migrations: true
                   tests: true
                 """.formatted(languageVersion, securityProvider), StandardCharsets.UTF_8);
+    }
+
+    private void writeFile(String path, String content) throws IOException {
+        Path file = projectRoot.resolve(path);
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, content, StandardCharsets.UTF_8);
     }
 
     private static String read() {
