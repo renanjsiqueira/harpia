@@ -28,6 +28,8 @@ import java.util.TreeSet;
 public final class JavaSpringIntegrationClientTransformer {
 
     private static final String CLIENT_FIELD = "client";
+    private static final String CONNECT_TIMEOUT = "2s";
+    private static final String READ_TIMEOUT = "10s";
 
     public List<JavaSourceFile> transform(JavaSpringContext context) {
         return context.application().integrations().stream()
@@ -44,6 +46,7 @@ public final class JavaSpringIntegrationClientTransformer {
         String typeName = clientTypeName(integration.name());
         TreeSet<String> imports = new TreeSet<>();
         imports.add("java.net.URI");
+        imports.add("org.springframework.http.client.SimpleClientHttpRequestFactory");
         imports.add("org.springframework.web.util.UriComponentsBuilder");
 
         List<JavaMethodModel> methods = integration.operations().stream()
@@ -69,14 +72,7 @@ public final class JavaSpringIntegrationClientTransformer {
                         List.of(),
                         Optional.empty(),
                         Optional.of(integration.where()))),
-                List.of(new JavaConstructorModel(
-                        JavaVisibility.PUBLIC,
-                        List.of(),
-                        List.of(new JavaParameterModel(
-                                "builder",
-                                JavaTypeRef.of("org.springframework.web.client.RestClient.Builder"))),
-                        List.of("this.client = builder.build();"),
-                        Optional.of(integration.where()))),
+                List.of(constructor(integration)),
                 methods,
                 Optional.of(integration.where()));
         return new JavaSourceFile(
@@ -84,6 +80,56 @@ public final class JavaSpringIntegrationClientTransformer {
                         context.layout().packagePath(JavaLayout.INTEGRATION), typeName),
                 type,
                 Optional.of(integration.where()));
+    }
+
+    /**
+     * Builds the client with a deadline on every call.
+     *
+     * <p>A call that can hang forever is not a dependency, it is a thread held until something
+     * else gives up. How long to wait is a deployment fact — it follows the network and the
+     * agreement with the other side, not anything the specification said — so it is read from
+     * configuration, with a default that is short enough to fail rather than accumulate.
+     */
+    private static JavaConstructorModel constructor(ApplicationIntegration integration) {
+        String prefix = "harpia.integration." + propertyName(integration.name());
+        return new JavaConstructorModel(
+                JavaVisibility.PUBLIC,
+                List.of(),
+                List.of(
+                        new JavaParameterModel(
+                                "builder",
+                                JavaTypeRef.of(
+                                        "org.springframework.web.client.RestClient.Builder")),
+                        new JavaParameterModel(
+                                "connectTimeout",
+                                JavaTypeRef.of("java.time.Duration"),
+                                List.of(JavaAnnotationModel.of(
+                                        "org.springframework.beans.factory.annotation.Value",
+                                        new JavaAnnotationModel.Attribute(
+                                                "value",
+                                                "\"${" + prefix + ".connect-timeout:"
+                                                        + CONNECT_TIMEOUT + "}\"")))),
+                        new JavaParameterModel(
+                                "readTimeout",
+                                JavaTypeRef.of("java.time.Duration"),
+                                List.of(JavaAnnotationModel.of(
+                                        "org.springframework.beans.factory.annotation.Value",
+                                        new JavaAnnotationModel.Attribute(
+                                                "value",
+                                                "\"${" + prefix + ".read-timeout:"
+                                                        + READ_TIMEOUT + "}\""))))),
+                List.of(
+                        "SimpleClientHttpRequestFactory requestFactory = "
+                                + "new SimpleClientHttpRequestFactory();",
+                        "requestFactory.setConnectTimeout(connectTimeout);",
+                        "requestFactory.setReadTimeout(readTimeout);",
+                        "this.client = builder.requestFactory(requestFactory).build();"),
+                Optional.of(integration.where()));
+    }
+
+    /** {@code FraudService} is configured as {@code fraud-service}, the way Spring reads keys. */
+    static String propertyName(String integration) {
+        return integration.replaceAll("([a-z0-9])([A-Z])", "$1-$2").toLowerCase(Locale.ROOT);
     }
 
     private static JavaMethodModel method(

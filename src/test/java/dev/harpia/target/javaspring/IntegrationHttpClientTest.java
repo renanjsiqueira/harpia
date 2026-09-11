@@ -130,6 +130,31 @@ class IntegrationHttpClientTest {
     }
 
     @Test
+    void everyCallCarriesADeadline(@TempDir Path classes) throws IOException {
+        bindings(validBindings());
+
+        CompileResult result = compile();
+        assertThat(result.diagnostics()).isEmpty();
+        String client = result.tree().orElseThrow().files()
+                .get("src/main/java/com/example/order/integration/FraudServiceClient.java");
+
+        // A call that can hang forever is not a dependency, it is a thread held until something
+        // else gives up.
+        assertThat(client)
+                .contains("import org.springframework.http.client.SimpleClientHttpRequestFactory;")
+                .contains("requestFactory.setConnectTimeout(connectTimeout);")
+                .contains("requestFactory.setReadTimeout(readTimeout);")
+                .contains("this.client = builder.requestFactory(requestFactory).build();")
+                .as("the wait follows the network, not anything the specification said")
+                .contains("@Value(\"${harpia.integration.fraud-service.connect-timeout:2s}\")")
+                .contains("@Value(\"${harpia.integration.fraud-service.read-timeout:10s}\")")
+                .as("a default short enough to fail rather than accumulate")
+                .doesNotContain("builder.build()");
+
+        GeneratedJava.compiles(result.tree().orElseThrow().files(), classes);
+    }
+
+    @Test
     void bindingGeneratesTypedRestClientAndInjectsItOnlyWhereUsed(@TempDir Path classes)
             throws IOException {
         bindings(validBindings());

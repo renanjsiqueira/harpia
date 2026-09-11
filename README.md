@@ -417,6 +417,11 @@ FraudResult
 `Integration` exchanges scalar, `Enum`, and `Value` data. It deliberately does not name HTTP,
 Spring, URLs, credentials, or persistence entities; bindings and providers supply those details.
 
+Every generated client carries a deadline: a call that can hang forever is not a dependency, it is
+a thread held until something else gives up. How long to wait follows the network and the agreement
+with the other side rather than anything the specification said, so it is read from configuration —
+`harpia.integration.<name>.connect-timeout` and `.read-timeout`, defaulting to `2s` and `10s`.
+
 ### Catalog
 
 [`docs/catalog.md`](docs/catalog.md) is the short answer to "how do I say X". Every entry is a whole

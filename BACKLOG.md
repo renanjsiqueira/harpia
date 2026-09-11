@@ -588,7 +588,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [ ] `SEC-007` **Spring Security provider** — `TODO` · `P0` · `L` · Area: `Security`
   - Depends on: `SEC-002`, `SEC-003`.
 
-- [ ] `RELY-001` **Timeout e failure mapping** — `TODO` · `P0` · `M` · Area: `Runtime`
+- [ ] `RELY-001` **Timeout e failure mapping** — `PARTIAL`; timeout pronto. Todo client gerado carrega um prazo: `builder.requestFactory(...)` com connect e read timeouts lidos de `harpia.integration.<nome>.connect-timeout` e `.read-timeout`, com padrão `2s`/`10s`. Quanto esperar segue a rede e o acordo com o outro lado, não algo que a especificação disse, então é configuração e não declaração. Falta o **failure mapping**: as variantes de `#### Errors` de uma Operation ainda não viram exceções tipadas no client · `P0` · `M` · Area: `Runtime`
+  - Evidence: [`IntegrationHttpClientTest`](src/test/java/dev/harpia/target/javaspring/IntegrationHttpClientTest.java), [`JavaSpringIntegrationClientTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringIntegrationClientTransformer.java).
   - Depends on: `INTEG-001`, `CMD-004`.
 
 
