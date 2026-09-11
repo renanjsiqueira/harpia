@@ -476,7 +476,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `API-007` **Status codes 2xx e errors V0** — `DONE` para o conjunto fechado atual · `P0` · `M` · Area: `API`
   - Evidence: [`OutputParser`](src/main/java/dev/harpia/parse/OutputParser.java), [`JavaSpringErrorTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringErrorTransformer.java).
 
-- [ ] `API-008` **Authentication e authorization HTTP** — `TODO` · `P0` · `XL` · Area: `Security`
+- [x] `API-008` **Authentication e authorization HTTP** — `DONE`; é a manifestação HTTP do que `SEC-002`, `SEC-003`, `SEC-005` e `SEC-007` entregam: autenticação na fronteira (`basic`/`jwt`), autorização por operação (`public`/`authenticated`/`role`/`scope`) chaveada por método e path, `denyAll` para o que ninguém declarou, e recusa no mesmo `ApiError` da API. Auditado em vez de assumido: a lacuna que restava era de evidência, não de código — um `### Access` vindo de binding externo atravessa a mesma gramática e gera a mesma regra, e agora há teste que observa isso · `P0` · `XL` · Area: `Security`
+  - Evidence: [`ExternalHttpBindingTest`](src/test/java/dev/harpia/binding/ExternalHttpBindingTest.java), [`AuthenticatedAccessTest`](src/test/java/dev/harpia/target/javaspring/AuthenticatedAccessTest.java), [`RoleAccessTest`](src/test/java/dev/harpia/target/javaspring/RoleAccessTest.java), [`SecurityProviderTest`](src/test/java/dev/harpia/target/javaspring/SecurityProviderTest.java).
   - Depends on: `SEC-002`, `SEC-003`.
 
 - [x] `API-009` **Validação HTTP** — `DONE` para o recorte atual; `validate input` vale na fronteira HTTP inteira, não só no corpo: parâmetros de path/query/header carregam as constraints declaradas, `ConstraintViolationException` responde o status declarado, e o teste de controller gerado envia valores de requisição em texto puro e um valor realmente inválido · `P0` · `M` · Area: `API`
@@ -834,11 +835,11 @@ Em ordem de dependência e valor para a Reference Application:
 1. `FLOW-014` e `FLOW-020`: calls e iteração controlada.
 2. `INTEG-003`–`INTEG-004`, `INTEG-010`, `RELY-001`: chamada e provider HTTP do FraudService.
 3. `EVENT-001`, `EVENT-003`, `EVENT-005`, `EVENT-007`, `FLOW-015`: Event local e emit.
-4. `API-008`: `SEC-002`, `SEC-003`, `SEC-005` e `SEC-007` fechados — access declarado, filter chain gerada, `basic`/`jwt` e recusa no mesmo corpo de erro da API.
+4. Fechado: `SEC-002`, `SEC-003`, `SEC-005`, `SEC-007` e `API-008` — access declarado, filter chain gerada, `basic`/`jwt` e recusa no mesmo corpo de erro da API.
 5. `CUSTOM-002`, `CUSTOM-003`: contract, DI e layout custom protegido.
 6. `GREEN-003`: baseline integrada verificável (`SPRING-012` fechado: `mvn package` e jar executável são gate).
 7. `HARNESS-001`–`HARNESS-004`: fechados — contrato Java versionado, JSON dos cinco comandos, `.harpia/handoff.json` e os quatro gates.
-8. `DOC-001`: catálogo compacto e exemplos canônicos para humanos e agentes.
+8. `DOC-001`: fechado — `docs/catalog.md`, com cada entrada compilada a cada execução.
 9. Reference Application end-to-end cobrindo o conjunto acima.
 10. `PERSIST-008` e demais parciais P0 após o baseline integrado revelar o recorte necessário.
 
