@@ -60,6 +60,7 @@ public final class IntegrationBindingResolver {
                                         .map(IntegrationBindingResolver::request)
                                         .toList(),
                                 response(binding.response()),
+                                file.auth().map(IntegrationBindingResolver::auth),
                                 binding.where(),
                                 binding.endpoint().where()),
                         binding.where(),
@@ -77,7 +78,53 @@ public final class IntegrationBindingResolver {
                 }
             }
         }
+        refuseDisagreement(resolved, diagnostics);
         return new BindingModel(base.http(), resolved);
+    }
+
+    private static IntegrationHttpBinding.Auth auth(BindingAst.Auth declared) {
+        return new IntegrationHttpBinding.Auth(
+                IntegrationHttpBinding.Auth.Kind.valueOf(declared.kind().name()),
+                declared.header(),
+                declared.where());
+    }
+
+    /**
+     * One port is reached one way.
+     *
+     * <p>Two binding files can each bind part of the same Integration, and nothing stops them from
+     * declaring different authentication. The generated client is a single object with a single
+     * credential, so one of the two declarations would have to be silently dropped — and a call
+     * that proves who it is in a way the binding never asked for is worse than a refusal here.
+     */
+    private static void refuseDisagreement(
+            Map<String, BindingModel.IntegrationHttp> resolved, DiagnosticCollector diagnostics) {
+        Map<String, BindingModel.IntegrationHttp> first = new LinkedHashMap<>();
+        for (BindingModel.IntegrationHttp binding : resolved.values()) {
+            String integration = binding.target().substring(0, binding.target().indexOf('.'));
+            BindingModel.IntegrationHttp previous = first.putIfAbsent(integration, binding);
+            if (previous == null) {
+                continue;
+            }
+            if (!describe(previous).equals(describe(binding))) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_BINDING_AUTH,
+                        "Integration '" + integration + "' is bound with '" + describe(binding)
+                                + "' here and '" + describe(previous) + "' elsewhere",
+                        binding.where(),
+                        "first binding declared here",
+                        previous.where());
+            }
+        }
+    }
+
+    private static String describe(BindingModel.IntegrationHttp binding) {
+        return binding.binding().auth()
+                .map(auth -> switch (auth.kind()) {
+                    case BEARER -> "bearer";
+                    case API_KEY -> "api key " + auth.header();
+                })
+                .orElse("no authentication");
     }
 
     private static HttpBinding.RequestMapping request(BindingAst.RequestMapping mapping) {

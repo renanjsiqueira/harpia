@@ -1176,6 +1176,174 @@ none
 Calling a port needs a binding that says how it is reached: declaring the port is free, but a call
 without one is refused, because the generated code would have nowhere to send the request.
 
+## Auth on an outbound binding
+
+`## Auth` says how this file's calls prove who is calling. `bearer` sends the value in
+`Authorization` behind `Bearer `; `api key <Header-Name>` sends it exactly as it was issued.
+
+The credential itself is never written here. It differs per deployment and it is a secret, so the
+generated project reads `harpia.integration.<port>.credential` — a placeholder in
+`application.yaml`, and a value of its own in the generated test configuration.
+
+````harpia
+# Purchase
+
+## Data
+
+- id: UUID generated
+- total: Decimal required
+
+## Integration FraudService
+
+### Operation CheckOrder
+
+#### Input
+
+- total: Decimal required
+
+#### Output
+
+Boolean
+
+## Command Place Purchase
+
+### Endpoint
+
+POST /purchases
+
+### Access
+
+public
+
+### Input
+
+- total: Decimal required
+
+### Flow
+
+```flow
+validate input
+approved = call FraudService.CheckOrder(total = total)
+purchase = create Purchase from input
+save purchase
+return purchase
+```
+
+### Output
+
+201 Purchase
+
+### Errors
+
+- invalid input -> 400
+
+<!-- bindings/http.harpia.md -->
+# HTTP Bindings
+
+## Base URL
+
+https://fraud.example
+
+## Auth
+
+bearer
+
+## Bind FraudService.CheckOrder
+
+### Endpoint
+
+POST /checks
+
+### Request
+
+- input: body
+
+### Response
+
+output: body
+````
+
+A scheme nobody implements is refused where it is written, rather than generating a client that
+sends nothing and fails at the other end.
+
+````harpia HRP1202
+# Purchase
+
+## Data
+
+- id: UUID generated
+- total: Decimal required
+
+## Integration FraudService
+
+### Operation CheckOrder
+
+#### Input
+
+- total: Decimal required
+
+#### Output
+
+Boolean
+
+## Command Place Purchase
+
+### Endpoint
+
+POST /purchases
+
+### Access
+
+public
+
+### Input
+
+- total: Decimal required
+
+### Flow
+
+```flow
+validate input
+approved = call FraudService.CheckOrder(total = total)
+purchase = create Purchase from input
+save purchase
+return purchase
+```
+
+### Output
+
+201 Purchase
+
+### Errors
+
+- invalid input -> 400
+
+<!-- bindings/http.harpia.md -->
+# HTTP Bindings
+
+## Base URL
+
+https://fraud.example
+
+## Auth
+
+oauth2
+
+## Bind FraudService.CheckOrder
+
+### Endpoint
+
+POST /checks
+
+### Request
+
+- input: body
+
+### Response
+
+output: body
+````
+
 ## Integration
 
 An outbound dependency starts as a business port: no HTTP, no library, no environment. Entities and

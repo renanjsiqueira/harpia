@@ -9,12 +9,14 @@ import java.util.Optional;
 public record BindingAst(
         String file,
         Optional<BaseUrl> baseUrl,
+        Optional<Auth> auth,
         List<Declaration> declarations,
         SourceRef where) {
 
     public BindingAst {
         Objects.requireNonNull(file, "file");
         Objects.requireNonNull(baseUrl, "baseUrl");
+        Objects.requireNonNull(auth, "auth");
         declarations = List.copyOf(declarations);
         Objects.requireNonNull(where, "where");
     }
@@ -73,6 +75,25 @@ public record BindingAst(
             Objects.requireNonNull(access, "access");
             request = List.copyOf(request);
             Objects.requireNonNull(response, "response");
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
+    /**
+     * How this file's calls prove who is calling, without saying with what.
+     *
+     * <p>The scheme is part of how the other side is reached, so it is a binding. The credential
+     * is not: it differs per deployment, it is a secret, and a secret written into a specification
+     * is a secret in version control. The generated project reads it from configuration.
+     */
+    public record Auth(Kind kind, String header, SourceRef where) {
+
+        /** {@code bearer} carries the credential in {@code Authorization}; an API key names it. */
+        public enum Kind { BEARER, API_KEY }
+
+        public Auth {
+            Objects.requireNonNull(kind, "kind");
+            Objects.requireNonNull(header, "header");
             Objects.requireNonNull(where, "where");
         }
     }

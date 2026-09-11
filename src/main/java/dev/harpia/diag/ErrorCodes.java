@@ -176,6 +176,8 @@ public final class ErrorCodes {
     public static final String SEMANTIC_DUPLICATE_BINDING = "HRP2202";
     /** A request or response mapping does not match the bound operation contract. */
     public static final String SEMANTIC_BINDING_MAPPING = "HRP2203";
+    /** One Integration is bound with more than one authentication scheme. */
+    public static final String SEMANTIC_BINDING_AUTH = "HRP2204";
 
     // --- HRP3xxx: configuration ---------------------------------------------------------------
     /** {@code harpia.yaml} is missing. Exit 2. */

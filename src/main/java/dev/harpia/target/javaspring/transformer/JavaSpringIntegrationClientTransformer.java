@@ -269,6 +269,9 @@ public final class JavaSpringIntegrationClientTransformer {
             imports.add("java.util.stream.Collectors");
             methods.add(checker(integration, failureTypeName(integration.name())));
         }
+        if (auth(integration).isPresent()) {
+            imports.add("org.springframework.beans.factory.annotation.Value");
+        }
         JavaTypeModel type = new JavaTypeModel(
                 JavaTypeModel.Kind.CLASS,
                 packageName,
@@ -300,30 +303,62 @@ public final class JavaSpringIntegrationClientTransformer {
      * lives one file over.
      */
     private static JavaConstructorModel constructor(ApplicationIntegration integration) {
-        if (!returnsAnything(integration)) {
-            return new JavaConstructorModel(
-                    JavaVisibility.PUBLIC,
-                    List.of(),
-                    List.of(new JavaParameterModel(
-                            "builder",
-                            JavaTypeRef.of("org.springframework.web.client.RestClient.Builder"))),
-                    List.of("this.client = builder.build();"),
-                    Optional.of(integration.where()));
+        List<JavaParameterModel> parameters = new ArrayList<>();
+        parameters.add(new JavaParameterModel(
+                "builder",
+                JavaTypeRef.of("org.springframework.web.client.RestClient.Builder")));
+        if (returnsAnything(integration)) {
+            parameters.add(new JavaParameterModel(
+                    "validator", JavaTypeRef.of("jakarta.validation.Validator")));
+        }
+        Optional<ApplicationIntegration.Auth> auth = auth(integration);
+        auth.ifPresent(ignored -> parameters.add(new JavaParameterModel(
+                "credential",
+                JavaTypeRef.of("java.lang.String"),
+                List.of(JavaAnnotationModel.of(
+                        "org.springframework.beans.factory.annotation.Value",
+                        new JavaAnnotationModel.Attribute(
+                                "value",
+                                "\"${harpia.integration." + propertyName(integration.name())
+                                        + ".credential}\""))))));
+        List<String> statements = new ArrayList<>();
+        // The header is installed on the builder rather than written into every call: one place
+        // where the credential is read, and no operation that can quietly forget to send it.
+        statements.add(auth
+                .map(value -> "this.client = builder.defaultHeader(\""
+                        + javaString(value.header()) + "\", " + credential(value) + ").build();")
+                .orElse("this.client = builder.build();"));
+        if (returnsAnything(integration)) {
+            statements.add("this.validator = validator;");
         }
         return new JavaConstructorModel(
                 JavaVisibility.PUBLIC,
                 List.of(),
-                List.of(
-                        new JavaParameterModel(
-                                "builder",
-                                JavaTypeRef.of(
-                                        "org.springframework.web.client.RestClient.Builder")),
-                        new JavaParameterModel(
-                                "validator", JavaTypeRef.of("jakarta.validation.Validator"))),
-                List.of(
-                        "this.client = builder.build();",
-                        "this.validator = validator;"),
+                List.copyOf(parameters),
+                List.copyOf(statements),
                 Optional.of(integration.where()));
+    }
+
+    /**
+     * How this port proves who is calling.
+     *
+     * <p>Taken from the binding, which is where reaching the other side is described. One port is
+     * reached one way: two bindings that disagree are already refused before this stage, so the
+     * first answer is the only answer.
+     */
+    private static Optional<ApplicationIntegration.Auth> auth(ApplicationIntegration integration) {
+        return integration.operations().stream()
+                .flatMap(operation -> operation.http().stream())
+                .flatMap(http -> http.auth().stream())
+                .findFirst();
+    }
+
+    /** {@code bearer} is a prefix the scheme owns; an API key is the value and nothing else. */
+    private static String credential(ApplicationIntegration.Auth auth) {
+        return switch (auth.kind()) {
+            case BEARER -> "\"Bearer \" + credential";
+            case API_KEY -> "credential";
+        };
     }
 
     private static List<JavaFieldModel> fields(ApplicationIntegration integration) {
@@ -392,7 +427,7 @@ public final class JavaSpringIntegrationClientTransformer {
     }
 
     /** {@code FraudService} is configured as {@code fraud-service}, the way Spring reads keys. */
-    static String propertyName(String integration) {
+    public static String propertyName(String integration) {
         return integration.replaceAll("([a-z0-9])([A-Z])", "$1-$2").toLowerCase(Locale.ROOT);
     }
 

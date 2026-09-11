@@ -94,6 +94,9 @@ public final class ApplicationModelBuilder {
                                                                                 ::requestMapping)
                                                                         .toList(),
                                                                 responseMapping(http.response()),
+                                                                http.auth().map(
+                                                                        ApplicationModelBuilder
+                                                                                ::integrationAuth),
                                                                 http.where(),
                                                                 http.endpointWhere())),
                                                 operation.where()))
@@ -294,6 +297,14 @@ public final class ApplicationModelBuilder {
                 source.errors().stream().map(ApplicationModelBuilder::failure).toList(),
                 transactional(source.nature(), kind),
                 source.where());
+    }
+
+    private static ApplicationIntegration.Auth integrationAuth(
+            dev.harpia.model.IntegrationHttpBinding.Auth auth) {
+        return new ApplicationIntegration.Auth(
+                ApplicationIntegration.Auth.Kind.valueOf(auth.kind().name()),
+                auth.header(),
+                auth.where());
     }
 
     private static ApplicationOperation.RequestMapping requestMapping(

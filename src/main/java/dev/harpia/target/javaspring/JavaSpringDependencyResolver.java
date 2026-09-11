@@ -30,6 +30,7 @@ public final class JavaSpringDependencyResolver {
         for (ResolvedCapability resolved : application.capabilities().asMap().values()) {
             contributions.add(contributionFor(resolved.capability(), application));
         }
+        contributions.add(integrationCredentials(application));
         if (application.settings().generation().tests()) {
             contributions.add(new ProviderContribution(
                     List.of(MavenDependency.managed(
@@ -65,6 +66,38 @@ public final class JavaSpringDependencyResolver {
             case SECURITY -> securityContribution(application);
             case EVENTS, CUSTOM -> ProviderContribution.empty();
         };
+    }
+
+    /**
+     * What a call needs in order to prove who is calling.
+     *
+     * <p>The binding says which scheme reaches the other side; the value is a secret that differs
+     * per deployment, so it is a placeholder here and never a line in a specification anyone
+     * commits. A test has no deployment to fill the placeholder in, and the context reads the
+     * property on the way up, so the tests get a value of their own — one that is obviously not a
+     * credential, because nothing generated should look like it shipped with one.
+     */
+    private static ProviderContribution integrationCredentials(ApplicationProject application) {
+        List<ConfigurationProperty> properties = new ArrayList<>();
+        List<ConfigurationProperty> testProperties = new ArrayList<>();
+        for (dev.harpia.application.ApplicationIntegration integration
+                : application.integrations()) {
+            boolean authenticated = integration.operations().stream()
+                    .flatMap(operation -> operation.http().stream())
+                    .anyMatch(http -> http.auth().isPresent());
+            if (!authenticated) {
+                continue;
+            }
+            String name = dev.harpia.target.javaspring.transformer
+                    .JavaSpringIntegrationClientTransformer.propertyName(integration.name());
+            String key = "harpia.integration." + name + ".credential";
+            properties.add(new ConfigurationProperty(
+                    key,
+                    "${" + name.replace('-', '_').toUpperCase(java.util.Locale.ROOT)
+                            + "_CREDENTIAL}"));
+            testProperties.add(new ConfigurationProperty(key, "harpia-test-credential"));
+        }
+        return new ProviderContribution(List.of(), properties, testProperties);
     }
 
     /**

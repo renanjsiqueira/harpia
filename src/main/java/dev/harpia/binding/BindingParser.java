@@ -23,6 +23,7 @@ public final class BindingParser {
 
     private static final String FILE_HEADING = "HTTP Bindings";
     private static final String BASE_URL_HEADING = "Base URL";
+    private static final String AUTH_HEADING = "Auth";
     private static final String DECLARATION_PREFIX = "Bind ";
     private static final Pattern OPERATION = Pattern.compile(
             "[A-Z][A-Za-z0-9]*(?:\\.[A-Z][A-Za-z0-9]*)?");
@@ -31,8 +32,11 @@ public final class BindingParser {
                     + "|/(?:[a-z][a-z0-9-]*(?:/[a-z][a-z0-9-]*)*)?)$");
     private static final Pattern REQUEST = Pattern.compile(
             "^([a-z][A-Za-z0-9]*): +(body|path|query|header)(?: +([^ ]+))?$");
+    private static final Pattern AUTH = Pattern.compile(
+            "^(?:bearer|api key ([A-Za-z][A-Za-z0-9-]*))$");
     private static final Set<String> SECTIONS = Set.of(
             "Endpoint", "Access", "Request", "Response");
+    private static final Set<String> FILE_SECTIONS = Set.of(BASE_URL_HEADING, AUTH_HEADING);
 
     private BindingParser() {
     }
@@ -97,8 +101,43 @@ public final class BindingParser {
             }
         }
 
+        List<Section> auths = topLevel.stream()
+                .filter(section -> section.heading().headingText().equals(AUTH_HEADING))
+                .toList();
+        Optional<BindingAst.Auth> auth = Optional.empty();
+        if (auths.size() > 1) {
+            diagnostics.error(
+                    ErrorCodes.SYNTAX_BINDING_FILE,
+                    "binding file repeats '## " + AUTH_HEADING + "'",
+                    auths.get(1).heading().raw().where());
+            valid = false;
+        }
+        if (!auths.isEmpty()) {
+            Optional<dev.harpia.ast.RawSpan> value =
+                    paragraph(auths.getFirst(), AUTH_HEADING, diagnostics);
+            java.util.regex.Matcher matcher = value
+                    .map(raw -> AUTH.matcher(raw.text().strip()))
+                    .filter(java.util.regex.Matcher::matches)
+                    .orElse(null);
+            if (matcher == null) {
+                diagnostics.error(
+                        ErrorCodes.SYNTAX_BINDING_SECTION,
+                        "'## Auth' requires 'bearer' or 'api key <Header-Name>'",
+                        value.map(dev.harpia.ast.RawSpan::where)
+                                .orElse(auths.getFirst().heading().raw().where()));
+                valid = false;
+            } else {
+                dev.harpia.ast.RawSpan raw = value.orElseThrow();
+                auth = Optional.of(matcher.group(1) == null
+                        ? new BindingAst.Auth(
+                                BindingAst.Auth.Kind.BEARER, "Authorization", raw.where())
+                        : new BindingAst.Auth(
+                                BindingAst.Auth.Kind.API_KEY, matcher.group(1), raw.where()));
+            }
+        }
+
         List<Section> declarations = topLevel.stream()
-                .filter(section -> !section.heading().headingText().equals(BASE_URL_HEADING))
+                .filter(section -> !FILE_SECTIONS.contains(section.heading().headingText()))
                 .toList();
         if (declarations.isEmpty()) {
             diagnostics.error(
@@ -119,7 +158,7 @@ public final class BindingParser {
         }
         return valid
                 ? Optional.of(new BindingAst(
-                        source.relativePath(), baseUrl, bindings, fileWhere))
+                        source.relativePath(), baseUrl, auth, bindings, fileWhere))
                 : Optional.empty();
     }
 
@@ -179,8 +218,8 @@ public final class BindingParser {
                     "outbound Integration binding '" + operation
                             + "' cannot declare '### Access'",
                     byName.get("Access").getFirst().heading().raw().where(),
-                    "Access controls inbound callers; Integration authentication belongs to "
-                            + "INTEG-010");
+                    "Access controls inbound callers; how this file's calls prove who they "
+                            + "are is '## Auth'");
             valid = false;
         }
 

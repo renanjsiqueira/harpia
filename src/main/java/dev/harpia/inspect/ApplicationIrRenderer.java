@@ -134,7 +134,14 @@ final class ApplicationIrRenderer {
                         .append(error.name()).append('\n'));
                 operation.http().ifPresent(http -> out.append("      Http ")
                         .append(http.method()).append(' ')
-                        .append(http.effectiveUrl()).append('\n'));
+                        .append(http.effectiveUrl())
+                        .append(http.auth()
+                                .map(auth -> " auth=" + switch (auth.kind()) {
+                                    case BEARER -> "bearer";
+                                    case API_KEY -> "api-key " + auth.header();
+                                })
+                                .orElse(""))
+                        .append('\n'));
             });
         });
         return out.toString();
