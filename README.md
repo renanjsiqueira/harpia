@@ -420,7 +420,15 @@ Spring, URLs, credentials, or persistence entities; bindings and providers suppl
 Every generated client carries a deadline: a call that can hang forever is not a dependency, it is
 a thread held until something else gives up. How long to wait follows the network and the agreement
 with the other side rather than anything the specification said, so it is read from configuration —
-`harpia.integration.<name>.connect-timeout` and `.read-timeout`, defaulting to `2s` and `10s`.
+`harpia.integration.connect-timeout` and `harpia.integration.read-timeout`, defaulting to `2s` and
+`10s`. It is applied by a generated `RestClientCustomizer` rather than inside each client, so a test
+can still install its own request factory the way `MockRestServiceServer` does.
+
+A failed call raises the port's own exception — `<Integration>Exception` — carrying the operation
+and, when there was a response, its status. An Integration exists so the caller does not have to
+know how the other side is reached, and an exception is part of what a caller has to know: without
+this it would catch `RestClientResponseException`, Spring vocabulary arriving through a declaration
+that never mentioned HTTP.
 
 ### Catalog
 

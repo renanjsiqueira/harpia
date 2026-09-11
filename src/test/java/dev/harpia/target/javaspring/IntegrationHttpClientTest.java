@@ -21,6 +21,9 @@ import org.junit.jupiter.api.io.TempDir;
 /** End-to-end contract of the first outbound HTTP provider. */
 class IntegrationHttpClientTest {
 
+    private static final String CLIENT =
+            "src/main/java/com/example/order/integration/FraudServiceClient.java";
+
     @TempDir
     Path projectRoot;
 
@@ -130,28 +133,58 @@ class IntegrationHttpClientTest {
     }
 
     @Test
-    void everyCallCarriesADeadline(@TempDir Path classes) throws IOException {
+    void everyCallCarriesADeadlineWithoutMakingTheClientUntestable(@TempDir Path classes)
+            throws IOException {
         bindings(validBindings());
 
         CompileResult result = compile();
         assertThat(result.diagnostics()).isEmpty();
-        String client = result.tree().orElseThrow().files()
-                .get("src/main/java/com/example/order/integration/FraudServiceClient.java");
+        SortedMap<String, String> files = result.tree().orElseThrow().files();
 
         // A call that can hang forever is not a dependency, it is a thread held until something
-        // else gives up.
-        assertThat(client)
-                .contains("import org.springframework.http.client.SimpleClientHttpRequestFactory;")
+        // else gives up. The deadline is a customizer because setting a request factory inside the
+        // client would silently replace the one MockRestServiceServer installs.
+        assertThat(files.get(
+                        "src/main/java/com/example/order/integration/IntegrationTimeouts.java"))
+                .contains("public RestClientCustomizer harpiaIntegrationTimeouts(")
+                .contains("@Value(\"${harpia.integration.connect-timeout:2s}\")")
+                .contains("@Value(\"${harpia.integration.read-timeout:10s}\")")
                 .contains("requestFactory.setConnectTimeout(connectTimeout);")
-                .contains("requestFactory.setReadTimeout(readTimeout);")
-                .contains("this.client = builder.requestFactory(requestFactory).build();")
-                .as("the wait follows the network, not anything the specification said")
-                .contains("@Value(\"${harpia.integration.fraud-service.connect-timeout:2s}\")")
-                .contains("@Value(\"${harpia.integration.fraud-service.read-timeout:10s}\")")
-                .as("a default short enough to fail rather than accumulate")
-                .doesNotContain("builder.build()");
+                .contains("requestFactory.setReadTimeout(readTimeout);");
+        assertThat(files.get(CLIENT))
+                .as("the client takes the builder as Spring hands it over, and nothing else")
+                .contains("this.client = builder.build();")
+                .doesNotContain("SimpleClientHttpRequestFactory");
 
-        GeneratedJava.compiles(result.tree().orElseThrow().files(), classes);
+        GeneratedJava.compiles(files, classes);
+    }
+
+    @Test
+    void aFailedCallRaisesThePortsOwnExceptionAndNotSprings(@TempDir Path classes)
+            throws IOException {
+        bindings(validBindings());
+
+        CompileResult result = compile();
+        assertThat(result.diagnostics()).isEmpty();
+        SortedMap<String, String> files = result.tree().orElseThrow().files();
+
+        // An Integration exists so the caller does not have to know how the other side is reached,
+        // and an exception is part of what a caller has to know.
+        assertThat(files.get(
+                        "src/main/java/com/example/order/integration/FraudServiceException.java"))
+                .contains("public class FraudServiceException extends RuntimeException")
+                .contains("public FraudServiceException(String operation, int status)")
+                .contains("public FraudServiceException(String operation, Throwable cause)")
+                .as("a call that never got a response failed just as truly")
+                .contains("return Optional.ofNullable(status);");
+        assertThat(files.get(CLIENT))
+                .contains(".onStatus(HttpStatusCode::isError, (request, response) -> {")
+                .contains("throw new FraudServiceException(\"notify\", "
+                        + "response.getStatusCode().value());")
+                .contains("} catch (ResourceAccessException exception) {")
+                .contains("throw new FraudServiceException(\"notify\", exception);");
+
+        GeneratedJava.compiles(files, classes);
     }
 
     @Test
