@@ -130,6 +130,9 @@ target:
     version: 21
   options:
     springBootVersion: "3.3.6"
+  properties:
+    server.port: "8081"
+    logging.level.root: "INFO"
 
 database:
   vendor: postgres
@@ -143,6 +146,14 @@ generation:
   migrations: true
   tests: true
 ```
+
+`target.properties` is deployment configuration the project states for itself. It lives inside the
+target block because a property name belongs to a framework and not to a specification: nothing
+above the target boundary reads these. They are written into the generated `application.yaml` in one
+sorted order whatever order they were typed in, and a key the generated project already sets is
+refused rather than overwritten — the provider chose `spring.jpa.hibernate.ddl-auto: validate` to
+match the migrations Harpia generated, and a project quietly flipping it would make those
+migrations a lie.
 
 `harpia.languageVersion` selects the Harpia grammar and semantics. It is intentionally independent
 from `target.language.version`, which selects Java 21 for the `java-spring` target. Version `0` is

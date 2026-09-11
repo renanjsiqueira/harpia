@@ -71,7 +71,8 @@ public final class TargetResolver {
                 config.target().languageVersion(),
                 config.project().group(),
                 config.project().artifact(),
-                config.target().options());
+                config.target().options(),
+                config.target().properties());
 
         if (generator.isEmpty()) {
             String message = "target `" + id + "` is not supported by this compiler; target status: "

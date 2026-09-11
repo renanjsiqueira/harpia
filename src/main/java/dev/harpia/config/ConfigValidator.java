@@ -30,7 +30,8 @@ public final class ConfigValidator {
     private static final Set<String> HARPIA_KEYS = Set.of("schemaVersion", "languageVersion");
     private static final Set<String> PROJECT_KEYS = Set.of("name", "group", "artifact", "package");
     private static final Set<String> TARGET_KEYS = Set.of(
-            "id", "language", "options", "type", "javaVersion", "springBootVersion");
+            "id", "language", "options", "properties",
+            "type", "javaVersion", "springBootVersion");
     private static final Set<String> TARGET_LANGUAGE_KEYS = Set.of("version");
     private static final String LEGACY_TARGET_HINT =
             "the canonical form is 'target.id', 'target.language.version' and 'target.options'";
@@ -164,6 +165,26 @@ public final class ConfigValidator {
             }
         }
 
+        Map<String, String> properties = new LinkedHashMap<>();
+        for (Map.Entry<String, Node> property
+                : optionalMapping(target, "properties", null, diagnostics).entrySet()) {
+            String key = property.getKey();
+            // A property name is a path, and one that is not shaped like a path would never be
+            // read by the framework it was written for: the file would look configured and be inert.
+            if (!key.matches("[a-z][a-z0-9]*([-.][a-z0-9]+)*")) {
+                errorAt(diagnostics, ErrorCodes.CONFIG_UNSUPPORTED_VALUE,
+                        "target.properties key '" + key + "' is not a dotted lower-case property "
+                                + "path",
+                        property.getValue());
+                continue;
+            }
+            String value = string(
+                    property.getValue(), "target.properties." + key, diagnostics);
+            if (value != null) {
+                properties.put(key, value);
+            }
+        }
+
         if (id == null || languageVersion == null) {
             return null;
         }
@@ -173,7 +194,7 @@ public final class ConfigValidator {
                     target.getOrDefault("id", target.get("type")));
             return null;
         }
-        return new TargetConfig(id, languageVersion, options);
+        return new TargetConfig(id, languageVersion, options, properties);
     }
 
     private static Map<String, Node> requiredMapping(

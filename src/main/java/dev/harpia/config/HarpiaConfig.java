@@ -45,11 +45,23 @@ public record HarpiaConfig(
      * {@code springBootVersion}: the compiler core never interprets them.
      */
     public record TargetConfig(
-            String id, int languageVersion, java.util.Map<String, String> options) {
+            String id,
+            int languageVersion,
+            java.util.Map<String, String> options,
+            java.util.Map<String, String> properties) {
+
+        public TargetConfig(String id, int languageVersion, java.util.Map<String, String> options) {
+            this(id, languageVersion, options, java.util.Map.of());
+        }
+
         public TargetConfig {
             Objects.requireNonNull(id, "id");
             options = java.util.Collections.unmodifiableMap(
                     new java.util.LinkedHashMap<>(Objects.requireNonNull(options, "options")));
+            // Sorted, because a configuration file is read by people and diffed by machines, and
+            // neither is served by the order someone happened to type the keys in.
+            properties = java.util.Collections.unmodifiableMap(
+                    new java.util.TreeMap<>(Objects.requireNonNull(properties, "properties")));
         }
     }
 

@@ -466,8 +466,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
   - Um valor ligado fora do corpo carrega o que a URL sabe escrever: escalar ou enum declarado (com o tipo declarado no parâmetro); coleção e Value são `HRP2138` em vez de estourarem dentro do target.
   - Evidence: [`EndpointParser`](src/main/java/dev/harpia/parse/EndpointParser.java), [`BindingResolver`](src/main/java/dev/harpia/binding/BindingResolver.java), [`BindingValidator`](src/main/java/dev/harpia/binding/BindingValidator.java), [`PathParameterTest`](src/test/java/dev/harpia/binding/PathParameterTest.java), [`UrlBoundInputTest`](src/test/java/dev/harpia/binding/UrlBoundInputTest.java).
 
-- [ ] `API-005` **Query params e headers** — `PARTIAL`; query params prontos. Num endpoint inline, `GET` e `DELETE` não têm corpo, então os inputs que o path não consumiu viram query parameters com o próprio nome — `GET /customers?page=…&size=…` em vez de um corpo em GET; os demais verbos seguem com corpo. Headers continuam pendentes: nada num endpoint inline nomeia um header, então dependem da sintaxe de mapeamento explícito dos bindings externos · `P0` · `L` · Area: `API`
-  - Evidence: [`QueryParameterTest`](src/test/java/dev/harpia/binding/QueryParameterTest.java), [`BindingResolver`](src/main/java/dev/harpia/binding/BindingResolver.java), [`ApplicationIrRenderer`](src/main/java/dev/harpia/inspect/ApplicationIrRenderer.java).
+- [x] `API-005` **Query params e headers** — `DONE`; num endpoint inline, `GET` e `DELETE` não têm corpo, então os inputs que o path não consumiu viram query parameters com o próprio nome — `GET /customers?page=…&size=…` em vez de um corpo em GET; os demais verbos seguem com corpo. Headers vêm do mapeamento explícito de um binding externo (`- x: header X-Nome` → `@RequestHeader`), com as constraints declaradas e o valor enviado em texto puro no teste de controller gerado; não há o que inferir num endpoint inline, onde nada nomeia um header · `P0` · `L` · Area: `API`
+  - Evidence: [`QueryParameterTest`](src/test/java/dev/harpia/binding/QueryParameterTest.java), [`ExternalHttpBindingTest`](src/test/java/dev/harpia/binding/ExternalHttpBindingTest.java), [`BindingResolver`](src/main/java/dev/harpia/binding/BindingResolver.java).
   - Depends on: `BIND-002`.
 
 - [x] `API-006` **Request body DTO e response body DTO** — `DONE` para CRUD V0 · `P0` · `L` · Area: `API`
@@ -594,7 +594,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 
 ## Configuration and Testing
 
-- [ ] `CONFIG-001` **Externalized YAML configuration** — `PARTIAL`; gera `application.yaml` para datasource, sem modelo geral de propriedades · `P0` · `L` · Area: `Operations`
+- [x] `CONFIG-001` **Externalized YAML configuration** — `DONE`; `target.properties` é o modelo geral: o projeto declara propriedades de deploy que chegam ao `application.yaml` gerado, numa ordem só, qualquer que tenha sido a ordem digitada. Vivem dentro do bloco do target porque um nome de propriedade pertence a um framework e não a uma especificação — nada acima da fronteira do target as lê. Uma chave que o projeto gerado já define é recusada em vez de sobrescrita, e uma chave que não tem forma de caminho de propriedade também: o arquivo pareceria configurado e seria inerte · `P0` · `L` · Area: `Operations`
+  - Evidence: [`DeclaredPropertyTest`](src/test/java/dev/harpia/target/javaspring/DeclaredPropertyTest.java), [`AppConfigEmitter`](src/main/java/dev/harpia/target/javaspring/AppConfigEmitter.java), [`ConfigValidator`](src/main/java/dev/harpia/config/ConfigValidator.java).
   - Evidence: [`AppConfigEmitter`](src/main/java/dev/harpia/target/javaspring/AppConfigEmitter.java), [`application.yaml.mustache`](src/main/resources/targets/java-spring/templates/application.yaml.mustache).
 
 - [x] `CONFIG-002` **Environment variables básicas** — `DONE` no recorte Core V1; datasource usa placeholders externos determinísticos para URL, username e password. `Secret` e redaction geral permanecem em `TYPE-019`/`SEC-009` no Next · `P0` · `M` · Area: `Security`
