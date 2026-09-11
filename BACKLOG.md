@@ -577,7 +577,9 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `SEC-001` **Access `public`** — `DONE` · `P0` · `XS` · Area: `Security`
   - Evidence: [`AccessParser`](src/main/java/dev/harpia/parse/AccessParser.java), [`AccessRule`](src/main/java/dev/harpia/model/AccessRule.java).
 
-- [ ] `SEC-002` **Access `authenticated`** — `TODO`; rejeitado explicitamente em V0 · `P0` · `L` · Area: `Security`
+- [x] `SEC-002` **Access `authenticated`** — `DONE`; `### Access` aceita `authenticated` na V1 e exige a capability `security`, que o target implementa por conta própria. No Java/Spring vira uma `SecurityFilterChain`: cada rota declarada com sua regra, `denyAll` no fim (o padrão só pega caminho que ninguém declarou), CSRF desligado e sessão stateless — uma API que lê a identidade da requisição não tem sessão para uma requisição forjada montar. Um projeto sem endpoint autenticado não ganha dependência nem configuração. O teste de controller gerado importa a chain, porque um slice test seria julgado pela regra padrão do Boot, e para um endpoint autenticado prova a recusa (401) em vez de afirmar um status que uma requisição anônima não alcança. V0 recusa com `HRP4001` · `P0` · `L` · Area: `Security`
+  - Evidence: [`AuthenticatedAccessTest`](src/test/java/dev/harpia/target/javaspring/AuthenticatedAccessTest.java), [`JavaSpringSecurityTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringSecurityTransformer.java), [`CapabilityAnalyzer`](src/main/java/dev/harpia/capability/CapabilityAnalyzer.java).
+  - Nota: o projeto gerado precisa de Spring Boot >= 3.4 para `spring-boot-starter-security` resolver no cache offline desta máquina.
 
 - [ ] `SEC-003` **Role e scope** — `TODO` · `P0` · `L` · Area: `Security`
   - Depends on: `SEC-002`, `RULE-003`.
@@ -828,7 +830,7 @@ Em ordem de dependência e valor para a Reference Application:
 1. `FLOW-014` e `FLOW-020`: calls e iteração controlada.
 2. `INTEG-003`–`INTEG-004`, `INTEG-010`, `RELY-001`: chamada e provider HTTP do FraudService.
 3. `EVENT-001`, `EVENT-003`, `EVENT-005`, `EVENT-007`, `FLOW-015`: Event local e emit.
-4. `SEC-002`, `SEC-003`, `SEC-005`, `SEC-007`, `API-008`: authenticated/role/JWT.
+4. `SEC-003`, `SEC-005`, `SEC-007`, `API-008`: role/JWT (`SEC-002` fechado: `authenticated` e a filter chain gerada).
 5. `CUSTOM-002`, `CUSTOM-003`: contract, DI e layout custom protegido.
 6. `GREEN-003`: baseline integrada verificável (`SPRING-012` fechado: `mvn package` e jar executável são gate).
 7. `HARNESS-001`–`HARNESS-004`: fechados — contrato Java versionado, JSON dos cinco comandos, `.harpia/handoff.json` e os quatro gates.

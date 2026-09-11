@@ -5,6 +5,7 @@ public enum Capability {
     HTTP("http"),
     PERSISTENCE("persistence"),
     EVENTS("events"),
+    SECURITY("security"),
     CUSTOM("custom");
 
     private final String id;

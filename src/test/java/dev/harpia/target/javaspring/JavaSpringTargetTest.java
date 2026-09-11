@@ -28,7 +28,8 @@ class JavaSpringTargetTest {
         assertThat(target.descriptor().language()).isEqualTo("java");
         assertThat(target.descriptor().framework()).isEqualTo("spring-boot");
         assertThat(target.descriptor().capabilities())
-                .containsExactlyInAnyOrder(Capability.HTTP, Capability.PERSISTENCE);
+                .containsExactlyInAnyOrder(
+                        Capability.HTTP, Capability.PERSISTENCE, Capability.SECURITY);
         assertThat(target.descriptor().supportsLanguageVersion(21)).isTrue();
         assertThat(target.descriptor().supportsLanguageVersion(17)).isFalse();
     }

@@ -129,7 +129,7 @@ class LineGrammarTest {
                 // A named parameter is valid syntax; whether it names an input is semantic.
                 Arguments.of("endpoint", "GET /customers/{CustomerId}", ErrorCodes.SYNTAX_ENDPOINT),
                 Arguments.of("endpoint", "GET /customers/{}", ErrorCodes.SYNTAX_ENDPOINT),
-                Arguments.of("access", "authenticated", ErrorCodes.UNSUPPORTED_AUTHENTICATION),
+                Arguments.of("access", "admin", ErrorCodes.UNSUPPORTED_AUTHENTICATION),
                 Arguments.of("flow", "find Customer by email", ErrorCodes.SYNTAX_FLOW_COMMAND),
                 Arguments.of("output", "404 Customer", ErrorCodes.SYNTAX_USE_CASE_SECTION),
                 // A bare phrase is now a domain error, so what stays invalid is a malformed one.

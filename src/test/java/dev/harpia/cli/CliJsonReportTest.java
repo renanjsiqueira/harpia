@@ -198,7 +198,7 @@ class CliJsonReportTest {
         assertThat(execution.stdout())
                 .contains("\"id\":\"java-spring\"")
                 .contains("\"canGenerate\":true")
-                .contains("\"capabilities\":[\"http\",\"persistence\"]")
+                .contains("\"capabilities\":[\"http\",\"persistence\",\"security\"]")
                 .contains("\"id\":\"csharp-aspnet\"")
                 .as("a target with no generator declares no capabilities, and says so")
                 .contains("\"canGenerate\":false");

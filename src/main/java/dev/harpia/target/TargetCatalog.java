@@ -36,7 +36,7 @@ public final class TargetCatalog {
                 TargetStatus.SUPPORTED,
                 "Java >= 21",
                 21,
-                Set.of(Capability.HTTP, Capability.PERSISTENCE),
+                Set.of(Capability.HTTP, Capability.PERSISTENCE, Capability.SECURITY),
                 "1",
                 "default",
                 1,

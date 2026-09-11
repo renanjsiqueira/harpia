@@ -56,6 +56,10 @@ public final class CapabilityResolver {
                             ErrorCodes.CAPABILITY_PROVIDER_UNSUPPORTED,
                             "capability 'persistence' requires provider 'postgresql'; configured "
                                     + "database is '" + config.database().vendor() + "'");
+            // The target enforces access itself, the way it exposes endpoints itself. Which
+            // mechanism proves an identity — basic, a token — is a later choice, and until one is
+            // declared the target applies the one its framework gives for nothing.
+            case SECURITY -> Selection.targetNative();
             case EVENTS -> Selection.unsupported(
                     ErrorCodes.CAPABILITY_PROVIDER_MISSING,
                     "capability 'events' has no provider configured");

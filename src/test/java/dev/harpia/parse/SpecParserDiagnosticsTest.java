@@ -86,7 +86,7 @@ class SpecParserDiagnosticsTest {
                         ### Endpoint
                         GET /customers/{id}
                         ### Access
-                        authenticated
+                        admin
                         ### Flow
                         ```flow
                         customer = load Customer by id
@@ -116,7 +116,7 @@ class SpecParserDiagnosticsTest {
 
                 ### Access
 
-                authenticated
+                admin
 
                 ### Mystery
 

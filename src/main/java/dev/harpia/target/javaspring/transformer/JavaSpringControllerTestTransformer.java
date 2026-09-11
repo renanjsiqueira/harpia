@@ -73,8 +73,20 @@ public final class JavaSpringControllerTestTransformer {
             }
         }
 
+        boolean secured = context.application().capabilities()
+                .requires(dev.harpia.capability.Capability.SECURITY);
+        if (secured) {
+            imports.add(context.layout().packageName(JavaLayout.CONFIG) + ".SecurityConfig");
+        }
         List<JavaMethodModel> methods = new ArrayList<>();
         for (ApplicationOperation operation : operations) {
+            // An authenticated endpoint cannot be exercised without an identity, and asserting
+            // its declared status from an anonymous request would only assert the refusal wearing
+            // the wrong number. What it can prove is that the refusal happens.
+            if (authenticated(operation)) {
+                methods.add(refusesAnonymous(names, entity, operation, imports));
+                continue;
+            }
             methods.add(declaredStatus(names, entity, operation, imports));
             for (ApplicationOperation.Failure failure : operation.failures()) {
                 failure(names, entity, operation, failure, imports).ifPresent(methods::add);
@@ -90,10 +102,25 @@ public final class JavaSpringControllerTestTransformer {
                 Set.of(),
                 Optional.of("Every endpoint declared for " + entity.typeName()
                         + ", and every failure it declares."),
-                List.of(JavaAnnotationModel.of(
-                        "org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest",
-                        new JavaAnnotationModel.Attribute(
-                                "value", names.controllerName() + ".class"))),
+                // A slice test auto-configures security when it is on the classpath, but not the
+                // chain this project declared. Without the import every endpoint would be judged
+                // by Spring Boot's default rule, and even a public one would answer 401.
+                secured
+                        ? List.of(
+                                JavaAnnotationModel.of(
+                                        "org.springframework.boot.test.autoconfigure.web.servlet"
+                                                + ".WebMvcTest",
+                                        new JavaAnnotationModel.Attribute(
+                                                "value", names.controllerName() + ".class")),
+                                JavaAnnotationModel.of(
+                                        "org.springframework.context.annotation.Import",
+                                        new JavaAnnotationModel.Attribute(
+                                                "value", "SecurityConfig.class")))
+                        : List.of(JavaAnnotationModel.of(
+                                "org.springframework.boot.test.autoconfigure.web.servlet"
+                                        + ".WebMvcTest",
+                                new JavaAnnotationModel.Attribute(
+                                        "value", names.controllerName() + ".class"))),
                 imports.stream().map(JavaImportModel::new).toList(),
                 List.of(),
                 List.of(identifier(entity), mockMvc(), mockedService(names)),
@@ -153,6 +180,29 @@ public final class JavaSpringControllerTestTransformer {
         perform(names, entity, operation, statements, body(operation), List.of(
                 MATCHERS_RESULT + ".status().is(" + operation.result().status() + ")"));
         return test(operation, "ReturnsItsDeclaredStatus", statements);
+    }
+
+    /**
+     * The one thing an anonymous request can prove about an authenticated endpoint.
+     *
+     * <p>401 and not 403: the request carried no identity at all, and saying "forbidden" would
+     * describe someone who was recognised and then turned away.
+     */
+    private JavaMethodModel refusesAnonymous(
+            Names names,
+            ApplicationEntity entity,
+            ApplicationOperation operation,
+            TreeSet<String> imports) {
+        List<String> statements = new ArrayList<>();
+        perform(names, entity, operation, statements, body(operation), List.of(
+                MATCHERS_RESULT + ".status().is(401)"));
+        return test(operation, "RefusesAnAnonymousRequest", statements);
+    }
+
+    private static boolean authenticated(ApplicationOperation operation) {
+        return operation.endpoint()
+                .map(endpoint -> endpoint.access() == ApplicationOperation.Access.AUTHENTICATED)
+                .orElse(false);
     }
 
     private Optional<JavaMethodModel> failure(

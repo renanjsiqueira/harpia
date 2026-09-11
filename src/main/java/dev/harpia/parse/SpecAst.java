@@ -122,7 +122,8 @@ public final class SpecAst {
     }
 
     public enum Access {
-        PUBLIC
+        PUBLIC,
+        AUTHENTICATED
     }
 
     public sealed interface FlowStatement

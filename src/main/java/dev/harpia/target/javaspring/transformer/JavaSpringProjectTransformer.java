@@ -28,6 +28,7 @@ public final class JavaSpringProjectTransformer {
     private final JavaSpringControllerTransformer controllers =
             new JavaSpringControllerTransformer();
     private final JavaSpringErrorTransformer errors = new JavaSpringErrorTransformer();
+    private final JavaSpringSecurityTransformer security = new JavaSpringSecurityTransformer();
     private final JavaSpringServiceTestTransformer serviceTests =
             new JavaSpringServiceTestTransformer();
     private final JavaSpringControllerTestTransformer controllerTests =
@@ -72,6 +73,7 @@ public final class JavaSpringProjectTransformer {
             }
         }
         files.addAll(errors.transform(context));
+        files.addAll(security.transform(context));
         if (context.application().settings().generation().tests()) {
             files.addAll(logicTests.transform(context));
         }

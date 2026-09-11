@@ -192,7 +192,8 @@ public record ApplicationOperation(
     }
 
     public enum Access {
-        PUBLIC
+        PUBLIC,
+        AUTHENTICATED
     }
 
     public record FlowInstruction(

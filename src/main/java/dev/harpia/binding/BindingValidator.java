@@ -71,6 +71,7 @@ public final class BindingValidator {
             }
             validatePathParameters(binding, operation, diagnostics);
             validatePartialUpdate(project.languageVersion(), binding, operation, diagnostics);
+            validateAccess(project.languageVersion(), binding, diagnostics);
             validateMappings(binding.binding(), operation, loadsById, diagnostics);
         }
     }
@@ -98,6 +99,26 @@ public final class BindingValidator {
                     "path parameter '{" + parameter + "}' has no input '" + parameter
                             + "' in operation '" + operation.title() + "' to fill it",
                     binding.endpointWhere());
+        }
+    }
+
+    /**
+     * {@code authenticated} is V1.
+     *
+     * <p>V0 refused it as a feature outside the language. It is inside now, so the refusal moves
+     * to where the version is known and says which version admits it.
+     */
+    private static void validateAccess(
+            dev.harpia.LanguageVersion languageVersion,
+            BindingModel.Http binding,
+            DiagnosticCollector diagnostics) {
+        if (binding.binding().access() == dev.harpia.model.AccessRule.AUTHENTICATED
+                && languageVersion == dev.harpia.LanguageVersion.V0) {
+            diagnostics.error(
+                    ErrorCodes.UNSUPPORTED_AUTHENTICATION,
+                    "access 'authenticated' needs harpia.languageVersion 1",
+                    binding.endpointWhere(),
+                    "set harpia.languageVersion to 1");
         }
     }
 

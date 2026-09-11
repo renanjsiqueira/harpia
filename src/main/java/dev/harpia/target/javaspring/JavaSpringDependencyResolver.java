@@ -62,6 +62,10 @@ public final class JavaSpringDependencyResolver {
                                     Boolean.toString(application.settings().generation().migrations())),
                             new ConfigurationProperty("spring.jpa.hibernate.ddl-auto", "validate"),
                             new ConfigurationProperty("spring.jpa.open-in-view", "false")));
+            case SECURITY -> new ProviderContribution(
+                    List.of(MavenDependency.managed(
+                            "org.springframework.boot", "spring-boot-starter-security")),
+                    List.of());
             case EVENTS, CUSTOM -> ProviderContribution.empty();
         };
     }

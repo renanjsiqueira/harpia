@@ -178,7 +178,17 @@ O conteúdo de `### Access` é exatamente:
 public
 ```
 
-`authenticated`, listas de roles ou qualquer outro valor geram `HRP4001`.
+Na V1, `### Access` também aceita `authenticated`: a requisição precisa carregar uma identidade.
+Qual mecanismo a comprova é decisão de um provider, do mesmo jeito que o vendor do banco — a
+especificação decide **quais** endpoints são alcançáveis sem uma, não como se prova. Na V0 o
+conjunto continua sendo só `public`, e `authenticated` ali é `HRP4001`. Listas de roles e qualquer
+outro valor seguem sendo `HRP4001` nas duas versões.
+
+Um endpoint `authenticated` exige a capability `security`, que o target implementa por conta
+própria, como já faz com HTTP. No Java/Spring isso vira uma filter chain: cada rota declarada
+aparece com a regra que pediu, e a cadeia termina em `denyAll` — o padrão só alcança um caminho que
+ninguém declarou, e recusá-lo é mais seguro do que deixá-lo herdar a última regra que passou. Um
+projeto sem nenhum endpoint autenticado não ganha dependência nem configuração de segurança.
 
 ## 6. Input
 

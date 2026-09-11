@@ -173,6 +173,7 @@ dev.harpia.capability.Capability
   public static final Capability EVENTS
   public static final Capability HTTP
   public static final Capability PERSISTENCE
+  public static final Capability SECURITY
 dev.harpia.target.TargetCatalog
   public static List all()
   public static List info()
