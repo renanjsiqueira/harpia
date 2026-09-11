@@ -20,102 +20,100 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * {@code authenticated} access.
+ * How an identity is proved.
  *
- * <p>It says the request must carry an identity, and nothing about how it proves one: which
- * mechanism supplies the identity is a provider's decision, the way a database vendor is. What the
- * specification decides is which endpoints are reachable without one.
+ * <p>Which endpoints need one is what the specification says. How one arrives is a logical
+ * provider, the way a database vendor is: the same declarations, a different deployment.
  */
-class AuthenticatedAccessTest {
+class SecurityProviderTest {
 
     private static final String CONFIG = "src/main/java/com/example/auth/config/SecurityConfig.java";
-    private static final String CONTROLLER_TEST =
-            "src/test/java/com/example/auth/web/CustomerControllerTest.java";
+    private static final String APP_CONFIG = "src/main/resources/application.yaml";
+    private static final String TEST_CONFIG = "src/test/resources/application.yaml";
 
     @TempDir
     Path projectRoot;
 
     @Test
-    void demandingAnIdentityRequiresSomethingToCheckOne() throws IOException {
-        project(1, "authenticated");
+    void withoutAChoiceTheFrameworkGivesBasicForNothing() throws IOException {
+        project(null);
 
         CompileResult result = compile();
         assertThat(result.diagnostics()).isEmpty();
-        assertThat(result.stages().application().orElseThrow().capabilities()
-                        .requires(Capability.SECURITY))
-                .isTrue();
         assertThat(Inspector.render(result, Stage.APPLICATION_IR).orElseThrow())
-                .contains("access=AUTHENTICATED")
-                .as("how an identity is proved is a provider's choice, like a database vendor")
                 .contains("Capability security provider=basic");
+        assertThat(result.tree().orElseThrow().files().get(CONFIG))
+                .contains(".httpBasic(basic -> {})")
+                .doesNotContain("oauth2ResourceServer");
+        assertThat(result.tree().orElseThrow().files().get("pom.xml"))
+                .doesNotContain("oauth2-resource-server");
     }
 
     @Test
-    void eachDeclaredRouteBecomesARuleAndTheRestIsRefused() throws IOException {
-        project(1, "authenticated");
+    void aTokenIsTheSameChainReachedADifferentWay() throws IOException {
+        project("jwt");
 
-        String config = compile().tree().orElseThrow().files().get(CONFIG);
-        assertThat(config)
+        CompileResult result = compile();
+        assertThat(result.diagnostics()).isEmpty();
+        assertThat(Inspector.render(result, Stage.APPLICATION_IR).orElseThrow())
+                .contains("Capability security provider=jwt");
+        SortedMap<String, String> files = result.tree().orElseThrow().files();
+        assertThat(files.get(CONFIG))
+                .contains(".oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}))")
+                .as("which endpoints need an identity does not change with how one is proved")
                 .contains(".requestMatchers(\"/customers\").permitAll()")
-                .contains(".requestMatchers(\"/customers/{id}\").authenticated()")
-                .as("the default only catches a path nobody declared, and refusing those is safer")
-                .contains(".anyRequest().denyAll()")
-                .as("a stateless API has no session to ride on and no cookie for CSRF to protect")
-                .contains(".csrf(csrf -> csrf.disable())")
-                .contains("SessionCreationPolicy.STATELESS");
+                .contains(".requestMatchers(\"/customers/{id}\").authenticated()");
+        assertThat(files.get("pom.xml")).contains("spring-boot-starter-oauth2-resource-server");
     }
 
     @Test
-    void aProjectWithNothingToEnforceGetsNoSecurityAtAll() throws IOException {
-        project(1, "public");
+    void theKeySetIsTheDeploymentsAnswerAndNotOneBakedIn() throws IOException {
+        project("jwt");
 
+        SortedMap<String, String> files = compile().tree().orElseThrow().files();
+        assertThat(files.get(APP_CONFIG))
+                .as("a URL baked into generated code is one environment written into every one")
+                .contains("spring.security.oauth2.resourceserver.jwt.jwk-set-uri: "
+                        + "\"${JWT_JWK_SET_URI}\"");
+        assertThat(files.get(TEST_CONFIG))
+                .as("a test has no deployment to fill the placeholder in")
+                .contains("spring.security.oauth2.resourceserver.jwt.jwk-set-uri: "
+                        + "\"http://localhost/.harpia-no-issuer/jwks.json\"");
+    }
+
+    @Test
+    void aProjectWithNothingToSecureCarriesNoTestConfigurationEither() throws IOException {
+        Files.createDirectories(projectRoot.resolve("specs"));
+        writeSpec("public");
+        writeConfig("jwt");
+
+        // The provider was named, but nothing asked for an identity, so nothing was resolved.
         CompileResult result = compile();
         assertThat(result.stages().application().orElseThrow().capabilities()
                         .requires(Capability.SECURITY))
                 .isFalse();
-        assertThat(result.tree().orElseThrow().files()).doesNotContainKey(CONFIG);
-        assertThat(result.tree().orElseThrow().files().get("pom.xml"))
-                .as("a dependency changes how a project starts; nobody asked for that here")
-                .doesNotContain("spring-boot-starter-security");
+        assertThat(result.tree().orElseThrow().files()).doesNotContainKey(TEST_CONFIG);
     }
 
     @Test
-    void theGeneratedTestProvesTheRefusalRatherThanAssertingItsDeclaredStatus() throws IOException {
-        project(1, "authenticated");
-
-        String test = compile().tree().orElseThrow().files().get(CONTROLLER_TEST);
-        assertThat(test)
-                .as("a slice test would otherwise be judged by Spring Boot's default rule")
-                .contains("@Import(SecurityConfig.class)")
-                .contains("void deleteCustomerRefusesAnAnonymousRequest()")
-                .as("401 and not 403: the request carried no identity at all")
-                .contains("status().is(401)")
-                .as("an anonymous request cannot reach the declared outcome")
-                .doesNotContain("void deleteCustomerReturnsItsDeclaredStatus()");
-        assertThat(test)
-                .as("a public endpoint is still exercised the way it always was")
-                .contains("void listCustomersReturnsItsDeclaredStatus()");
-    }
-
-    @Test
-    void v0HasOnlyPublicEndpoints() throws IOException {
-        project(0, "authenticated");
+    void aMechanismNobodyImplementsIsRefused() throws IOException {
+        project("kerberos");
 
         assertThat(compile().diagnostics())
                 .filteredOn(diagnostic ->
-                        diagnostic.code().equals(ErrorCodes.UNSUPPORTED_AUTHENTICATION))
+                        diagnostic.code().equals(ErrorCodes.CONFIG_UNSUPPORTED_VALUE))
                 .singleElement()
                 .satisfies(diagnostic -> assertThat(diagnostic.message())
-                        .isEqualTo("access 'authenticated' needs harpia.languageVersion 1"));
+                        .contains("security.provider must be one of [basic, jwt]"));
     }
 
     @Test
-    void theGeneratedProjectEnforcesWhatItDeclared(@TempDir Path generated) throws Exception {
-        project(1, "authenticated");
+    void theGeneratedProjectStartsWithNoEnvironmentAtAll(@TempDir Path generated) throws Exception {
+        project("jwt");
         write(generated, compile().tree().orElseThrow().files());
 
-        // Only the generated project can answer this: a string says the rule was written down,
-        // a running filter chain says it is applied.
+        // Without the generated test configuration the context fails on an unresolved placeholder,
+        // which only a real run of the generated project can show.
         Path log = generated.resolve("maven-test.log");
         Process process = new ProcessBuilder("mvn", "-q", "-o", "test")
                 .directory(generated.toFile())
@@ -145,8 +143,13 @@ class AuthenticatedAccessTest {
         return new HarpiaCompiler().compile(new CompileRequest(projectRoot));
     }
 
-    private void project(int languageVersion, String access) throws IOException {
+    private void project(String provider) throws IOException {
         Files.createDirectories(projectRoot.resolve("specs"));
+        writeSpec("authenticated");
+        writeConfig(provider);
+    }
+
+    private void writeSpec(String access) throws IOException {
         Files.writeString(projectRoot.resolve("specs/customer.harpia.md"), """
                 # Customer
 
@@ -202,10 +205,18 @@ class AuthenticatedAccessTest {
 
                 - not found -> 404
                 """.formatted(access), StandardCharsets.UTF_8);
+    }
+
+    private void writeConfig(String provider) throws IOException {
+        String security = provider == null ? "" : """
+                security:
+                  provider: %s
+
+                """.formatted(provider);
         Files.writeString(projectRoot.resolve("harpia.yaml"), """
                 harpia:
                   schemaVersion: 1
-                  languageVersion: %d
+                  languageVersion: 1
 
                 project:
                   name: auth-service
@@ -220,7 +231,7 @@ class AuthenticatedAccessTest {
                   options:
                     springBootVersion: "3.4.4"
 
-                database:
+                %sdatabase:
                   vendor: postgres
 
                 paths:
@@ -230,6 +241,6 @@ class AuthenticatedAccessTest {
                 generation:
                   migrations: true
                   tests: true
-                """.formatted(languageVersion), StandardCharsets.UTF_8);
+                """.formatted(security), StandardCharsets.UTF_8);
     }
 }

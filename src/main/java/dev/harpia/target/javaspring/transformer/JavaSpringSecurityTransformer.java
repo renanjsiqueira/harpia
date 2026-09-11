@@ -61,7 +61,7 @@ public final class JavaSpringSecurityTransformer {
         routes.forEach((pattern, access) -> statements.add(
                 "                .requestMatchers(\"" + pattern + "\")." + rule(access)));
         statements.add("                .anyRequest().denyAll())");
-        statements.add("        .httpBasic(basic -> {})");
+        statements.add("        " + mechanism(context));
         statements.add("        .build();");
 
         JavaTypeModel type = new JavaTypeModel(
@@ -122,6 +122,21 @@ public final class JavaSpringSecurityTransformer {
             }
         }
         return new LinkedHashMap<>(routes);
+    }
+
+    /**
+     * How an identity arrives.
+     *
+     * <p>Basic is what the framework gives for nothing; a token is what a deployment with an
+     * issuer uses. The chain is otherwise identical, because which endpoints need an identity is
+     * not affected by how one is proved.
+     */
+    private static String mechanism(JavaSpringContext context) {
+        return context.application().capabilities()
+                .providerOf(Capability.SECURITY)
+                .filter(provider -> provider.value().equals("jwt"))
+                .map(provider -> ".oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}))")
+                .orElse(".httpBasic(basic -> {})");
     }
 
     /**

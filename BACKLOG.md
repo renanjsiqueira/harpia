@@ -585,7 +585,9 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
   - Evidence: [`RoleAccessTest`](src/test/java/dev/harpia/target/javaspring/RoleAccessTest.java), [`AccessParser`](src/main/java/dev/harpia/parse/AccessParser.java), [`AccessRule`](src/main/java/dev/harpia/model/AccessRule.java), [`JavaSpringSecurityTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringSecurityTransformer.java).
   - Depends on: `SEC-002`, `RULE-003`.
 
-- [ ] `SEC-005` **JWT** — `TODO` · `P0` · `L` · Area: `Security`
+- [x] `SEC-005` **JWT** — `DONE`; `security.provider` em `harpia.yaml` escolhe como uma identidade é provada, do mesmo jeito que `database.vendor` escolhe o banco: `basic` (padrão, o que o framework dá de graça) ou `jwt`, que torna o projeto gerado um resource server OAuth2. A cadeia é idêntica nos dois — quais endpoints exigem identidade não muda com como ela é provada. O conjunto de chaves é `${JWT_JWK_SET_URI}`, resposta do deployment, e um `src/test/resources/application.yaml` gerado dá aos testes um valor próprio: o contexto lê essa propriedade ao subir e um teste não tem deployment para preencher o placeholder · `P0` · `L` · Area: `Security`
+  - Evidence: [`SecurityProviderTest`](src/test/java/dev/harpia/target/javaspring/SecurityProviderTest.java), [`CapabilityResolver`](src/main/java/dev/harpia/capability/CapabilityResolver.java), [`JavaSpringDependencyResolver`](src/main/java/dev/harpia/target/javaspring/JavaSpringDependencyResolver.java).
+  - Nota: `spring-boot-starter-oauth2-resource-server` exige Spring Boot >= 3.4 no cache offline desta máquina.
   - Depends on: `SEC-002`, `BIND-008`.
 
 - [ ] `SEC-007` **Spring Security provider** — `TODO` · `P0` · `L` · Area: `Security`

@@ -137,6 +137,9 @@ target:
 database:
   vendor: postgres
 
+security:
+  provider: basic
+
 paths:
   specs: spec
   bindings: bindings

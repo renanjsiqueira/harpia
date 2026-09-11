@@ -26,7 +26,7 @@ public final class ConfigValidator {
 
     private static final String FILE = ConfigLoader.CONFIG_FILE;
     private static final Set<String> ROOT_KEYS = Set.of(
-            "harpia", "project", "target", "database", "paths", "generation");
+            "harpia", "project", "target", "database", "security", "paths", "generation");
     private static final Set<String> HARPIA_KEYS = Set.of("schemaVersion", "languageVersion");
     private static final Set<String> PROJECT_KEYS = Set.of("name", "group", "artifact", "package");
     private static final Set<String> TARGET_KEYS = Set.of(
@@ -36,6 +36,7 @@ public final class ConfigValidator {
     private static final String LEGACY_TARGET_HINT =
             "the canonical form is 'target.id', 'target.language.version' and 'target.options'";
     private static final Set<String> DATABASE_KEYS = Set.of("vendor");
+    private static final Set<String> SECURITY_KEYS = Set.of("provider");
     private static final Set<String> PATH_KEYS = Set.of("specs", "bindings", "output");
     private static final Set<String> GENERATION_KEYS = Set.of("migrations", "tests");
 
@@ -85,6 +86,15 @@ public final class ConfigValidator {
         String vendor = requiredString(database, "vendor", diagnostics);
         requireSupported("database.vendor", vendor, "postgres", database.get("vendor"), diagnostics);
 
+        Map<String, Node> security = optionalMapping(root, "security", SECURITY_KEYS, diagnostics);
+        String securityProvider = optionalString(
+                security, "provider", HarpiaConfig.SecurityConfig.BASIC, diagnostics);
+        requireSupported(
+                "security.provider", securityProvider,
+                java.util.List.of(
+                        HarpiaConfig.SecurityConfig.BASIC, HarpiaConfig.SecurityConfig.JWT),
+                security.get("provider"), diagnostics);
+
         Map<String, Node> paths = optionalMapping(root, "paths", PATH_KEYS, diagnostics);
         String specs = optionalString(paths, "specs", "spec", diagnostics);
         String bindings = optionalString(paths, "bindings", "bindings", diagnostics);
@@ -108,6 +118,7 @@ public final class ConfigValidator {
                 new ProjectConfig(name, group, artifact, packageName),
                 targetConfig,
                 new DatabaseConfig(vendor),
+                new HarpiaConfig.SecurityConfig(securityProvider),
                 new PathsConfig(specs, bindings, output),
                 new GenerationConfig(migrations, tests)));
     }
@@ -359,6 +370,19 @@ public final class ConfigValidator {
         if (actual != null && !actual.equals(expected)) {
             errorAt(diagnostics, ErrorCodes.CONFIG_UNSUPPORTED_VALUE,
                     key + " must be '" + expected + "' in Harpia V0", node);
+        }
+    }
+
+    /** One of a closed set, listed in the message so the reader does not have to guess. */
+    private static void requireSupported(
+            String key,
+            String actual,
+            java.util.List<String> expected,
+            Node node,
+            DiagnosticCollector diagnostics) {
+        if (actual != null && !expected.contains(actual)) {
+            errorAt(diagnostics, ErrorCodes.CONFIG_UNSUPPORTED_VALUE,
+                    key + " must be one of " + expected, node);
         }
     }
 

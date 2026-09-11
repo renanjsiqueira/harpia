@@ -62,12 +62,41 @@ public final class JavaSpringDependencyResolver {
                                     Boolean.toString(application.settings().generation().migrations())),
                             new ConfigurationProperty("spring.jpa.hibernate.ddl-auto", "validate"),
                             new ConfigurationProperty("spring.jpa.open-in-view", "false")));
-            case SECURITY -> new ProviderContribution(
-                    List.of(MavenDependency.managed(
-                            "org.springframework.boot", "spring-boot-starter-security")),
-                    List.of());
+            case SECURITY -> securityContribution(application);
             case EVENTS, CUSTOM -> ProviderContribution.empty();
         };
+    }
+
+    /**
+     * What proving an identity costs the build.
+     *
+     * <p>A token is validated against a key set the deployment names, so the property is a
+     * placeholder here: a URL baked into generated code would be one environment's answer written
+     * into every environment's source.
+     */
+    private static ProviderContribution securityContribution(ApplicationProject application) {
+        List<MavenDependency> dependencies = new ArrayList<>();
+        dependencies.add(MavenDependency.managed(
+                "org.springframework.boot", "spring-boot-starter-security"));
+        boolean jwt = application.capabilities()
+                .providerOf(dev.harpia.capability.Capability.SECURITY)
+                .filter(provider -> provider.value().equals("jwt"))
+                .isPresent();
+        if (!jwt) {
+            return new ProviderContribution(dependencies, List.of());
+        }
+        dependencies.add(MavenDependency.managed(
+                "org.springframework.boot", "spring-boot-starter-oauth2-resource-server"));
+        return new ProviderContribution(
+                dependencies,
+                List.of(new ConfigurationProperty(
+                        "spring.security.oauth2.resourceserver.jwt.jwk-set-uri",
+                        "${JWT_JWK_SET_URI}")),
+                // The context reads this on the way up, and a test has no deployment to fill the
+                // placeholder in. The address is never fetched: no generated test presents a token.
+                List.of(new ConfigurationProperty(
+                        "spring.security.oauth2.resourceserver.jwt.jwk-set-uri",
+                        "http://localhost/.harpia-no-issuer/jwks.json")));
     }
 
     private static List<MavenDependency> persistenceDependencies(ApplicationProject application) {

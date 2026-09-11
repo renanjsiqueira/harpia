@@ -57,7 +57,7 @@ class ConfigLoaderTest {
     @Test
     void reportsUnknownAndDuplicateKeysAtTheKey() throws IOException {
         writeConfig(validConfig()
-                .replace("project:", "security: enabled\nproject:")
+                .replace("project:", "telemetry: enabled\nproject:")
                 .replace("  vendor: postgres", "  vendor: postgres\n  vendor: mysql"));
         DiagnosticCollector diagnostics = new DiagnosticCollector();
 

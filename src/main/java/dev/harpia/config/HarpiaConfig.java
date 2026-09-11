@@ -9,14 +9,33 @@ public record HarpiaConfig(
         ProjectConfig project,
         TargetConfig target,
         DatabaseConfig database,
+        SecurityConfig security,
         PathsConfig paths,
         GenerationConfig generation) {
+
+    /**
+     * The shape from before an identity could be proved more than one way.
+     *
+     * <p>It defaults to `basic`, which is what a project that never mentioned security was already
+     * getting, so nothing that compiled stops compiling and nothing changes meaning.
+     */
+    public HarpiaConfig(
+            HarpiaSettings harpia,
+            ProjectConfig project,
+            TargetConfig target,
+            DatabaseConfig database,
+            PathsConfig paths,
+            GenerationConfig generation) {
+        this(harpia, project, target, database,
+                new SecurityConfig(SecurityConfig.BASIC), paths, generation);
+    }
 
     public HarpiaConfig {
         Objects.requireNonNull(harpia, "harpia");
         Objects.requireNonNull(project, "project");
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(database, "database");
+        Objects.requireNonNull(security, "security");
         Objects.requireNonNull(paths, "paths");
         Objects.requireNonNull(generation, "generation");
     }
@@ -68,6 +87,22 @@ public record HarpiaConfig(
     public record DatabaseConfig(String vendor) {
         public DatabaseConfig {
             Objects.requireNonNull(vendor, "vendor");
+        }
+    }
+
+    /**
+     * How an identity is proved.
+     *
+     * <p>A logical provider, like the database vendor: `basic` and `jwt` are both ways of arriving
+     * with an identity, and which one a deployment uses is not something the specification said.
+     * It defaults to `basic`, which is what a framework gives for nothing.
+     */
+    public record SecurityConfig(String provider) {
+        public static final String BASIC = "basic";
+        public static final String JWT = "jwt";
+
+        public SecurityConfig {
+            Objects.requireNonNull(provider, "provider");
         }
     }
 

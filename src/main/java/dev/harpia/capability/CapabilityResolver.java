@@ -18,6 +18,8 @@ import java.util.Optional;
 public final class CapabilityResolver {
 
     public static final ProviderId POSTGRESQL = new ProviderId("postgresql");
+    public static final ProviderId BASIC = new ProviderId("basic");
+    public static final ProviderId JWT = new ProviderId("jwt");
 
     private CapabilityResolver() {
     }
@@ -56,10 +58,13 @@ public final class CapabilityResolver {
                             ErrorCodes.CAPABILITY_PROVIDER_UNSUPPORTED,
                             "capability 'persistence' requires provider 'postgresql'; configured "
                                     + "database is '" + config.database().vendor() + "'");
-            // The target enforces access itself, the way it exposes endpoints itself. Which
-            // mechanism proves an identity — basic, a token — is a later choice, and until one is
-            // declared the target applies the one its framework gives for nothing.
-            case SECURITY -> Selection.targetNative();
+            // Which mechanism proves an identity is a logical choice that outlives any target,
+            // the way a database vendor is: the specification says which endpoints need one, the
+            // deployment says how it arrives.
+            case SECURITY -> Selection.provider(
+                    config.security().provider().equals(HarpiaConfig.SecurityConfig.JWT)
+                            ? JWT
+                            : BASIC);
             case EVENTS -> Selection.unsupported(
                     ErrorCodes.CAPABILITY_PROVIDER_MISSING,
                     "capability 'events' has no provider configured");

@@ -198,6 +198,19 @@ Um role é nomeado como tudo o mais na especificação, em `lower_snake_case`; n
 `hasAnyRole("ADMIN", "AUDITOR")`, que é a grafia do framework para a mesma coisa. De onde vêm os
 roles de uma identidade é decisão de um provider, como é o mecanismo que a comprova.
 
+Esse mecanismo é declarado em `harpia.yaml`, do mesmo jeito que o vendor do banco:
+
+```yaml
+security:
+  provider: jwt
+```
+
+`basic` é o padrão — é o que o framework dá de graça — e `jwt` faz o projeto gerado ser um resource
+server OAuth2. A cadeia é a mesma nos dois casos: **quais** endpoints exigem identidade não muda com
+**como** uma identidade é provada. Com `jwt`, o conjunto de chaves é a resposta do deployment
+(`${JWT_JWK_SET_URI}`) e não uma URL cozida no código gerado, que seria um ambiente escrito no
+código-fonte de todos os ambientes.
+
 Quando duas operações compartilham um path, a regra mais estrita vence: um role sobre
 `authenticated`, e qualquer um dos dois sobre `public`. Uma regra que deixasse uma delas passar
 seria uma regra com a qual a outra nunca concordou.
