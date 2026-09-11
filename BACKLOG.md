@@ -590,7 +590,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
   - Nota: `spring-boot-starter-oauth2-resource-server` exige Spring Boot >= 3.4 no cache offline desta máquina.
   - Depends on: `SEC-002`, `BIND-008`.
 
-- [ ] `SEC-007` **Spring Security provider** — `TODO` · `P0` · `L` · Area: `Security`
+- [x] `SEC-007` **Spring Security provider** — `DONE`; o provider é a soma de `SEC-002`, `SEC-003` e `SEC-005` — dependência, filter chain a partir do access declarado, `basic`/`jwt` e testes gerados — mais a peça que faltava: uma recusa responde com o **mesmo** `ApiError` que qualquer outra falha. Ela acontece na filter chain, antes de qualquer `@ExceptionHandler`, então sem isso a API teria dois contratos de erro e quem chama trataria os dois. O corpo compartilhado passa a ser gerado mesmo num projeto que não declara falha alguma, porque a recusa é uma · `P0` · `L` · Area: `Security`
+  - Evidence: [`AuthenticatedAccessTest`](src/test/java/dev/harpia/target/javaspring/AuthenticatedAccessTest.java), [`JavaSpringSecurityTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringSecurityTransformer.java), [`JavaSpringErrorTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringErrorTransformer.java).
   - Depends on: `SEC-002`, `SEC-003`.
 
 - [ ] `RELY-001` **Timeout e failure mapping** — `PARTIAL`; timeout e fronteira de falha prontos. Todo client carrega um prazo, aplicado por um `RestClientCustomizer` gerado a partir de `harpia.integration.connect-timeout` e `.read-timeout` (padrão `2s`/`10s`) — customizer e não construtor, porque fixar o request factory dentro do client substituiria silenciosamente o que o `MockRestServiceServer` instala, e um client que ninguém consegue testar do jeito normal é um negócio pior. Uma chamada que falha levanta a exceção da própria porta (`<Integration>Exception`), com a operação e, quando houve resposta, o status: sem isso o chamador pegaria `RestClientResponseException`, vocabulário do Spring chegando por uma declaração que nunca mencionou HTTP. Falta ligar as **variantes nomeadas** de `#### Errors` a essa falha, o que precisa de uma regra de reconhecimento no binding · `P0` · `M` · Area: `Runtime`
@@ -833,7 +834,7 @@ Em ordem de dependência e valor para a Reference Application:
 1. `FLOW-014` e `FLOW-020`: calls e iteração controlada.
 2. `INTEG-003`–`INTEG-004`, `INTEG-010`, `RELY-001`: chamada e provider HTTP do FraudService.
 3. `EVENT-001`, `EVENT-003`, `EVENT-005`, `EVENT-007`, `FLOW-015`: Event local e emit.
-4. `SEC-003`, `SEC-005`, `SEC-007`, `API-008`: role/JWT (`SEC-002` fechado: `authenticated` e a filter chain gerada).
+4. `API-008` e o `scope` de `SEC-003`: `SEC-002`, `SEC-005` e `SEC-007` fechados — access declarado, filter chain gerada, `basic`/`jwt` e recusa no mesmo corpo de erro da API.
 5. `CUSTOM-002`, `CUSTOM-003`: contract, DI e layout custom protegido.
 6. `GREEN-003`: baseline integrada verificável (`SPRING-012` fechado: `mvn package` e jar executável são gate).
 7. `HARNESS-001`–`HARNESS-004`: fechados — contrato Java versionado, JSON dos cinco comandos, `.harpia/handoff.json` e os quatro gates.

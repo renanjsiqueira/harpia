@@ -98,6 +98,65 @@ class AuthenticatedAccessTest {
     }
 
     @Test
+    void aRefusalLooksLikeEveryOtherFailureTheApiProduces() throws IOException {
+        project(1, "authenticated");
+
+        var files = compile().tree().orElseThrow().files();
+        // A refusal happens in the filter chain, before any @ExceptionHandler can see it. Without
+        // this the API would answer refusals in a shape of Spring's choosing while answering every
+        // declared failure in its own, and a caller would have to handle both.
+        assertThat(files.get(CONFIG))
+                .contains(".authenticationEntryPoint((request, response, failure) ->")
+                .contains(".accessDeniedHandler((request, response, failure) ->")
+                .contains("new ApiError(status, error, message)");
+        assertThat(files)
+                .as("the shared body has to exist even where no failure was declared")
+                .containsKey("src/main/java/com/example/auth/error/ApiError.java");
+        assertThat(files.get(CONTROLLER_TEST))
+                .contains("jsonPath(\"$.error\").value(\"unauthorized\")");
+    }
+
+    @Test
+    void theSharedBodyExistsEvenWhereNothingElseFails() throws IOException {
+        Files.createDirectories(projectRoot.resolve("specs"));
+        Files.writeString(projectRoot.resolve("specs/customer.harpia.md"), """
+                # Customer
+
+                ## Data
+
+                - id: UUID generated
+                - name: String required
+
+                ## List Customers
+
+                ### Endpoint
+
+                GET /customers
+
+                ### Access
+
+                authenticated
+
+                ### Flow
+
+                ```flow
+                customers = list Customer
+                return customers
+                ```
+
+                ### Output
+
+                200 List<Customer>
+                """, StandardCharsets.UTF_8);
+        config(1);
+
+        // This project declares no failure of its own, and still refuses anonymous requests. The
+        // body a refusal answers with therefore cannot depend on some other failure existing.
+        assertThat(compile().tree().orElseThrow().files())
+                .containsKey("src/main/java/com/example/auth/error/ApiError.java");
+    }
+
+    @Test
     void v0HasOnlyPublicEndpoints() throws IOException {
         project(0, "authenticated");
 
@@ -147,6 +206,11 @@ class AuthenticatedAccessTest {
 
     private void project(int languageVersion, String access) throws IOException {
         Files.createDirectories(projectRoot.resolve("specs"));
+        spec(access);
+        config(languageVersion);
+    }
+
+    private void spec(String access) throws IOException {
         Files.writeString(projectRoot.resolve("specs/customer.harpia.md"), """
                 # Customer
 
@@ -202,6 +266,9 @@ class AuthenticatedAccessTest {
 
                 - not found -> 404
                 """.formatted(access), StandardCharsets.UTF_8);
+    }
+
+    private void config(int languageVersion) throws IOException {
         Files.writeString(projectRoot.resolve("harpia.yaml"), """
                 harpia:
                   schemaVersion: 1

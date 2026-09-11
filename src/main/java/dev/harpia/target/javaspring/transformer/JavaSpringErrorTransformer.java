@@ -55,7 +55,11 @@ public final class JavaSpringErrorTransformer {
         if (notFoundWhere.isEmpty() && failures.notFound()) {
             notFoundWhere = Optional.of(failures.where());
         }
-        if (notFoundWhere.isEmpty() && !failures.any()) {
+        // A refusal from the security layer answers with the same body, so the type has to exist
+        // even in a project whose specification declares no failure of its own.
+        boolean secured = context.application().capabilities()
+                .requires(dev.harpia.capability.Capability.SECURITY);
+        if (notFoundWhere.isEmpty() && !failures.any() && !secured) {
             return List.of();
         }
         List<JavaSourceFile> files = new ArrayList<>();
@@ -72,8 +76,10 @@ public final class JavaSpringErrorTransformer {
         for (Map.Entry<String, DomainError> domain : failures.domains().entrySet()) {
             files.add(domainException(context, domain.getKey(), domain.getValue()));
         }
-        if (failures.any()) {
+        if (failures.any() || secured) {
             files.add(apiError(context, where));
+        }
+        if (failures.any()) {
             files.add(handler(context, failures, where));
         }
         return List.copyOf(files);

@@ -205,6 +205,12 @@ security:
   provider: jwt
 ```
 
+Uma recusa responde com o mesmo corpo de erro que qualquer outra falha da API. Ela acontece na
+filter chain, antes de qualquer handler de exceção, então sem isso a API responderia recusas numa
+forma escolhida pelo framework e todas as demais falhas na sua própria — e quem chama teria dois
+contratos de erro para tratar. `401` diz que a requisição não trouxe identidade; `403`, que a
+identidade trazida não serve ali.
+
 `basic` é o padrão — é o que o framework dá de graça — e `jwt` faz o projeto gerado ser um resource
 server OAuth2. A cadeia é a mesma nos dois casos: **quais** endpoints exigem identidade não muda com
 **como** uma identidade é provada. Com `jwt`, o conjunto de chaves é a resposta do deployment

@@ -194,8 +194,12 @@ public final class JavaSpringControllerTestTransformer {
             ApplicationOperation operation,
             TreeSet<String> imports) {
         List<String> statements = new ArrayList<>();
+        // The body matters as much as the status: a refusal that answered in a shape of Spring's
+        // choosing would leave the API with two error contracts and callers handling both.
         perform(names, entity, operation, statements, body(operation), List.of(
-                MATCHERS_RESULT + ".status().is(401)"));
+                MATCHERS_RESULT + ".status().is(401)",
+                MATCHERS_RESULT + ".jsonPath(\"$.status\").value(401)",
+                MATCHERS_RESULT + ".jsonPath(\"$.error\").value(\"unauthorized\")"));
         return test(operation, "RefusesAnAnonymousRequest", statements);
     }
 

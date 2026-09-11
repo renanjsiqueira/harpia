@@ -61,6 +61,16 @@ public final class JavaSpringSecurityTransformer {
         routes.forEach((pattern, access) -> statements.add(
                 "                .requestMatchers(\"" + pattern + "\")." + rule(access)));
         statements.add("                .anyRequest().denyAll())");
+        // A refusal here happens in the filter chain, before any @ExceptionHandler can see it, so
+        // without this the generated API would answer refusals in a shape of Spring's choosing
+        // while answering every declared failure in its own.
+        statements.add("        .exceptionHandling(handling -> handling");
+        statements.add("                .authenticationEntryPoint((request, response, failure) ->");
+        statements.add("                        write(json, response, 401, \"unauthorized\",");
+        statements.add("                                \"this endpoint requires an identity\"))");
+        statements.add("                .accessDeniedHandler((request, response, failure) ->");
+        statements.add("                        write(json, response, 403, \"forbidden\",");
+        statements.add("                                \"this identity is not allowed here\")))");
         statements.add("        " + mechanism(context));
         statements.add("        .build();");
 
@@ -76,27 +86,38 @@ public final class JavaSpringSecurityTransformer {
                 List.of(
                         new JavaImportModel("org.springframework.context.annotation.Bean"),
                         new JavaImportModel(
-                                "org.springframework.security.config.http.SessionCreationPolicy")),
+                                "org.springframework.security.config.http.SessionCreationPolicy"),
+                        new JavaImportModel("org.springframework.http.MediaType"),
+                        new JavaImportModel(
+                                context.layout().packageName(JavaLayout.ERROR) + ".ApiError")),
                 List.of(),
                 List.of(),
                 List.of(),
-                List.of(new JavaMethodModel(
+                List.of(
+                        new JavaMethodModel(
                         "harpiaFilterChain",
                         JavaTypeRef.of("org.springframework.security.web.SecurityFilterChain"),
                         JavaVisibility.PUBLIC,
                         Set.of(),
                         List.of(JavaAnnotationModel.marker(
                                 "org.springframework.context.annotation.Bean")),
-                        List.of(new JavaParameterModel(
-                                "http",
-                                JavaTypeRef.of("org.springframework.security.config.annotation"
-                                        + ".web.builders.HttpSecurity"))),
+                        List.of(
+                                new JavaParameterModel(
+                                        "http",
+                                        JavaTypeRef.of(
+                                                "org.springframework.security.config.annotation"
+                                                        + ".web.builders.HttpSecurity")),
+                                new JavaParameterModel(
+                                        "json",
+                                        JavaTypeRef.of(
+                                                "com.fasterxml.jackson.databind.ObjectMapper"))),
                         statements,
                         // Building the chain is declared to throw, and Spring expects the bean
                         // method to say so rather than swallow it into something less specific.
                         List.of(JavaTypeRef.of("java.lang.Exception")),
                         Optional.empty(),
-                        Optional.of(where))),
+                        Optional.of(where)),
+                        writer(context, where)),
                 Optional.of(where));
         return List.of(new JavaSourceFile(
                 JavaLayout.sourcePath(context.layout().packagePath(JavaLayout.CONFIG), TYPE_NAME),
@@ -122,6 +143,35 @@ public final class JavaSpringSecurityTransformer {
             }
         }
         return new LinkedHashMap<>(routes);
+    }
+
+    /** Writes the shared error body, because a refusal is a failure like any other. */
+    private static JavaMethodModel writer(JavaSpringContext context, SourceRef where) {
+        return new JavaMethodModel(
+                "write",
+                JavaTypeRef.of("void"),
+                JavaVisibility.PRIVATE,
+                Set.of(dev.harpia.target.javaspring.model.JavaModifier.STATIC),
+                List.of(),
+                List.of(
+                        new JavaParameterModel(
+                                "json",
+                                JavaTypeRef.of("com.fasterxml.jackson.databind.ObjectMapper")),
+                        new JavaParameterModel(
+                                "response",
+                                JavaTypeRef.of("jakarta.servlet.http.HttpServletResponse")),
+                        new JavaParameterModel("status", JavaTypeRef.of("int")),
+                        new JavaParameterModel("error", JavaTypeRef.of("java.lang.String")),
+                        new JavaParameterModel("message", JavaTypeRef.of("java.lang.String"))),
+                List.of(
+                        "response.setStatus(status);",
+                        "response.setContentType(MediaType.APPLICATION_JSON_VALUE);",
+                        "json.writeValue("
+                                + "response.getOutputStream(), new ApiError(status, error, "
+                                + "message));"),
+                List.of(JavaTypeRef.of("java.io.IOException")),
+                Optional.empty(),
+                Optional.of(where));
     }
 
     /**
