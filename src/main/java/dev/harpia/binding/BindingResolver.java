@@ -44,8 +44,7 @@ public final class BindingResolver {
                                         // names it as plainly as /accounts/{id} does.
                                         dev.harpia.parse.EndpointParser.parameters(endpoint.path())
                                                 .contains("id"),
-                                        AccessRule.valueOf(
-                                                operation.access().orElseThrow().name()),
+                                        accessRule(operation.access().orElseThrow()),
                                         inferredRequest(operation, endpoint.where()),
                                         inferredResponse(operation),
                                         operation.where(),
@@ -79,7 +78,7 @@ public final class BindingResolver {
                                         dev.harpia.parse.EndpointParser
                                                 .parameters(binding.endpoint().path())
                                                 .contains("id"),
-                                        AccessRule.valueOf(binding.access().name()),
+                                        accessRule(binding.access()),
                                         binding.request().stream()
                                                 .map(BindingResolver::request)
                                                 .toList(),
@@ -144,6 +143,14 @@ public final class BindingResolver {
         return operation.output().shape().kind() == SpecAst.OutputKind.NOTHING
                 ? new HttpBinding.NoResponse(operation.output().where())
                 : new HttpBinding.ResponseBody("output", operation.output().where());
+    }
+
+    private static AccessRule accessRule(SpecAst.Access access) {
+        return new AccessRule(AccessRule.Kind.valueOf(access.kind().name()), access.roles());
+    }
+
+    private static AccessRule accessRule(BindingAst.Access access) {
+        return new AccessRule(AccessRule.Kind.valueOf(access.kind().name()), access.roles());
     }
 
     private static HttpBinding.RequestMapping request(BindingAst.RequestMapping mapping) {

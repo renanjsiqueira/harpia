@@ -273,7 +273,9 @@ public final class ApplicationModelBuilder {
                         binding.baseUrl(),
                         binding.path(),
                         binding.hasIdPathVariable(),
-                        Access.valueOf(binding.access().name()),
+                        new Access(
+                                Access.Kind.valueOf(binding.access().kind().name()),
+                                binding.access().roles()),
                         binding.request().stream()
                                 .map(ApplicationModelBuilder::requestMapping)
                                 .toList(),

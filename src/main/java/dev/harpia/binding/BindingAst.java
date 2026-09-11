@@ -150,7 +150,54 @@ public record BindingAst(
         }
     }
 
-    public enum Access {
-        PUBLIC
+    /**
+     * Who may reach an operation.
+     *
+     * <p>{@code AUTHENTICATED} says the request must carry an identity. {@code ROLE} says the
+     * identity must also hold one of the named roles — any of them, because listing several is
+     * how you say a thing is open to more than one kind of person.
+     *
+     * <p>How an identity is proved, and where its roles come from, is a provider's decision. What
+     * is declared here is which endpoints are reachable without one.
+     */
+    public record Access(Kind kind, java.util.List<String> roles) {
+
+        public enum Kind {
+            PUBLIC,
+            AUTHENTICATED,
+            ROLE
+        }
+
+        public static final Access PUBLIC = new Access(Kind.PUBLIC, java.util.List.of());
+        public static final Access AUTHENTICATED =
+                new Access(Kind.AUTHENTICATED, java.util.List.of());
+
+        public Access {
+            java.util.Objects.requireNonNull(kind, "kind");
+            roles = java.util.List.copyOf(roles);
+            if (roles.isEmpty() == (kind == Kind.ROLE)) {
+                throw new IllegalArgumentException("ROLE names roles and nothing else does");
+            }
+        }
+
+        public static Access role(java.util.List<String> roles) {
+            return new Access(Kind.ROLE, roles);
+        }
+
+        /** True when the request has to carry an identity at all, whatever is asked of it. */
+        public boolean requiresIdentity() {
+            return kind != Kind.PUBLIC;
+        }
+
+        /**
+         * The stable form the inspect stages print.
+         *
+         * <p>{@code PUBLIC} and {@code AUTHENTICATED} read as they did when this was an enum, so
+         * nothing that was already written down changed meaning.
+         */
+        @Override
+        public String toString() {
+            return kind == Kind.ROLE ? "ROLE " + String.join(" or ", roles) : kind.name();
+        }
     }
 }

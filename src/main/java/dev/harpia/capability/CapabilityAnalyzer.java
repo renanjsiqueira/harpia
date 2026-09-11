@@ -29,7 +29,7 @@ public final class CapabilityAnalyzer {
                             "operation " + useCase.baseName() + " declares an HTTP binding",
                             useCase.where()));
                     // Demanding an identity is not free: something has to be there to check one.
-                    if (binding.access() == dev.harpia.model.AccessRule.AUTHENTICATED) {
+                    if (binding.access().requiresIdentity()) {
                         requirements.add(new CapabilityRequirement(
                                 Capability.SECURITY,
                                 "operation " + useCase.baseName() + " is authenticated",

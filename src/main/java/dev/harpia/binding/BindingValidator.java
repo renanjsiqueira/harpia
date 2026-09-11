@@ -112,11 +112,12 @@ public final class BindingValidator {
             dev.harpia.LanguageVersion languageVersion,
             BindingModel.Http binding,
             DiagnosticCollector diagnostics) {
-        if (binding.binding().access() == dev.harpia.model.AccessRule.AUTHENTICATED
+        if (binding.binding().access().requiresIdentity()
                 && languageVersion == dev.harpia.LanguageVersion.V0) {
             diagnostics.error(
                     ErrorCodes.UNSUPPORTED_AUTHENTICATION,
-                    "access 'authenticated' needs harpia.languageVersion 1",
+                    "access '" + binding.binding().access().toString().toLowerCase(
+                            java.util.Locale.ROOT) + "' needs harpia.languageVersion 1",
                     binding.endpointWhere(),
                     "set harpia.languageVersion to 1");
         }

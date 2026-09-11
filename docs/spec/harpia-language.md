@@ -184,7 +184,25 @@ especificação decide **quais** endpoints são alcançáveis sem uma, não como
 conjunto continua sendo só `public`, e `authenticated` ali é `HRP4001`. Listas de roles e qualquer
 outro valor seguem sendo `HRP4001` nas duas versões.
 
-Um endpoint `authenticated` exige a capability `security`, que o target implementa por conta
+`role` vai um passo além: a identidade precisa ser de um tipo específico de pessoa.
+
+```markdown
+### Access
+
+role admin
+```
+
+Vários se escrevem com `or` — `role admin or auditor` — e a verificação é "qualquer um deles",
+porque listar mais de um é justamente como se diz que algo está aberto a mais de um tipo de pessoa.
+Um role é nomeado como tudo o mais na especificação, em `lower_snake_case`; no Java/Spring ele vira
+`hasAnyRole("ADMIN", "AUDITOR")`, que é a grafia do framework para a mesma coisa. De onde vêm os
+roles de uma identidade é decisão de um provider, como é o mecanismo que a comprova.
+
+Quando duas operações compartilham um path, a regra mais estrita vence: um role sobre
+`authenticated`, e qualquer um dos dois sobre `public`. Uma regra que deixasse uma delas passar
+seria uma regra com a qual a outra nunca concordou.
+
+Um endpoint `authenticated` ou com `role` exige a capability `security`, que o target implementa por conta
 própria, como já faz com HTTP. No Java/Spring isso vira uma filter chain: cada rota declarada
 aparece com a regra que pediu, e a cadeia termina em `denyAll` — o padrão só alcança um caminho que
 ninguém declarou, e recusá-lo é mais seguro do que deixá-lo herdar a última regra que passou. Um

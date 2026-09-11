@@ -218,7 +218,9 @@ public final class BindingParser {
         return Optional.of(new BindingAst.Http(
                 operation,
                 new BindingAst.Endpoint(parsed.method(), parsed.path(), parsed.where()),
-                BindingAst.Access.valueOf(access.orElseThrow().name()),
+                new BindingAst.Access(
+                        BindingAst.Access.Kind.valueOf(access.orElseThrow().kind().name()),
+                        access.orElseThrow().roles()),
                 request.mappings(),
                 response.orElseThrow(),
                 declaration.heading().raw().where()));

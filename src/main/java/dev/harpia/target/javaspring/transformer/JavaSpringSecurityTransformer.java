@@ -59,10 +59,7 @@ public final class JavaSpringSecurityTransformer {
                 + ".STATELESS))");
         statements.add("        .authorizeHttpRequests(requests -> requests");
         routes.forEach((pattern, access) -> statements.add(
-                "                .requestMatchers(\"" + pattern + "\")."
-                        + (access == ApplicationOperation.Access.AUTHENTICATED
-                                ? "authenticated()"
-                                : "permitAll()")));
+                "                .requestMatchers(\"" + pattern + "\")." + rule(access)));
         statements.add("                .anyRequest().denyAll())");
         statements.add("        .httpBasic(basic -> {})");
         statements.add("        .build();");
@@ -127,11 +124,41 @@ public final class JavaSpringSecurityTransformer {
         return new LinkedHashMap<>(routes);
     }
 
+    /**
+     * The rule as Spring spells it.
+     *
+     * <p>A role is written {@code admin} and checked as {@code hasRole("ADMIN")}: the
+     * specification names people the way it names everything else, and the upper-case authority is
+     * the framework's spelling of the same thing.
+     */
+    private static String rule(ApplicationOperation.Access access) {
+        return switch (access.kind()) {
+            case PUBLIC -> "permitAll()";
+            case AUTHENTICATED -> "authenticated()";
+            case ROLE -> "hasAnyRole(" + access.roles().stream()
+                    .map(role -> "\"" + role.toUpperCase(java.util.Locale.ROOT) + "\"")
+                    .reduce((left, right) -> left + ", " + right)
+                    .orElseThrow() + ")";
+        };
+    }
+
+    /**
+     * The stricter of two rules for one path.
+     *
+     * <p>A rule that let one operation through would be a rule the other never agreed to, so the
+     * narrower one wins: a role over merely authenticated, and either over public.
+     */
     private static ApplicationOperation.Access stricter(
             ApplicationOperation.Access left, ApplicationOperation.Access right) {
-        return left == ApplicationOperation.Access.AUTHENTICATED
-                        || right == ApplicationOperation.Access.AUTHENTICATED
-                ? ApplicationOperation.Access.AUTHENTICATED
-                : ApplicationOperation.Access.PUBLIC;
+        if (left.equals(right)) {
+            return left;
+        }
+        if (left.kind() == ApplicationOperation.Access.Kind.ROLE) {
+            return left;
+        }
+        if (right.kind() == ApplicationOperation.Access.Kind.ROLE) {
+            return right;
+        }
+        return left.requiresIdentity() ? left : right;
     }
 }

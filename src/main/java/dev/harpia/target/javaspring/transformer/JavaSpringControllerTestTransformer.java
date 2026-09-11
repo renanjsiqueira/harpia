@@ -201,7 +201,7 @@ public final class JavaSpringControllerTestTransformer {
 
     private static boolean authenticated(ApplicationOperation operation) {
         return operation.endpoint()
-                .map(endpoint -> endpoint.access() == ApplicationOperation.Access.AUTHENTICATED)
+                .map(endpoint -> endpoint.access().requiresIdentity())
                 .orElse(false);
     }
 
