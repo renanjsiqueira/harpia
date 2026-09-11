@@ -472,6 +472,15 @@ object with the directory and the `created`, `updated`, `unchanged`, `stale`, `d
 and answers an unknown name with `unknownTarget` plus the catalogue. A run that never compiled
 reports in the same shape, without the command's own extra field.
 
+A successful `build` also writes `.harpia/handoff.json` next to the project. A build leaves a
+directory behind, and whoever picks it up next asks the same questions every time: which target is
+this, what does it depend on, which files are mine to edit, and what did Harpia deliberately leave
+unimplemented. It names the target and its status, the capabilities and their providers, where the
+ownership manifest is — it points at `.harpia-manifest` rather than keeping a second copy of the
+file list that could disagree with the first — and every `custom` Logic whose contract is generated
+but whose implementation is still yours. It carries no timestamp: two identical builds leave
+identical bytes.
+
 `capabilities` answers the other half of `targets`: what these specifications actually asked for.
 Each entry names the capability, who supplies it — `<target>` when the target implements it itself
 rather than choosing a provider — and every declaration that required it, with its location.

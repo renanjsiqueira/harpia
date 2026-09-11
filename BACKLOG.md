@@ -812,7 +812,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
   - Evidence: [`CliJsonReportTest`](src/test/java/dev/harpia/cli/CliJsonReportTest.java), [`JsonReport`](src/main/java/dev/harpia/cli/JsonReport.java), [`Json`](src/main/java/dev/harpia/cli/Json.java), [`CapabilitiesCommand`](src/main/java/dev/harpia/cli/CapabilitiesCommand.java).
   - Depends on: `HARNESS-001`, `CORE-017`, `TARGET-014`.
 
-- [ ] `HARNESS-003` **Handoff manifest `.harpia/handoff.json`** — `TODO`; deve declarar target, ownership, capabilities geradas e contratos custom ainda sem implementação · `P0` · `M` · Area: `Ownership`
+- [x] `HARNESS-003` **Handoff manifest `.harpia/handoff.json`** — `DONE`; um build bem-sucedido escreve o manifesto ao lado do projeto, declarando target e status, capabilities com seus providers (`<target>` quando o próprio target implementa), onde está o manifesto de ownership — aponta para `.harpia-manifest` em vez de guardar uma segunda cópia da lista que poderia discordar da primeira — e cada Logic `custom` cuja interface foi gerada e cuja implementação continua sendo do usuário. Sem timestamp: dois builds idênticos deixam bytes idênticos. `CompileResult` ganhou `targetId()`, que faltava para responder "qual target rodou" sem reler a configuração · `P0` · `M` · Area: `Ownership`
+  - Evidence: [`HandoffManifestTest`](src/test/java/dev/harpia/cli/HandoffManifestTest.java), [`HandoffManifest`](src/main/java/dev/harpia/cli/HandoffManifest.java), [`BuildCommand`](src/main/java/dev/harpia/cli/BuildCommand.java).
   - Depends on: `HARNESS-001`, `CORE-027`, `CUSTOM-002`.
 
 - [ ] `HARNESS-004` **Resultado de verificação e instruções de handoff** — `TODO`; resposta estruturada deve informar os gates `validate`, `build`, `test` e `package` e quando continuar no código target · `P0` · `M` · Area: `CLI/DX`

@@ -187,6 +187,7 @@ public final class HarpiaCompiler {
         return new CompileResult(
                 Optional.of(generated),
                 Optional.of(config.paths().output()),
+                Optional.of(config.target().id()),
                 stages,
                 diagnostics.diagnostics());
     }

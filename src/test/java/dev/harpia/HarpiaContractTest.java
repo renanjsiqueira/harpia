@@ -25,8 +25,9 @@ import org.junit.jupiter.api.Test;
  * whoever was calling it — so the surface is a golden file, and changing it has to be a decision.
  *
  * <p>When this test fails: if the change was accidental, revert it. If it was intended, regenerate
- * the golden and raise {@link HarpiaContract#VERSION}, because a consumer pinned to the old number
- * is now looking at something else.
+ * the golden — and raise {@link HarpiaContract#VERSION} only when something a consumer relied on
+ * stopped being true: a member removed, renamed, or given a different signature. A new member is
+ * additive and breaks nobody, which is the same reason the code ledger below only ever grows.
  */
 class HarpiaContractTest {
 
@@ -36,8 +37,8 @@ class HarpiaContractTest {
     @Test
     void thePromisedSurfaceIsTheOneThatWasPromised() {
         assertThat(surface())
-                .as("regenerate %s and raise HarpiaContract.VERSION only if this change is meant "
-                        + "to reach consumers", GOLDEN)
+                .as("regenerate %s; raise HarpiaContract.VERSION only if something a consumer "
+                        + "relied on stopped being true", GOLDEN)
                 .isEqualTo(golden());
     }
 

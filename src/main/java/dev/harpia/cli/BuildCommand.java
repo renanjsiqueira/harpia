@@ -59,6 +59,22 @@ public final class BuildCommand implements Callable<Integer> {
         if (written.isEmpty()) {
             return report(ExitCode.USAGE_OR_IO_ERROR, diagnostics);
         }
+        // The directory is only half of what a build leaves behind; the other half is what the
+        // next person has to know before touching it.
+        try {
+            HandoffManifest.write(
+                    directory,
+                    result.outputDirectory().orElseThrow(),
+                    result.stages().application().orElseThrow(),
+                    dev.harpia.target.TargetId.of(result.targetId().orElseThrow()),
+                    written.orElseThrow());
+        } catch (java.io.IOException exception) {
+            spec.commandLine().getErr().println(
+                    "harpia: could not write " + HandoffManifest.PATH + ": "
+                            + exception.getMessage());
+            spec.commandLine().getErr().flush();
+            return ExitCode.USAGE_OR_IO_ERROR;
+        }
         if (json) {
             spec.commandLine().getOut().println(JsonReport.of(
                     "build",
