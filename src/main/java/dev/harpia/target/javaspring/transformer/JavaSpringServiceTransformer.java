@@ -243,6 +243,33 @@ public final class JavaSpringServiceTransformer {
                             + "\");");
                     statements.add("}");
                 }
+                case CALL_LOGIC -> {
+                    ApplicationOperation.FlowInstruction.Invocation invocation =
+                            instruction.invocation().orElseThrow();
+                    List<String> arguments = new ArrayList<>();
+                    for (ApplicationOperation.FlowInstruction.Invocation.Argument argument
+                            : invocation.arguments()) {
+                        JavaLogicWriter.Result written = JavaLogicWriter.expression(
+                                argument.value(),
+                                argument.parameterType(),
+                                JavaSpringLogicTransformer.METHOD_NAME,
+                                field -> REQUEST_PARAMETER + "." + field + "()");
+                        explicitImports.addAll(written.imports());
+                        arguments.add(written.body());
+                    }
+                    dev.harpia.target.javaspring.model.JavaTypeRef resultType =
+                            JavaTypeMapper.map(invocation.resultType());
+                    if (resultType.canonicalName().contains(".")
+                            && !resultType.canonicalName().startsWith("java.lang.")) {
+                        explicitImports.add(resultType.canonicalName());
+                    }
+                    explicitImports.add(names.logicPackage() + "." + invocation.target());
+                    statements.add(resultType.simpleName() + " "
+                            + instruction.variable().orElseThrow() + " = "
+                            + invocation.target() + "."
+                            + JavaSpringLogicTransformer.METHOD_NAME + "("
+                            + String.join(", ", arguments) + ");");
+                }
                 case CREATE_FROM -> {
                     String variable = instruction.variable().orElseThrow();
                     statements.add(entityName + " " + variable + " = new " + entityName + "();");
@@ -501,6 +528,7 @@ public final class JavaSpringServiceTransformer {
             String serviceName,
             String dtoPackage,
             String errorPackage,
+            String logicPackage,
             JavaTypeRef entityType,
             JavaTypeRef responseType,
             JavaTypeRef repositoryType) {
@@ -513,6 +541,7 @@ public final class JavaSpringServiceTransformer {
                     JavaLayout.serviceTypeName(entity.typeName()),
                     layout.packageName(JavaLayout.DTO),
                     layout.packageName(JavaLayout.ERROR),
+                    layout.packageName(JavaLayout.LOGIC),
                     JavaTypeRef.of(
                             layout.packageName(JavaLayout.DOMAIN) + "." + entity.typeName()),
                     JavaTypeRef.of(

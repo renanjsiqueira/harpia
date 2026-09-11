@@ -368,6 +368,28 @@ public final class ApplicationModelBuilder {
                             value.error(), value.text(), value.condition())),
                     value.where());
         }
+        if (source instanceof FlowStep.Call value) {
+            return new FlowInstruction(
+                    FlowCommand.CALL_LOGIC,
+                    Optional.of(value.variable()),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    false,
+                    Optional.empty(),
+                    Optional.of(new FlowInstruction.Invocation(
+                            value.logic(),
+                            value.arguments().stream()
+                                    .map(argument -> new FlowInstruction.Invocation.Argument(
+                                            argument.name(),
+                                            argument.value(),
+                                            argument.parameterType()))
+                                    .toList(),
+                            value.resultType())),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    value.where());
+        }
         if (source instanceof FlowStep.CreateFrom value) {
             return new FlowInstruction(
                     FlowCommand.CREATE_FROM,
@@ -414,6 +436,7 @@ public final class ApplicationModelBuilder {
                     false,
                     Optional.of(new FlowInstruction.TypedValue(
                             "if", value.text(), value.condition())),
+                    Optional.empty(),
                     value.whenTrue().stream()
                             .map(ApplicationModelBuilder::instruction)
                             .toList(),
@@ -492,9 +515,11 @@ public final class ApplicationModelBuilder {
         flow.variables().forEach((name, type) -> result.put(
                 name,
                 new VariableType(
-                        type.kind() == FlowModel.Kind.ENTITY
-                                ? VariableKind.ENTITY
-                                : VariableKind.LIST,
+                        switch (type.kind()) {
+                            case ENTITY -> VariableKind.ENTITY;
+                            case LIST -> VariableKind.LIST;
+                            case SCALAR -> VariableKind.SCALAR;
+                        },
                         type.entity())));
         return result;
     }

@@ -1,6 +1,8 @@
 package dev.harpia.application;
 
 import dev.harpia.diag.SourceRef;
+import dev.harpia.logic.LogicType;
+import dev.harpia.logic.TypedExpression;
 import dev.harpia.model.OperationNature;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -201,6 +203,7 @@ public record ApplicationOperation(
             List<SortOrder> sort,
             boolean paged,
             Optional<TypedValue> value,
+            Optional<Invocation> invocation,
             List<FlowInstruction> whenTrue,
             List<FlowInstruction> whenFalse,
             SourceRef where) {
@@ -220,11 +223,34 @@ public record ApplicationOperation(
          * the question is: which thing, written how, meaning what.
          */
         public record TypedValue(
-                String name, String text, dev.harpia.logic.TypedExpression expression) {
+                String name, String text, TypedExpression expression) {
             public TypedValue {
                 Objects.requireNonNull(name, "name");
                 Objects.requireNonNull(text, "text");
                 Objects.requireNonNull(expression, "expression");
+            }
+        }
+
+        /** A pure Logic invocation whose arguments already follow the declared signature. */
+        public record Invocation(
+                String target,
+                List<Argument> arguments,
+                LogicType resultType) {
+            public Invocation {
+                Objects.requireNonNull(target, "target");
+                arguments = List.copyOf(arguments);
+                Objects.requireNonNull(resultType, "resultType");
+            }
+
+            public record Argument(
+                    String name,
+                    TypedExpression value,
+                    LogicType parameterType) {
+                public Argument {
+                    Objects.requireNonNull(name, "name");
+                    Objects.requireNonNull(value, "value");
+                    Objects.requireNonNull(parameterType, "parameterType");
+                }
             }
         }
 
@@ -238,8 +264,8 @@ public record ApplicationOperation(
                 boolean paged,
                 Optional<TypedValue> value,
                 SourceRef where) {
-            this(command, variable, entity, fields, sort, paged, value, List.of(), List.of(),
-                    where);
+            this(command, variable, entity, fields, sort, paged, value, Optional.empty(),
+                    List.of(), List.of(), where);
         }
 
         /** An instruction that carries neither a typed expression nor conditional branches. */
@@ -249,7 +275,7 @@ public record ApplicationOperation(
                 Optional<String> entity,
                 SourceRef where) {
             this(command, variable, entity, List.of(), List.of(), false, Optional.empty(),
-                    List.of(), List.of(), where);
+                    Optional.empty(), List.of(), List.of(), where);
         }
 
         public FlowInstruction {
@@ -259,6 +285,7 @@ public record ApplicationOperation(
             fields = List.copyOf(fields);
             sort = List.copyOf(sort);
             Objects.requireNonNull(value, "value");
+            Objects.requireNonNull(invocation, "invocation");
             whenTrue = List.copyOf(whenTrue);
             whenFalse = List.copyOf(whenFalse);
             Objects.requireNonNull(where, "where");
@@ -270,6 +297,13 @@ public record ApplicationOperation(
                 // The assigned field is the value's own name, so it is not repeated in `fields`.
                 case SET_FIELD, ADD_TO, REMOVE_FROM ->
                         variable.isPresent() && fields.isEmpty() && value.isPresent();
+                case CALL_LOGIC -> variable.isPresent()
+                        && entity.isEmpty()
+                        && fields.isEmpty()
+                        && sort.isEmpty()
+                        && !paged
+                        && value.isEmpty()
+                        && invocation.isPresent();
                 case IF -> variable.isEmpty()
                         && entity.isEmpty()
                         && fields.isEmpty()
@@ -281,6 +315,7 @@ public record ApplicationOperation(
                 case UPDATE_FROM, SAVE, DELETE -> variable.isPresent() && entity.isEmpty();
                 case RETURN -> entity.isEmpty();
             };
+            valid &= command == FlowCommand.CALL_LOGIC || invocation.isEmpty();
             valid &= command == FlowCommand.IF || whenTrue.isEmpty() && whenFalse.isEmpty();
             if (!valid) {
                 throw new IllegalArgumentException("invalid operands for flow command " + command);
@@ -292,6 +327,7 @@ public record ApplicationOperation(
         VALIDATE_INPUT,
         FAIL,
         REQUIRE,
+        CALL_LOGIC,
         FIND_BY,
         LIST_BY,
         SET_FIELD,
@@ -316,7 +352,8 @@ public record ApplicationOperation(
 
     public enum VariableKind {
         ENTITY,
-        LIST
+        LIST,
+        SCALAR
     }
 
     public record Result(int status, ResultKind kind, Optional<String> responseTypeName) {

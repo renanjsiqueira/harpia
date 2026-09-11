@@ -102,6 +102,15 @@ final class BusinessIrRenderer {
             } else if (step instanceof FlowStep.Require require) {
                 out.append(' ').append(require.text())
                         .append(" otherwise ").append(require.error());
+            } else if (step instanceof FlowStep.Call call) {
+                out.append(' ').append(call.variable()).append(" = ")
+                        .append(call.logic()).append('(')
+                        .append(call.arguments().stream()
+                                .map(argument -> argument.name() + ": "
+                                        + argument.parameterType().display())
+                                .reduce((left, right) -> left + ", " + right)
+                                .orElse(""))
+                        .append(')');
             }
             out.append('\n');
             if (step instanceof FlowStep.Conditional conditional) {

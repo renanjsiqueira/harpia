@@ -1094,6 +1094,13 @@ public final class SemanticValidator {
                         ValueType.list(value.entity()),
                         value.where(),
                         diagnostics);
+            } else if (statement instanceof SpecAst.Call value && value.variable().isPresent()) {
+                define(
+                        variables,
+                        value.variable().orElseThrow(),
+                        ValueType.scalar(value.displayTarget()),
+                        value.where(),
+                        diagnostics);
             } else if (statement instanceof SpecAst.SetField value) {
                 requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
                 createsOrUpdates = true;
@@ -1149,6 +1156,9 @@ public final class SemanticValidator {
         if (statement instanceof SpecAst.ListBy value) {
             return Optional.of(value.variable());
         }
+        if (statement instanceof SpecAst.Call value) {
+            return value.variable();
+        }
         return Optional.empty();
     }
 
@@ -1194,7 +1204,9 @@ public final class SemanticValidator {
             if (type.kind() != ValueKind.ENTITY) {
                 diagnostics.error(
                         ErrorCodes.SEMANTIC_UNDEFINED_VAR,
-                        "flow variable '" + variable + "' is a list, not an entity value",
+                        "flow variable '" + variable + "' is "
+                                + type.kind().name().toLowerCase(java.util.Locale.ROOT)
+                                + ", not an entity value",
                         where);
             }
         });
@@ -1244,7 +1256,8 @@ public final class SemanticValidator {
 
     private enum ValueKind {
         ENTITY,
-        LIST
+        LIST,
+        SCALAR
     }
 
     private record ValueType(ValueKind kind, String entity) {
@@ -1254,6 +1267,10 @@ public final class SemanticValidator {
 
         private static ValueType list(String entity) {
             return new ValueType(ValueKind.LIST, entity);
+        }
+
+        private static ValueType scalar(String type) {
+            return new ValueType(ValueKind.SCALAR, type);
         }
     }
 }

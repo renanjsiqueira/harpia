@@ -38,6 +38,7 @@ public record FlowModel(List<FlowStep> steps, Map<String, ValueType> variables) 
 
     public enum Kind {
         ENTITY,
-        LIST
+        LIST,
+        SCALAR
     }
 }

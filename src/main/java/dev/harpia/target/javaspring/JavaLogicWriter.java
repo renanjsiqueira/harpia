@@ -55,12 +55,22 @@ public final class JavaLogicWriter {
             TypedExpression expression,
             String methodName,
             java.util.function.UnaryOperator<String> names) {
+        return expression(expression, LogicType.BOOLEAN, methodName, names);
+    }
+
+    /** Renders one typed expression for use by another generated Java construct. */
+    public static Result expression(
+            TypedExpression expression,
+            LogicType target,
+            String methodName,
+            java.util.function.UnaryOperator<String> names) {
         Objects.requireNonNull(expression, "expression");
+        Objects.requireNonNull(target, "target");
         Objects.requireNonNull(methodName, "methodName");
         Objects.requireNonNull(names, "names");
         JavaLogicWriter writer = new JavaLogicWriter(methodName);
         writer.names = names;
-        String code = writer.render(expression, LogicType.BOOLEAN).code();
+        String code = writer.render(expression, target).code();
         return new Result(code, List.copyOf(writer.imports));
     }
 

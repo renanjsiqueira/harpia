@@ -27,13 +27,15 @@ public final class Resolver {
             Map<String, List<RuleModel>> rules,
             Map<String, List<RuleModel>> invariants,
             Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards,
-            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments) {
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments,
+            Map<dev.harpia.diag.SourceRef, FlowCallModel> flowCalls) {
         Objects.requireNonNull(syntax, "syntax");
         Objects.requireNonNull(bindings, "bindings");
         Objects.requireNonNull(logics, "logics");
         Objects.requireNonNull(scenarios, "scenarios");
         Objects.requireNonNull(rules, "rules");
         Objects.requireNonNull(invariants, "invariants");
+        Objects.requireNonNull(flowCalls, "flowCalls");
         Map<String, List<String>> enums = new LinkedHashMap<>();
         Map<String, List<FieldModel>> values = new LinkedHashMap<>();
         for (ModuleAst module : syntax.modules()) {
@@ -131,7 +133,8 @@ public final class Resolver {
                                 declared,
                                 invariants,
                                 guards,
-                                assignments))
+                                assignments,
+                                flowCalls))
                         .toList(),
                 logics,
                 scenarios);
@@ -184,7 +187,8 @@ public final class Resolver {
             Declared declared,
             Map<String, List<RuleModel>> invariants,
             Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards,
-            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments) {
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments,
+            Map<dev.harpia.diag.SourceRef, FlowCallModel> flowCalls) {
         SpecAst.EntityDeclaration declaration = module.entity();
         List<FieldModel> fields = declaration.fields().stream()
                 .map(field -> field(field, declared))
@@ -198,7 +202,8 @@ public final class Resolver {
                         "Resolver requires semantic validation before resolving "
                                 + declaration.name()));
         List<UseCaseModel> useCases = operations.stream()
-                .map(useCase -> useCase(useCase, fields, bindings, rules, declared, guards, assignments))
+                .map(useCase -> useCase(
+                        useCase, fields, bindings, rules, declared, guards, assignments, flowCalls))
                 .toList();
         return new EntityModel(
                 declaration.name(),
@@ -273,7 +278,8 @@ public final class Resolver {
             Map<String, List<RuleModel>> rules,
             Declared declared,
             Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards,
-            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments) {
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments,
+            Map<dev.harpia.diag.SourceRef, FlowCallModel> flowCalls) {
         Map<String, FieldModel> fieldsByName = new LinkedHashMap<>();
         entityFields.forEach(field -> fieldsByName.putIfAbsent(field.name(), field));
 
@@ -295,7 +301,8 @@ public final class Resolver {
 
         LinkedHashMap<String, FlowModel.ValueType> variables = new LinkedHashMap<>();
         List<FlowStep> steps = useCase.flow().stream()
-                .map(statement -> flowStep(statement, variables, guards, assignments))
+                .map(statement -> flowStep(
+                        statement, variables, guards, assignments, flowCalls))
                 .toList();
 
         OutputModel.Shape shape = new OutputModel.Shape(
@@ -352,7 +359,8 @@ public final class Resolver {
             SpecAst.FlowStatement statement,
             LinkedHashMap<String, FlowModel.ValueType> variables,
             Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards,
-            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments) {
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments,
+            Map<dev.harpia.diag.SourceRef, FlowCallModel> flowCalls) {
         if (statement instanceof SpecAst.ValidateInput value) {
             return new FlowStep.ValidateInput(value.where());
         }
@@ -377,10 +385,12 @@ public final class Resolver {
                     value.text(),
                     guards.get(value.where()),
                     value.whenTrue().stream()
-                            .map(inner -> flowStep(inner, variables, guards, assignments))
+                            .map(inner -> flowStep(
+                                    inner, variables, guards, assignments, flowCalls))
                             .toList(),
                     value.whenFalse().stream()
-                            .map(inner -> flowStep(inner, variables, guards, assignments))
+                            .map(inner -> flowStep(
+                                    inner, variables, guards, assignments, flowCalls))
                             .toList(),
                     value.where());
         }
@@ -444,6 +454,17 @@ public final class Resolver {
                     guards.get(value.where()),
                     value.error(),
                     value.where());
+        }
+        if (statement instanceof SpecAst.Call value) {
+            FlowCallModel call = flowCalls.get(value.where());
+            variables.put(call.variable().orElseThrow(), new FlowModel.ValueType(
+                    FlowModel.Kind.SCALAR, call.resultType().display()));
+            return new FlowStep.Call(
+                    call.variable().orElseThrow(),
+                    call.logic(),
+                    call.arguments(),
+                    call.resultType(),
+                    call.where());
         }
         if (statement instanceof SpecAst.Return value) {
             return new FlowStep.Return(value.variable(), value.where());

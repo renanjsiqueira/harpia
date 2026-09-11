@@ -154,6 +154,12 @@ public final class ErrorCodes {
     public static final String SEMANTIC_INTEGRATION_TYPE = "HRP2133";
     /** An integration operation declares the same input name more than once. */
     public static final String SEMANTIC_DUPLICATE_INTEGRATION_INPUT = "HRP2134";
+    /** A Flow call target is unknown, ambiguous or not callable in the implemented slice. */
+    public static final String SEMANTIC_FLOW_CALL_TARGET = "HRP2142";
+    /** Named arguments do not match the signature of a Flow call target. */
+    public static final String SEMANTIC_FLOW_CALL_ARGUMENT = "HRP2143";
+    /** A Flow call discards a result or assigns an operation that returns nothing. */
+    public static final String SEMANTIC_FLOW_CALL_RESULT = "HRP2144";
     /** A path parameter names nothing the operation can fill it with. */
     public static final String SEMANTIC_PATH_PARAM_INPUT = "HRP2135";
     /** A partial update demands an input the client is free to omit. */

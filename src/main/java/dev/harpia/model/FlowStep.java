@@ -19,6 +19,7 @@ public sealed interface FlowStep
                 FlowStep.Delete,
                 FlowStep.Fail,
                 FlowStep.Require,
+                FlowStep.Call,
                 FlowStep.Return {
 
     SourceRef where();
@@ -53,6 +54,22 @@ public sealed interface FlowStep
             Objects.requireNonNull(text, "text");
             Objects.requireNonNull(condition, "condition");
             Objects.requireNonNull(error, "error");
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
+    /** A pure Logic invocation with arguments ordered by its resolved signature. */
+    record Call(
+            String variable,
+            String logic,
+            java.util.List<FlowCallModel.Argument> arguments,
+            dev.harpia.logic.LogicType resultType,
+            SourceRef where) implements FlowStep {
+        public Call {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(logic, "logic");
+            arguments = java.util.List.copyOf(arguments);
+            Objects.requireNonNull(resultType, "resultType");
             Objects.requireNonNull(where, "where");
         }
     }

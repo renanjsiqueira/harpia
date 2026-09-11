@@ -167,6 +167,17 @@ final class ApplicationIrRenderer {
                                     .reduce((left, right) -> left + " and " + right)
                                     .orElse(""))
                     .append(instruction.paged() ? " paged" : "")
+                    .append(instruction.invocation()
+                            .map(invocation -> " "
+                                    + instruction.variable().orElseThrow() + " = "
+                                    + invocation.target() + "("
+                                    + invocation.arguments().stream()
+                                            .map(argument -> argument.name() + ": "
+                                                    + argument.parameterType().display())
+                                            .reduce((left, right) -> left + ", " + right)
+                                            .orElse("")
+                                    + ") -> " + invocation.resultType().display())
+                            .orElse(""))
                     // The shape is shared; how it reads is not. Fail raises when a condition
                     // holds, require raises unless it holds, and set assigns a value.
                     .append(instruction.value()

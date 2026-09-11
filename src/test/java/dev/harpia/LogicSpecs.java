@@ -56,6 +56,7 @@ public final class LogicSpecs {
                         java.util.Map.of(),
                         java.util.Map.of(),
                         java.util.Map.of(),
+                        java.util.Map.of(),
                         java.util.Map.of()));
         return new Analysis(
                 parsed, analysis.logics(), analysis.scenarios(), diagnostics.diagnostics());

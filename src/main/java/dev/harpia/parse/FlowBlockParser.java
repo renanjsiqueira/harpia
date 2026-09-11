@@ -95,6 +95,14 @@ final class FlowBlockParser {
     }
 
     private Optional<FlowStatement> statement(IndentedLines.Line line, int level, int depth) {
+        if (!v1Flow && isCall(line)) {
+            diagnostics.error(
+                    ErrorCodes.SYNTAX_DECLARATION_TOO_NEW,
+                    "'call' in a flow needs harpia.languageVersion 1",
+                    line.contentWhere());
+            failed = true;
+            return Optional.empty();
+        }
         if (!v1Flow && line.text().startsWith("require ")) {
             diagnostics.error(
                     ErrorCodes.SYNTAX_DECLARATION_TOO_NEW,
@@ -104,6 +112,9 @@ final class FlowBlockParser {
             return Optional.empty();
         }
         if (!line.text().startsWith("if ")) {
+            if (isCall(line) && !line.text().endsWith(")")) {
+                return multilineCall(line, level);
+            }
             cursor++;
             Optional<FlowStatement> parsed =
                     FlowLineParser.parse(line.text(), line.contentWhere(), diagnostics);
@@ -165,6 +176,41 @@ final class FlowBlockParser {
         }
         return Optional.of(new SpecAst.Conditional(
                 text, condition.orElseThrow(), whenTrue, whenFalse, line.contentWhere()));
+    }
+
+    /** Collapses the readable multi-line call form into the same closed line grammar. */
+    private Optional<FlowStatement> multilineCall(IndentedLines.Line header, int level) {
+        StringBuilder source = new StringBuilder(header.text());
+        cursor++;
+        while (cursor < lines.size()) {
+            IndentedLines.Line line = lines.get(cursor);
+            if (line.level() == level && line.text().equals(")")) {
+                source.append(')');
+                cursor++;
+                Optional<FlowStatement> parsed = FlowLineParser.parse(
+                        source.toString(), header.contentWhere(), diagnostics);
+                if (parsed.isEmpty()) {
+                    failed = true;
+                }
+                return parsed;
+            }
+            if (line.level() != level + 1) {
+                error(
+                        "call arguments must be indented by four spaces and ')' must align with "
+                                + "the call",
+                        line.where());
+                return Optional.empty();
+            }
+            source.append(' ').append(line.text());
+            cursor++;
+        }
+        error("call is missing its closing ')'", header.where());
+        return Optional.empty();
+    }
+
+    private static boolean isCall(IndentedLines.Line line) {
+        return line.text().startsWith("call ") || line.text().matches(
+                "[a-z][A-Za-z0-9]* += +call +.*");
     }
 
     private static boolean isElse(IndentedLines.Line line) {

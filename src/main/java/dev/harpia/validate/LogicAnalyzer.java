@@ -11,6 +11,7 @@ import dev.harpia.logic.TypedExpression;
 import dev.harpia.logic.TypedStatement;
 import dev.harpia.logic.UnaryOperator;
 import dev.harpia.model.LogicModel;
+import dev.harpia.model.FlowCallModel;
 import dev.harpia.parse.SpecAst;
 import dev.harpia.model.Naming;
 import dev.harpia.model.RuleModel;
@@ -73,13 +74,158 @@ public final class LogicAnalyzer {
         }
 
         reportCycles(callGraph, symbols, diagnostics);
+        Map<SourceRef, FlowCallModel> flowCalls = flowCalls(project, symbols, diagnostics);
         return new Result(
                 List.copyOf(models),
                 ScenarioAnalyzer.analyze(project, symbols, diagnostics),
                 rules(project, symbols, diagnostics),
                 invariants(project, symbols, diagnostics),
                 guards(project, symbols, diagnostics),
-                assignments(project, symbols, diagnostics));
+                assignments(project, symbols, diagnostics),
+                flowCalls);
+    }
+
+    /** Resolves simple Flow calls to pure Logic signatures. Command and Integration follow next. */
+    private static Map<SourceRef, FlowCallModel> flowCalls(
+            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+        Map<SourceRef, FlowCallModel> resolved = new LinkedHashMap<>();
+        Set<String> customLogics = project.modules().stream()
+                .flatMap(module -> module.logics().stream())
+                .filter(declaration -> declaration.custom().isPresent())
+                .map(LogicAst.Declaration::name)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        for (ModuleAst module : project.modules()) {
+            for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
+                List<LogicModel.Parameter> scope = scopeOf(useCase.input());
+                for (SpecAst.FlowStatement statement : flattened(useCase.flow())) {
+                    if (!(statement instanceof SpecAst.Call call)) {
+                        continue;
+                    }
+                    if (call.operation().isPresent()) {
+                        String target = call.displayTarget();
+                        String reason = symbols.integration(call.target()).isPresent()
+                                ? "Integration calls are completed by INTEG-003"
+                                : "no Integration named '" + call.target() + "' is declared";
+                        diagnostics.error(
+                                ErrorCodes.SEMANTIC_FLOW_CALL_TARGET,
+                                "cannot call '" + target + "': " + reason,
+                                call.where());
+                        continue;
+                    }
+
+                    Optional<Symbol.Computation> computation = symbols.computation(call.target());
+                    Optional<Symbol> operation = symbols.lookup(
+                            dev.harpia.symbol.Namespace.OPERATIONS, call.target());
+                    if (computation.isPresent() && operation.isPresent()) {
+                        diagnostics.error(
+                                ErrorCodes.SEMANTIC_FLOW_CALL_TARGET,
+                                "call target '" + call.target()
+                                        + "' is ambiguous between Logic and Command/Query",
+                                call.where());
+                        continue;
+                    }
+                    if (computation.isEmpty()) {
+                        diagnostics.error(
+                                ErrorCodes.SEMANTIC_FLOW_CALL_TARGET,
+                                operation.isPresent()
+                                        ? "Command/Query calls are not yet implemented for '"
+                                                + call.target() + "'"
+                                        : "unknown Flow call target '" + call.target() + "'",
+                                call.where());
+                        continue;
+                    }
+                    if (call.variable().isEmpty()) {
+                        diagnostics.error(
+                                ErrorCodes.SEMANTIC_FLOW_CALL_RESULT,
+                                "Logic '" + call.target()
+                                        + "' returns a value; assign it as '<name> = call ...'",
+                                call.where());
+                        continue;
+                    }
+                    if (customLogics.contains(call.target())) {
+                        diagnostics.error(
+                                ErrorCodes.SEMANTIC_FLOW_CALL_TARGET,
+                                "custom Logic '" + call.target()
+                                        + "' cannot be called from Flow until its target adapter "
+                                        + "is available",
+                                call.where());
+                        continue;
+                    }
+                    resolveLogicCall(call, computation.orElseThrow(), scope, symbols, diagnostics)
+                            .ifPresent(model -> resolved.put(call.where(), model));
+                }
+            }
+        }
+        return Map.copyOf(resolved);
+    }
+
+    private static Optional<FlowCallModel> resolveLogicCall(
+            SpecAst.Call call,
+            Symbol.Computation computation,
+            List<LogicModel.Parameter> scope,
+            SymbolTable symbols,
+            DiagnosticCollector diagnostics) {
+        Map<String, LogicAst.NamedArgument> supplied = new LinkedHashMap<>();
+        boolean valid = true;
+        for (LogicAst.NamedArgument argument : call.arguments()) {
+            LogicAst.NamedArgument first = supplied.putIfAbsent(argument.name(), argument);
+            if (first != null) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_ARGUMENT,
+                        "call to Logic '" + call.target() + "' repeats argument '"
+                                + argument.name() + "'",
+                        argument.where(),
+                        "first supplied here",
+                        first.where());
+                valid = false;
+            } else if (computation.parameter(argument.name()).isEmpty()) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_ARGUMENT,
+                        "Logic '" + call.target() + "' has no parameter '"
+                                + argument.name() + "'",
+                        argument.where());
+                valid = false;
+            }
+        }
+
+        List<FlowCallModel.Argument> arguments = new ArrayList<>();
+        for (LogicModel.Parameter parameter : computation.parameters()) {
+            LogicAst.NamedArgument suppliedArgument = supplied.get(parameter.name());
+            if (suppliedArgument == null) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_ARGUMENT,
+                        "call to Logic '" + call.target() + "' is missing argument '"
+                                + parameter.name() + "'",
+                        call.where());
+                valid = false;
+                continue;
+            }
+            Optional<TypedExpression> value = analyzeExpression(
+                    "argument '" + parameter.name() + "' of Logic " + call.target(),
+                    scope,
+                    parameter.type(),
+                    suppliedArgument.value(),
+                    symbols,
+                    suppliedArgument.where(),
+                    diagnostics);
+            if (value.isEmpty()) {
+                valid = false;
+                continue;
+            }
+            arguments.add(new FlowCallModel.Argument(
+                    parameter.name(),
+                    value.orElseThrow(),
+                    parameter.type(),
+                    suppliedArgument.where()));
+        }
+        return valid
+                ? Optional.of(new FlowCallModel(
+                        call.variable(),
+                        call.target(),
+                        arguments,
+                        computation.returnType(),
+                        call.where()))
+                : Optional.empty();
     }
 
     /**
@@ -351,12 +497,14 @@ public final class LogicAnalyzer {
             Map<String, List<RuleModel>> rules,
             Map<String, List<RuleModel>> invariants,
             Map<SourceRef, TypedExpression> guards,
-            Map<SourceRef, TypedExpression> assignments) {
+            Map<SourceRef, TypedExpression> assignments,
+            Map<SourceRef, FlowCallModel> flowCalls) {
         public Result {
             rules = Map.copyOf(rules);
             invariants = Map.copyOf(invariants);
             guards = Map.copyOf(guards);
             assignments = Map.copyOf(assignments);
+            flowCalls = Map.copyOf(flowCalls);
             logics = List.copyOf(logics);
             scenarios = List.copyOf(scenarios);
         }

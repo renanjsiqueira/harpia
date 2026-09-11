@@ -394,7 +394,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `FLOW-013` **`fail` com erro tipado** — `DONE` na V1; `fail <erro> when <condição>` levanta um erro de domínio declarado em `### Errors`, com a condição tipada contra o input pelo mesmo analisador de Rules e Invariants. Um `fail` sem guarda não é comando de flow, e levantar erro não declarado é `HRP2127` · `P0` · `M` · Area: `API`
   - Evidence: [`FlowLineParser`](src/main/java/dev/harpia/parse/FlowLineParser.java), [`LogicAnalyzer`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`FailInstructionTest`](src/test/java/dev/harpia/validate/FailInstructionTest.java).
 
-- [ ] `FLOW-014` **`call` Logic/Command/Integration** — `TODO` · `P0` · `L` · Area: `API`
+- [ ] `FLOW-014` **`call` Logic/Command/Integration** — `PARTIAL`; a V1 aceita a forma compacta e multilinha de `resultado = call Logic(argumento = expressão)`, resolve argumentos nomeados pela assinatura global, valida nomes/completude/tipos, preserva o resultado escalar nos IRs e gera uma chamada Java `Logic.apply(...)`. Esta fatia cobre Logic pura gerada e input da operação; faltam consumir variáveis escalares anteriores, Command, Integration e o adapter de Logic custom · `P0` · `L` · Area: `API`
+  - Evidence: [`FlowBlockParser`](src/main/java/dev/harpia/parse/FlowBlockParser.java), [`LogicAnalyzer`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`FlowCallModel`](src/main/java/dev/harpia/model/FlowCallModel.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`FlowCallTest`](src/test/java/dev/harpia/validate/FlowCallTest.java).
   - Depends on: `CORE-009`, `CMD-001`, `INTEG-001`.
 
 - [ ] `FLOW-015` **`emit` Event** — `TODO` · `P0` · `M` · Area: `Messaging`
@@ -1895,11 +1896,11 @@ deliberados não têm meta de 100%.
 
 | Horizon | Total | Done | Partial | Todo | Other | Completion |
 |---|---:|---:|---:|---:|---:|---:|
-| Core V1 | 213 | 174 | 15 | 24 | 0 | 85,2% |
+| Core V1 | 213 | 174 | 16 | 23 | 0 | 85,4% |
 | Next / Upstream | 183 | 1 | 12 | 168 | 2 | 3,8% |
 | Labs / Research | 134 | 0 | 1 | 69 | 64 | N/A |
 | Custom / Non-goals | 20 | 0 | 0 | 0 | 20 | N/A |
-| **Canonical total** | **550** | **175** | **28** | **261** | **86** | — |
+| **Canonical total** | **550** | **175** | **29** | **260** | **86** | — |
 
 `Other` reúne `RESEARCH`, `NOT_SUPPORTED`, `CUSTOM` e `WONT_DO`. Ele não mascara trabalho do Core:
 a seleção Core contém apenas itens implementáveis `DONE`, `PARTIAL` ou `TODO`.
@@ -1917,14 +1918,14 @@ a seleção Core contém apenas itens implementáveis `DONE`, `PARTIAL` ou `TODO
 
 ## Audit Snapshot
 
-Baseline auditada no ciclo que fecha `INTEG-002`:
+Baseline auditada na primeira fatia de `FLOW-014`:
 
 | Métrica | Resultado |
 |---|---:|
-| Produção Java | 215 arquivos / 22.124 linhas |
-| Testes Java | 86 arquivos / 12.428 linhas |
-| Gate | `mvn -o clean test` — **BUILD SUCCESS** |
-| Testes executados | 443; 0 failures, 0 errors, 0 skipped |
+| Produção Java | 225 arquivos / 23.962 linhas |
+| Testes Java | 97 arquivos / 14.737 linhas |
+| Gate | `mvn -o test` — **BUILD SUCCESS** |
+| Testes executados | 511; 0 failures, 0 errors, 0 skipped |
 
 # Core V1 Completion Criteria
 

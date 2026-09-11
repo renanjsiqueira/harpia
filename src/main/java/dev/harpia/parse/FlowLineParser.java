@@ -3,6 +3,7 @@ package dev.harpia.parse;
 import dev.harpia.diag.DiagnosticCollector;
 import dev.harpia.diag.ErrorCodes;
 import dev.harpia.diag.SourceRef;
+import dev.harpia.parse.SpecAst.Call;
 import dev.harpia.parse.SpecAst.CreateFrom;
 import dev.harpia.parse.SpecAst.Delete;
 import dev.harpia.parse.SpecAst.Fail;
@@ -17,6 +18,7 @@ import dev.harpia.parse.SpecAst.Save;
 import dev.harpia.parse.SpecAst.SetField;
 import dev.harpia.parse.SpecAst.UpdateFrom;
 import dev.harpia.parse.SpecAst.ValidateInput;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -55,6 +57,11 @@ public final class FlowLineParser {
             "^fail +([a-z]+(?: [a-z]+)*?) +when +(\\S.*)$");
     private static final Pattern REQUIRE = Pattern.compile(
             "^require +(\\S.*?) +otherwise +([a-z]+(?: [a-z]+)*)$");
+    private static final Pattern CALL = Pattern.compile(
+            "^(?:" + VARIABLE + " +\\= +)?call +" + ENTITY
+                    + "(?:\\." + ENTITY + ")?\\((.*)\\)$");
+    private static final Pattern CALL_ARGUMENT = Pattern.compile(
+            "^([a-z][A-Za-z0-9]*) += +(\\S.*)$");
 
     private FlowLineParser() {
     }
@@ -93,7 +100,17 @@ public final class FlowLineParser {
         if (line.equals("validate input")) {
             return Optional.of(new ValidateInput(where));
         }
-        Matcher matcher = CREATE.matcher(line);
+        Matcher matcher = CALL.matcher(line);
+        if (matcher.matches()) {
+            // `matcher` is reassigned below, so the groups are read before the lambda captures.
+            Optional<String> target = Optional.ofNullable(matcher.group(1));
+            String name = matcher.group(2);
+            Optional<String> qualifier = Optional.ofNullable(matcher.group(3));
+            Optional<List<LogicAst.NamedArgument>> arguments = callArguments(
+                    matcher.group(4), where, diagnostics);
+            return arguments.map(values -> new Call(target, name, qualifier, values, where));
+        }
+        matcher = CREATE.matcher(line);
         if (matcher.matches()) {
             return Optional.of(new CreateFrom(matcher.group(1), matcher.group(2), where));
         }
@@ -185,8 +202,70 @@ public final class FlowLineParser {
                 ErrorCodes.SYNTAX_FLOW_COMMAND,
                 "unknown flow command '" + raw
                         + "'; expected validate, create, load, update, set, add, remove, list, "
-                        + "require, fail, save, delete, or return",
+                        + "call, require, fail, save, delete, or return",
                 where);
         return Optional.empty();
+    }
+
+    private static Optional<List<LogicAst.NamedArgument>> callArguments(
+            String source, SourceRef where, DiagnosticCollector diagnostics) {
+        if (source.isBlank()) {
+            return Optional.of(List.of());
+        }
+        List<LogicAst.NamedArgument> arguments = new ArrayList<>();
+        for (String raw : splitArguments(source)) {
+            Matcher matcher = CALL_ARGUMENT.matcher(raw.strip());
+            if (!matcher.matches()) {
+                diagnostics.error(
+                        ErrorCodes.SYNTAX_FLOW_COMMAND,
+                        "call arguments must be named as '<name> = <expression>'",
+                        where);
+                return Optional.empty();
+            }
+            String expression = matcher.group(2).strip();
+            Optional<LogicAst.Expression> value = LogicLexer.tokenize(
+                            expression, where, diagnostics)
+                    .flatMap(tokens -> LogicExpressionParser.parse(tokens, diagnostics));
+            if (value.isEmpty()) {
+                return Optional.empty();
+            }
+            arguments.add(new LogicAst.NamedArgument(
+                    matcher.group(1), value.orElseThrow(), where));
+        }
+        return Optional.of(List.copyOf(arguments));
+    }
+
+    /** Splits only commas at the call's own depth, preserving nested Logic calls and strings. */
+    private static List<String> splitArguments(String source) {
+        List<String> arguments = new ArrayList<>();
+        int start = 0;
+        int depth = 0;
+        boolean quoted = false;
+        boolean escaped = false;
+        for (int index = 0; index < source.length(); index++) {
+            char character = source.charAt(index);
+            if (quoted) {
+                if (escaped) {
+                    escaped = false;
+                } else if (character == '\\') {
+                    escaped = true;
+                } else if (character == '"') {
+                    quoted = false;
+                }
+                continue;
+            }
+            if (character == '"') {
+                quoted = true;
+            } else if (character == '(') {
+                depth++;
+            } else if (character == ')') {
+                depth--;
+            } else if (character == ',' && depth == 0) {
+                arguments.add(source.substring(start, index));
+                start = index + 1;
+            }
+        }
+        arguments.add(source.substring(start));
+        return List.copyOf(arguments);
     }
 }
