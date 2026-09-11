@@ -422,7 +422,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `CMD-006` **Flow de mutação CRUD V0** — `DONE` · `P0` · `L` · Area: `API`
   - Evidence: [`FlowStep`](src/main/java/dev/harpia/model/FlowStep.java), [`GeneratedMavenProjectTest`](src/test/java/dev/harpia/target/javaspring/GeneratedMavenProjectTest.java).
 
-- [ ] `CMD-007` **Access de Command** — `PARTIAL`; somente `public` · `P0` · `L` · Area: `Security`
+- [x] `CMD-007` **Access de Command** — `DONE`; um `## Command` declarado pede identidade como qualquer outra operação — `public`, `authenticated`, `role` ou `scope` — porque a gramática de acesso pertence ao endpoint e não ao heading que declarou a operação · `P0` · `L` · Area: `Security`
+  - Evidence: [`DeclaredOperationAccessTest`](src/test/java/dev/harpia/target/javaspring/DeclaredOperationAccessTest.java).
   - Evidence: [`AccessParser`](src/main/java/dev/harpia/parse/AccessParser.java), [`UnsupportedFeatureDetector`](src/main/java/dev/harpia/parse/UnsupportedFeatureDetector.java).
 
 - [ ] `CMD-008` **Política de transação de Command** — `PARTIAL`; inferência por espécie CRUD, sem configuração declarativa · `P0` · `M` · Area: `Persistence`
@@ -447,7 +448,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `QUERY-005` **Pagination offset/page** — `DONE` na V1; `paged` sobre `list` com ou sem filtro vira `PageRequest.of(page, size, <ordem>)`, e o repositório recebe `Pageable` em vez de `Sort`. `page` e `size` são inputs declarados (`HRP2129`) — a única exceção à regra de que todo input nomeia um campo da entidade, porque descrevem a requisição e não a entidade. O envelope com total/páginas é `TYPE-025`/`API-010` · `P0` · `M` · Area: `API`
   - Evidence: [`FlowLineParser`](src/main/java/dev/harpia/parse/FlowLineParser.java), [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`PaginationTest`](src/test/java/dev/harpia/validate/PaginationTest.java).
 
-- [ ] `QUERY-009` **Access de Query** — `PARTIAL`; somente `public` · `P0` · `L` · Area: `Security`
+- [x] `QUERY-009` **Access de Query** — `DONE`; mesma gramática de acesso do Command, pela mesma razão: ela pertence ao endpoint · `P0` · `L` · Area: `Security`
+  - Evidence: [`DeclaredOperationAccessTest`](src/test/java/dev/harpia/target/javaspring/DeclaredOperationAccessTest.java).
   - Evidence: [`AccessRule`](src/main/java/dev/harpia/model/AccessRule.java), [`AccessParser`](src/main/java/dev/harpia/parse/AccessParser.java).
 
 
@@ -759,7 +761,8 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `SPRING-005` **Spring Validation V0** — `DONE` para required/Email e `validate input` · `P0` · `M` · Area: `Java/Spring Target`
   - Evidence: [`SpringValidationMapper`](src/main/java/dev/harpia/target/javaspring/mapping/SpringValidationMapper.java), [`ApplicationLayerTransformerTest`](src/test/java/dev/harpia/target/javaspring/transformer/ApplicationLayerTransformerTest.java).
 
-- [ ] `SPRING-006` **Spring Security/JWT** — `TODO` · `P0` · `XL` · Area: `Java/Spring Target`
+- [x] `SPRING-006` **Spring Security/JWT** — `DONE`; é o lado Java/Spring de `SEC-002`, `SEC-003`, `SEC-005` e `SEC-007`: dependência condicionada à capability, `SecurityFilterChain` gerada a partir do access declarado, `httpBasic` ou `oauth2ResourceServer` conforme o provider, recusa no `ApiError` da própria API e testes gerados que a observam · `P0` · `XL` · Area: `Java/Spring Target`
+  - Evidence: [`JavaSpringSecurityTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringSecurityTransformer.java), [`SecurityProviderTest`](src/test/java/dev/harpia/target/javaspring/SecurityProviderTest.java), [`AuthenticatedAccessTest`](src/test/java/dev/harpia/target/javaspring/AuthenticatedAccessTest.java).
   - Depends on: `SEC-005`, `SEC-007`.
 
 - [ ] `SPRING-008` **Local Spring Events** — `TODO` · `P0` · `L` · Area: `Java/Spring Target`
