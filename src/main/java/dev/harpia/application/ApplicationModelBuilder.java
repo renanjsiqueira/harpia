@@ -82,6 +82,20 @@ public final class ApplicationModelBuilder {
                                                                         failure.name(),
                                                                         failure.where()))
                                                         .toList(),
+                                                operation.http().map(http ->
+                                                        new ApplicationIntegration.Http(
+                                                                ApplicationOperation.HttpMethod
+                                                                        .valueOf(http.method()
+                                                                                .name()),
+                                                                http.baseUrl(),
+                                                                http.path(),
+                                                                http.request().stream()
+                                                                        .map(ApplicationModelBuilder
+                                                                                ::requestMapping)
+                                                                        .toList(),
+                                                                responseMapping(http.response()),
+                                                                http.where(),
+                                                                http.endpointWhere())),
                                                 operation.where()))
                                         .toList(),
                                 source.where()))

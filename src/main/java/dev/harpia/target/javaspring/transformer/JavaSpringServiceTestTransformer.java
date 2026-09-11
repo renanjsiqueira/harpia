@@ -78,6 +78,13 @@ public final class JavaSpringServiceTestTransformer {
         }
         methods.add(sampleEntity(names, entity));
 
+        List<JavaFieldModel> fields = new ArrayList<>();
+        fields.add(identifier(names, entity));
+        fields.add(mock(names));
+        usedIntegrations(entity).forEach(integration -> fields.add(integrationMock(
+                names, integration, entity)));
+        fields.add(underTest(names));
+
         JavaTypeModel type = new JavaTypeModel(
                 JavaTypeModel.Kind.CLASS,
                 names.servicePackage(),
@@ -91,7 +98,7 @@ public final class JavaSpringServiceTestTransformer {
                         new JavaAnnotationModel.Attribute("value", "MockitoExtension.class"))),
                 imports.stream().map(JavaImportModel::new).toList(),
                 List.of(),
-                List.of(identifier(names, entity), mock(names), underTest(names)),
+                fields,
                 List.of(),
                 methods,
                 Optional.of(entity.where()));
@@ -133,6 +140,30 @@ public final class JavaSpringServiceTestTransformer {
                 List.of(JavaAnnotationModel.marker("org.mockito.InjectMocks")),
                 Optional.empty(),
                 Optional.empty());
+    }
+
+    private static JavaFieldModel integrationMock(
+            Names names, String integration, ApplicationEntity entity) {
+        return new JavaFieldModel(
+                JavaSpringIntegrationClientTransformer.clientFieldName(integration),
+                JavaTypeRef.of(names.integrationPackage() + "."
+                        + JavaSpringIntegrationClientTransformer.clientTypeName(integration)),
+                JavaVisibility.PRIVATE,
+                Set.of(),
+                List.of(JavaAnnotationModel.marker("org.mockito.Mock")),
+                Optional.empty(),
+                Optional.of(entity.where()));
+    }
+
+    private static List<String> usedIntegrations(ApplicationEntity entity) {
+        return entity.operations().stream()
+                .flatMap(operation -> operation.allInstructions().stream())
+                .filter(instruction -> instruction.command() == FlowCommand.CALL_INTEGRATION)
+                .map(instruction -> instruction.integrationInvocation()
+                        .orElseThrow().integration())
+                .distinct()
+                .sorted()
+                .toList();
     }
 
     /**
@@ -466,6 +497,7 @@ public final class JavaSpringServiceTestTransformer {
             String responseName,
             String dtoPackage,
             String errorPackage,
+            String integrationPackage,
             JavaTypeRef entityType,
             JavaTypeRef serviceType,
             JavaTypeRef repositoryType) {
@@ -480,6 +512,7 @@ public final class JavaSpringServiceTestTransformer {
                     entity.responseTypeName(),
                     layout.packageName(JavaLayout.DTO),
                     layout.packageName(JavaLayout.ERROR),
+                    layout.packageName(JavaLayout.INTEGRATION),
                     JavaTypeRef.of(
                             layout.packageName(JavaLayout.DOMAIN) + "." + entity.typeName()),
                     JavaTypeRef.of(layout.packageName(JavaLayout.SERVICE) + "." + serviceName),

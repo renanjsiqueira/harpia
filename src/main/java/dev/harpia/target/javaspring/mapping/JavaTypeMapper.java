@@ -91,4 +91,25 @@ public final class JavaTypeMapper {
         }
         throw new IllegalArgumentException("no Java type for " + type.display());
     }
+
+    /** Maps the full type algebra used by Integration boundaries. */
+    public static JavaTypeRef map(LogicType type, String domainPackage) {
+        Objects.requireNonNull(type, "type");
+        Objects.requireNonNull(domainPackage, "domainPackage");
+        if (type instanceof LogicType.Scalar scalar) {
+            return map(ApplicationScalarType.valueOf(scalar.kind().name()));
+        }
+        if (type instanceof LogicType.Nominal nominal) {
+            return JavaTypeRef.of(domainPackage + "." + nominal.name());
+        }
+        if (type instanceof LogicType.Container container) {
+            return JavaTypeRef.parameterized(
+                    "java.util.List", map(container.element(), domainPackage));
+        }
+        if (type instanceof LogicType.Optionality optional) {
+            return JavaTypeRef.parameterized(
+                    "java.util.Optional", map(optional.element(), domainPackage));
+        }
+        throw new IllegalArgumentException("no Java type for " + type.display());
+    }
 }

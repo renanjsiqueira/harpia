@@ -86,6 +86,10 @@ final class AstRenderer {
                     .append(binding.endpoint().method()).append(' ')
                     .append(binding.endpoint().path()).append(" access=")
                     .append(binding.access()).append('\n'));
+            file.integrationHttpBindings().forEach(binding -> out.append("  IntegrationHttp ")
+                    .append(binding.target()).append(' ')
+                    .append(binding.endpoint().method()).append(' ')
+                    .append(binding.endpoint().path()).append('\n'));
         });
         return out.toString();
     }

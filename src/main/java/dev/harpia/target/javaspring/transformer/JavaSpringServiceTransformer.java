@@ -54,6 +54,36 @@ public final class JavaSpringServiceTransformer {
         }
         methods.add(toResponse(names, entity));
 
+        List<String> usedIntegrations = usedIntegrations(entity);
+        List<JavaFieldModel> fields = new ArrayList<>();
+        fields.add(new JavaFieldModel(
+                REPOSITORY_FIELD,
+                names.repositoryType(),
+                JavaVisibility.PRIVATE,
+                Set.of(JavaModifier.FINAL),
+                List.of(),
+                Optional.empty(),
+                Optional.of(entity.where())));
+        List<JavaParameterModel> constructorParameters = new ArrayList<>();
+        constructorParameters.add(new JavaParameterModel(REPOSITORY_FIELD, names.repositoryType()));
+        List<String> assignments = new ArrayList<>();
+        assignments.add("this." + REPOSITORY_FIELD + " = " + REPOSITORY_FIELD + ";");
+        for (String integration : usedIntegrations) {
+            String fieldName = JavaSpringIntegrationClientTransformer.clientFieldName(integration);
+            JavaTypeRef clientType = JavaTypeRef.of(names.integrationPackage() + "."
+                    + JavaSpringIntegrationClientTransformer.clientTypeName(integration));
+            fields.add(new JavaFieldModel(
+                    fieldName,
+                    clientType,
+                    JavaVisibility.PRIVATE,
+                    Set.of(JavaModifier.FINAL),
+                    List.of(),
+                    Optional.empty(),
+                    Optional.of(entity.where())));
+            constructorParameters.add(new JavaParameterModel(fieldName, clientType));
+            assignments.add("this." + fieldName + " = " + fieldName + ";");
+        }
+
         JavaTypeModel type = new JavaTypeModel(
                 JavaTypeModel.Kind.CLASS,
                 names.servicePackage(),
@@ -72,19 +102,12 @@ public final class JavaSpringServiceTransformer {
                                 "org.springframework.stereotype.Service")),
                 explicitImports.stream().map(JavaImportModel::new).toList(),
                 List.of(),
-                List.of(new JavaFieldModel(
-                        REPOSITORY_FIELD,
-                        names.repositoryType(),
-                        JavaVisibility.PRIVATE,
-                        Set.of(JavaModifier.FINAL),
-                        List.of(),
-                        Optional.empty(),
-                        Optional.of(entity.where()))),
+                fields,
                 List.of(new JavaConstructorModel(
                         JavaVisibility.PUBLIC,
                         List.of(),
-                        List.of(new JavaParameterModel(REPOSITORY_FIELD, names.repositoryType())),
-                        List.of("this." + REPOSITORY_FIELD + " = " + REPOSITORY_FIELD + ";"),
+                        constructorParameters,
+                        assignments,
                         Optional.of(entity.where()))),
                 methods,
                 Optional.of(entity.where()));
@@ -270,8 +293,40 @@ public final class JavaSpringServiceTransformer {
                             + JavaSpringLogicTransformer.METHOD_NAME + "("
                             + String.join(", ", arguments) + ");");
                 }
-                case CALL_INTEGRATION -> throw new IllegalStateException(
-                        "Integration calls require target validation and INTEG-004");
+                case CALL_INTEGRATION -> {
+                    ApplicationOperation.FlowInstruction.IntegrationInvocation invocation =
+                            instruction.integrationInvocation().orElseThrow();
+                    List<String> arguments = new ArrayList<>();
+                    for (ApplicationOperation.FlowInstruction.IntegrationInvocation.Argument argument
+                            : invocation.arguments()) {
+                        JavaLogicWriter.Result written = JavaLogicWriter.expression(
+                                argument.value(),
+                                argument.parameterType(),
+                                JavaSpringLogicTransformer.METHOD_NAME,
+                                field -> REQUEST_PARAMETER + "." + field + "()");
+                        explicitImports.addAll(written.imports());
+                        arguments.add(written.body());
+                    }
+                    String call = JavaSpringIntegrationClientTransformer.clientFieldName(
+                                    invocation.integration())
+                            + "."
+                            + JavaSpringIntegrationClientTransformer.operationMethodName(
+                                    invocation.operation())
+                            + "(" + String.join(", ", arguments) + ");";
+                    if (invocation.resultType().isEmpty()) {
+                        statements.add(call);
+                    } else {
+                        JavaTypeRef resultType = JavaTypeMapper.map(
+                                invocation.resultType().orElseThrow(), names.domainPackage());
+                        resultType.flattened()
+                                .map(JavaTypeRef::canonicalName)
+                                .filter(name -> name.contains(".")
+                                        && !name.startsWith("java.lang."))
+                                .forEach(explicitImports::add);
+                        statements.add(resultType.sourceName() + " "
+                                + instruction.variable().orElseThrow() + " = " + call);
+                    }
+                }
                 case CREATE_FROM -> {
                     String variable = instruction.variable().orElseThrow();
                     statements.add(entityName + " " + variable + " = new " + entityName + "();");
@@ -392,6 +447,18 @@ public final class JavaSpringServiceTransformer {
 
     private static boolean reportsPage(ApplicationOperation operation) {
         return operation.result().kind() == ApplicationOperation.ResultKind.PAGE;
+    }
+
+    private static List<String> usedIntegrations(ApplicationEntity entity) {
+        return entity.operations().stream()
+                .flatMap(operation -> operation.allInstructions().stream())
+                .filter(instruction -> instruction.command()
+                        == ApplicationOperation.FlowCommand.CALL_INTEGRATION)
+                .map(instruction -> instruction.integrationInvocation()
+                        .orElseThrow().integration())
+                .distinct()
+                .sorted()
+                .toList();
     }
 
     private static String listingType(ApplicationOperation operation, String entityName) {
@@ -531,6 +598,8 @@ public final class JavaSpringServiceTransformer {
             String dtoPackage,
             String errorPackage,
             String logicPackage,
+            String integrationPackage,
+            String domainPackage,
             JavaTypeRef entityType,
             JavaTypeRef responseType,
             JavaTypeRef repositoryType) {
@@ -544,6 +613,8 @@ public final class JavaSpringServiceTransformer {
                     layout.packageName(JavaLayout.DTO),
                     layout.packageName(JavaLayout.ERROR),
                     layout.packageName(JavaLayout.LOGIC),
+                    layout.packageName(JavaLayout.INTEGRATION),
+                    layout.packageName(JavaLayout.DOMAIN),
                     JavaTypeRef.of(
                             layout.packageName(JavaLayout.DOMAIN) + "." + entity.typeName()),
                     JavaTypeRef.of(

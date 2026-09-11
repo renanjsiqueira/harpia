@@ -108,7 +108,7 @@ public final class Resolver {
                                 declaration.name(),
                                 declaration.operations().stream()
                                         .map(operation -> integrationOperation(
-                                                operation, declared))
+                                                declaration.name(), operation, declared, bindings))
                                         .toList(),
                                 declaration.where()))
                         .toList(),
@@ -144,7 +144,10 @@ public final class Resolver {
     }
 
     private static IntegrationModel.Operation integrationOperation(
-            dev.harpia.parse.IntegrationAst.Operation operation, Declared declared) {
+            String integration,
+            dev.harpia.parse.IntegrationAst.Operation operation,
+            Declared declared,
+            BindingModel bindings) {
         return new IntegrationModel.Operation(
                 operation.name(),
                 operation.input().stream()
@@ -163,6 +166,7 @@ public final class Resolver {
                         .map(failure -> new IntegrationModel.Failure(
                                 failure.name(), failure.where()))
                         .toList(),
+                bindings.integrationBindingFor(integration + "." + operation.name()),
                 operation.where());
     }
 

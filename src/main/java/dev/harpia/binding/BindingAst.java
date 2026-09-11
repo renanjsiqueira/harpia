@@ -23,9 +23,39 @@ public record BindingAst(
         return declarations.stream().filter(Http.class::isInstance).map(Http.class::cast).toList();
     }
 
+    public List<IntegrationHttp> integrationHttpBindings() {
+        return declarations.stream()
+                .filter(IntegrationHttp.class::isInstance)
+                .map(IntegrationHttp.class::cast)
+                .toList();
+    }
+
     /** Closed binding kinds; messaging and persistence can add nodes without changing the file. */
-    public sealed interface Declaration permits Http {
+    public sealed interface Declaration permits Http, IntegrationHttp {
         SourceRef where();
+    }
+
+    /** One outbound HTTP adapter binding for an Integration operation. */
+    public record IntegrationHttp(
+            String integration,
+            String operation,
+            Endpoint endpoint,
+            List<RequestMapping> request,
+            ResponseMapping response,
+            SourceRef where)
+            implements Declaration {
+        public IntegrationHttp {
+            Objects.requireNonNull(integration, "integration");
+            Objects.requireNonNull(operation, "operation");
+            Objects.requireNonNull(endpoint, "endpoint");
+            request = List.copyOf(request);
+            Objects.requireNonNull(response, "response");
+            Objects.requireNonNull(where, "where");
+        }
+
+        public String target() {
+            return integration + "." + operation;
+        }
     }
 
     /** One HTTP exposure referring to an operation symbol by its canonical name. */

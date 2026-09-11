@@ -77,6 +77,9 @@ final class BusinessIrRenderer {
                         .append('\n');
                 operation.errors().forEach(error -> out.append("    Error ")
                         .append(error.name()).append('\n'));
+                operation.http().ifPresent(http -> out.append("    Http ")
+                        .append(http.method()).append(' ')
+                        .append(http.effectiveUrl()).append('\n'));
             });
         });
         return out.toString();

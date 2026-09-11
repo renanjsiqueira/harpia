@@ -3,6 +3,7 @@ package dev.harpia.model;
 import dev.harpia.diag.SourceRef;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /** Framework-free outbound port owned by the business specification. */
 public record IntegrationModel(String name, List<Operation> operations, SourceRef where) {
@@ -17,12 +18,14 @@ public record IntegrationModel(String name, List<Operation> operations, SourceRe
             List<Parameter> input,
             Result output,
             List<Failure> errors,
+            Optional<IntegrationHttpBinding> http,
             SourceRef where) {
         public Operation {
             Objects.requireNonNull(name, "name");
             input = List.copyOf(input);
             Objects.requireNonNull(output, "output");
             errors = List.copyOf(errors);
+            Objects.requireNonNull(http, "http");
             Objects.requireNonNull(where, "where");
         }
     }

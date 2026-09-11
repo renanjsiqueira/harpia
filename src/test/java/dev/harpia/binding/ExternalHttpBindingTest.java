@@ -172,6 +172,22 @@ class ExternalHttpBindingTest {
     }
 
     @Test
+    void anInboundBaseUrlRemainsAPathPrefix() throws IOException {
+        bindings("""
+                ## Base URL
+
+                https://api.example
+
+                """ + binding("GetCustomer", "GET /customers/{id}"));
+
+        assertThat(compile().diagnostics())
+                .filteredOn(diagnostic -> diagnostic.code()
+                        .equals(ErrorCodes.SEMANTIC_BINDING_MAPPING))
+                .anySatisfy(diagnostic -> assertThat(diagnostic.message())
+                        .contains("inbound HTTP binding").contains("path-prefix"));
+    }
+
+    @Test
     void anOperationHasAtMostOneHttpBinding() throws IOException {
         bindings(binding("GetCustomer", "GET /customers/{id}")
                 + binding("GetCustomer", "GET /customer/{id}"));

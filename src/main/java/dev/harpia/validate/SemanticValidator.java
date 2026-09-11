@@ -4,6 +4,8 @@ import dev.harpia.LanguageVersion;
 import dev.harpia.binding.BindingModel;
 import dev.harpia.binding.BindingResolver;
 import dev.harpia.binding.BindingValidator;
+import dev.harpia.binding.IntegrationBindingResolver;
+import dev.harpia.binding.IntegrationBindingValidator;
 import dev.harpia.diag.DiagnosticCollector;
 import dev.harpia.diag.ErrorCodes;
 import dev.harpia.diag.SourceRef;
@@ -38,8 +40,13 @@ public final class SemanticValidator {
             ProjectAst project,
             SymbolTable symbols,
             DiagnosticCollector diagnostics) {
-        BindingModel bindings = BindingResolver.resolve(project, symbols, diagnostics);
+        BindingModel bindings = IntegrationBindingResolver.enrich(
+                project,
+                symbols,
+                BindingResolver.resolve(project, symbols, diagnostics),
+                diagnostics);
         BindingValidator.validate(project, bindings, diagnostics);
+        IntegrationBindingValidator.validate(project, bindings, diagnostics);
         validate(project, symbols, bindings, diagnostics);
     }
 

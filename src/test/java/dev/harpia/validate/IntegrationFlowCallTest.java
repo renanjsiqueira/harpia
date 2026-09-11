@@ -41,7 +41,7 @@ class IntegrationFlowCallTest {
                         .equals(ErrorCodes.TARGET_CONSTRUCT_UNSUPPORTED))
                 .singleElement()
                 .satisfies(diagnostic -> assertThat(diagnostic.message())
-                        .contains("HTTP client provider is INTEG-004"));
+                        .contains("has no HTTP binding"));
         assertThat(Inspector.render(result, Stage.BUSINESS_IR).orElseThrow())
                 .contains("Step IntegrationCall approved = FraudService.CheckOrder("
                         + "orderId: UUID, context: FraudContext) -> Boolean");

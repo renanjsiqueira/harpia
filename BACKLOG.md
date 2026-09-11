@@ -394,7 +394,7 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `FLOW-013` **`fail` com erro tipado** — `DONE` na V1; `fail <erro> when <condição>` levanta um erro de domínio declarado em `### Errors`, com a condição tipada contra o input pelo mesmo analisador de Rules e Invariants. Um `fail` sem guarda não é comando de flow, e levantar erro não declarado é `HRP2127` · `P0` · `M` · Area: `API`
   - Evidence: [`FlowLineParser`](src/main/java/dev/harpia/parse/FlowLineParser.java), [`LogicAnalyzer`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`FailInstructionTest`](src/test/java/dev/harpia/validate/FailInstructionTest.java).
 
-- [ ] `FLOW-014` **`call` Logic/Command/Integration** — `PARTIAL`; a V1 aceita a forma compacta e multilinha de `resultado = call Logic(argumento = expressão)`, resolve argumentos nomeados pela assinatura global, valida nomes/completude/tipos, preserva o resultado escalar nos IRs e gera uma chamada Java `Logic.apply(...)`. Esta fatia cobre Logic pura gerada e input da operação; faltam consumir variáveis escalares anteriores, Command, Integration e o adapter de Logic custom · `P0` · `L` · Area: `API`
+- [ ] `FLOW-014` **`call` Logic/Command/Integration** — `PARTIAL`; a V1 aceita chamadas compactas e multilinha para Logic e `Integration.Operation`, resolve argumentos nomeados pela assinatura global, valida nomes/completude/tipos, preserva o resultado nos IRs e gera a chamada Java. Integration possui provider HTTP em `INTEG-004`; faltam consumir variáveis escalares anteriores, Command e o adapter de Logic custom · `P0` · `L` · Area: `API`
   - Evidence: [`FlowBlockParser`](src/main/java/dev/harpia/parse/FlowBlockParser.java), [`LogicAnalyzer`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`FlowCallModel`](src/main/java/dev/harpia/model/FlowCallModel.java), [`JavaSpringServiceTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringServiceTransformer.java), [`FlowCallTest`](src/test/java/dev/harpia/validate/FlowCallTest.java).
   - Depends on: `CORE-009`, `CMD-001`, `INTEG-001`.
 
@@ -550,11 +550,12 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
 - [x] `INTEG-002` **Typed Input/Output/Errors de integração** — `DONE`; cada Operation exige `#### Output`, aceita `#### Input` tipado e variantes PascalCase em `#### Errors`. Escalares, Enum, Value, `List<T>` e `Optional<T>` atravessam AST, SymbolTable, Business IR e Application IR; Entity/`Reference<Entity>` são recusados para não vazar persistência pela porta. Binding, transporte e política de falha continuam separados · `P0` · `L` · Area: `Integration`
   - Evidence: [`IntegrationOperationParser`](src/main/java/dev/harpia/parse/IntegrationOperationParser.java), [`SemanticValidator`](src/main/java/dev/harpia/validate/SemanticValidator.java), [`IntegrationModel`](src/main/java/dev/harpia/model/IntegrationModel.java), [`ApplicationIntegration`](src/main/java/dev/harpia/application/ApplicationIntegration.java), [`IntegrationContractTest`](src/test/java/dev/harpia/validate/IntegrationContractTest.java).
 
-- [x] `INTEG-003` **Flow call integration** — `DONE`; `call Integration.Operation(...)` resolve a porta e a operação em namespaces próprios, ordena argumentos nomeados pela assinatura, valida escalares/Enum/Value/`List`/`Optional`, exige atribuição exatamente quando há resultado e preserva a invocação nos AST/Business IR/Application IR. O Core permanece independente de transporte; enquanto `INTEG-004` não existe, `java-spring` recusa a construção explicitamente com `HRP7008` · `P0` · `M` · Area: `Integration`
+- [x] `INTEG-003` **Flow call integration** — `DONE`; `call Integration.Operation(...)` resolve a porta e a operação em namespaces próprios, ordena argumentos nomeados pela assinatura, valida escalares/Enum/Value/`List`/`Optional`, exige atribuição exatamente quando há resultado e preserva a invocação nos AST/Business IR/Application IR. O Core permanece independente de transporte e o target resolve a porta pelo provider de `INTEG-004` · `P0` · `M` · Area: `Integration`
   - Evidence: [`LogicAnalyzer`](src/main/java/dev/harpia/validate/LogicAnalyzer.java), [`IntegrationCallModel`](src/main/java/dev/harpia/model/IntegrationCallModel.java), [`ApplicationOperation`](src/main/java/dev/harpia/application/ApplicationOperation.java), [`JavaSpringTarget`](src/main/java/dev/harpia/target/javaspring/JavaSpringTarget.java), [`IntegrationFlowCallTest`](src/test/java/dev/harpia/validate/IntegrationFlowCallTest.java).
   - Depends on: `INTEG-001`, `FLOW-014`.
 
-- [ ] `INTEG-004` **HTTP/REST client provider** — `TODO` · `P0` · `L` · Area: `Integration`
+- [x] `INTEG-004` **HTTP/REST client provider** — `DONE` no contrato Core V1; `## Bind Integration.Operation` associa base URL absoluta, verbo/path, path/query/header/body e resposta à porta tipada. O `java-spring` gera um `RestClient` por Integration, tipos escalares/Enum/Value/`List`/`Optional`, injeta somente os clients usados nos services e recusa chamadas sem binding com `HRP7008`. Autenticação e response validation permanecem em `INTEG-010` · `P0` · `L` · Area: `Integration`
+  - Evidence: [`IntegrationBindingResolver`](src/main/java/dev/harpia/binding/IntegrationBindingResolver.java), [`IntegrationBindingValidator`](src/main/java/dev/harpia/binding/IntegrationBindingValidator.java), [`JavaSpringIntegrationClientTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringIntegrationClientTransformer.java), [`IntegrationHttpClientTest`](src/test/java/dev/harpia/target/javaspring/IntegrationHttpClientTest.java).
   - Depends on: `INTEG-001`, `BIND-006`.
 
 - [ ] `INTEG-010` **Autenticação básica e response validation de integração** — `TODO`; o Core cobre API key/bearer e validação básica de resposta. OAuth e políticas avançadas ficam em `BIND-008` no Next · `P0` · `L` · Area: `Integration`
@@ -1897,11 +1898,11 @@ deliberados não têm meta de 100%.
 
 | Horizon | Total | Done | Partial | Todo | Other | Completion |
 |---|---:|---:|---:|---:|---:|---:|
-| Core V1 | 213 | 175 | 16 | 22 | 0 | 85,9% |
+| Core V1 | 213 | 176 | 16 | 21 | 0 | 86,4% |
 | Next / Upstream | 183 | 1 | 12 | 168 | 2 | 3,8% |
 | Labs / Research | 134 | 0 | 1 | 69 | 64 | N/A |
 | Custom / Non-goals | 20 | 0 | 0 | 0 | 20 | N/A |
-| **Canonical total** | **550** | **176** | **29** | **259** | **86** | — |
+| **Canonical total** | **550** | **177** | **29** | **258** | **86** | — |
 
 `Other` reúne `RESEARCH`, `NOT_SUPPORTED`, `CUSTOM` e `WONT_DO`. Ele não mascara trabalho do Core:
 a seleção Core contém apenas itens implementáveis `DONE`, `PARTIAL` ou `TODO`.
@@ -1919,14 +1920,14 @@ a seleção Core contém apenas itens implementáveis `DONE`, `PARTIAL` ou `TODO
 
 ## Audit Snapshot
 
-Baseline auditada no fechamento de `INTEG-003`:
+Baseline auditada no fechamento de `INTEG-004`:
 
 | Métrica | Resultado |
 |---|---:|
-| Produção Java | 226 arquivos / 24.359 linhas |
-| Testes Java | 98 arquivos / 14.967 linhas |
+| Produção Java | 230 arquivos / 25.163 linhas |
+| Testes Java | 99 arquivos / 15.253 linhas |
 | Gate | `mvn -o test` — **BUILD SUCCESS** |
-| Testes executados | 516; 0 failures, 0 errors, 0 skipped |
+| Testes executados | 520; 0 failures, 0 errors, 0 skipped |
 
 # Core V1 Completion Criteria
 
@@ -1956,7 +1957,7 @@ avançada, semantic diff, zero-downtime migration, marketplace ou plugin ecosyst
 
 ## Top 10 Core V1 Next Tasks
 
-1. Implementar `FLOW-014`, `INTEG-003`/`INTEG-004` e `RELY-001` para FraudService.
+1. Fechar `FLOW-014` e implementar `RELY-001` sobre o FraudService HTTP já gerado.
 2. Implementar `FLOW-020` somente no recorte de coleção exigido pela Reference Application.
 3. Implementar `EVENT-001`/`EVENT-003`/`EVENT-005`/`EVENT-007` e `FLOW-015`.
 4. Implementar `SEC-002`/`SEC-003`/`SEC-005`/`SEC-007` e fechar `API-008`.

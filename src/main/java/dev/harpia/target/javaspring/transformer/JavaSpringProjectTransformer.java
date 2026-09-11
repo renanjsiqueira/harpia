@@ -21,6 +21,8 @@ public final class JavaSpringProjectTransformer {
     private final JavaSpringRepositoryTransformer repositories =
             new JavaSpringRepositoryTransformer();
     private final JavaSpringLogicTransformer logics = new JavaSpringLogicTransformer();
+    private final JavaSpringIntegrationClientTransformer integrations =
+            new JavaSpringIntegrationClientTransformer();
     private final JavaSpringDtoTransformer dtos = new JavaSpringDtoTransformer();
     private final JavaSpringServiceTransformer services = new JavaSpringServiceTransformer();
     private final JavaSpringControllerTransformer controllers =
@@ -41,6 +43,7 @@ public final class JavaSpringProjectTransformer {
         files.addAll(enums.transform(context));
         files.addAll(values.transform(context));
         files.addAll(events.transform(context));
+        files.addAll(integrations.transform(context));
         for (ApplicationEntity entity : context.application().entities()) {
             boolean hasHttpBindings = entity.operations().stream()
                     .anyMatch(operation -> operation.endpoint().isPresent());

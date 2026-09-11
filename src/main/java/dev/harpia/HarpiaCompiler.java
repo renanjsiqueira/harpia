@@ -9,6 +9,8 @@ import dev.harpia.binding.BindingModel;
 import dev.harpia.binding.BindingParser;
 import dev.harpia.binding.BindingResolver;
 import dev.harpia.binding.BindingValidator;
+import dev.harpia.binding.IntegrationBindingResolver;
+import dev.harpia.binding.IntegrationBindingValidator;
 import dev.harpia.capability.CapabilityAnalyzer;
 import dev.harpia.capability.CapabilityRequirementSet;
 import dev.harpia.capability.CapabilityResolver;
@@ -101,8 +103,13 @@ public final class HarpiaCompiler {
 
         SymbolTable symbols = SymbolTable.declare(syntax, diagnostics);
         stages = stages.withSymbols(symbols);
-        BindingModel bindings = BindingResolver.resolve(syntax, symbols, diagnostics);
+        BindingModel bindings = IntegrationBindingResolver.enrich(
+                syntax,
+                symbols,
+                BindingResolver.resolve(syntax, symbols, diagnostics),
+                diagnostics);
         BindingValidator.validate(syntax, bindings, diagnostics);
+        IntegrationBindingValidator.validate(syntax, bindings, diagnostics);
         SemanticValidator.validate(syntax, symbols, bindings, diagnostics);
         LogicAnalyzer.Result computations =
                 LogicAnalyzer.analyze(syntax, symbols, diagnostics);

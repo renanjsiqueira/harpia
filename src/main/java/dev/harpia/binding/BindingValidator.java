@@ -37,6 +37,13 @@ public final class BindingValidator {
 
         Map<String, SourceRef> routes = new LinkedHashMap<>();
         for (BindingModel.Http binding : bindings.http().values()) {
+            if (binding.binding().baseUrl().matches("https?://.*")) {
+                mappingError(
+                        "inbound HTTP binding requires a path-prefix '## Base URL', not an "
+                                + "absolute URL",
+                        binding.binding().where(),
+                        diagnostics);
+            }
             String route = binding.binding().method() + " " + binding.binding().effectivePath();
             SourceRef first = routes.putIfAbsent(route, binding.endpointWhere());
             if (first != null) {
