@@ -56,8 +56,9 @@ class AuthenticatedAccessTest {
 
         String config = compile().tree().orElseThrow().files().get(CONFIG);
         assertThat(config)
-                .contains(".requestMatchers(\"/customers\").permitAll()")
-                .contains(".requestMatchers(\"/customers/{id}\").authenticated()")
+                .contains(".requestMatchers(HttpMethod.GET, \"/customers\").permitAll()")
+                .contains(".requestMatchers(HttpMethod.DELETE, \"/customers/{id}\")"
+                        + ".authenticated()")
                 .as("the default only catches a path nobody declared, and refusing those is safer")
                 .contains(".anyRequest().denyAll()")
                 .as("a stateless API has no session to ride on and no cookie for CSRF to protect")
@@ -154,6 +155,78 @@ class AuthenticatedAccessTest {
         // body a refusal answers with therefore cannot depend on some other failure existing.
         assertThat(compile().tree().orElseThrow().files())
                 .containsKey("src/main/java/com/example/auth/error/ApiError.java");
+    }
+
+    @Test
+    void twoOperationsOnOnePathKeepTheRuleEachOneAskedFor() throws IOException {
+        Files.createDirectories(projectRoot.resolve("specs"));
+        Files.writeString(projectRoot.resolve("specs/customer.harpia.md"), """
+                # Customer
+
+                ## Data
+
+                - id: UUID generated
+                - name: String required
+
+                ## Query List Customers
+
+                ### Endpoint
+
+                GET /customers
+
+                ### Access
+
+                public
+
+                ### Flow
+
+                ```flow
+                customers = list Customer
+                return customers
+                ```
+
+                ### Output
+
+                200 List<Customer>
+
+                ## Command Create Customer
+
+                ### Endpoint
+
+                POST /customers
+
+                ### Access
+
+                authenticated
+
+                ### Input
+
+                - name: String required
+
+                ### Flow
+
+                ```flow
+                validate input
+                customer = create Customer from input
+                save customer
+                return customer
+                ```
+
+                ### Output
+
+                201 Customer
+
+                ### Errors
+
+                - invalid input -> 400
+                """, StandardCharsets.UTF_8);
+        config(1);
+
+        // One rule for the path would make the generated code contradict the specification:
+        // whichever rule won, one of the two operations never agreed to it.
+        assertThat(compile().tree().orElseThrow().files().get(CONFIG))
+                .contains(".requestMatchers(HttpMethod.GET, \"/customers\").permitAll()")
+                .contains(".requestMatchers(HttpMethod.POST, \"/customers\").authenticated()");
     }
 
     @Test

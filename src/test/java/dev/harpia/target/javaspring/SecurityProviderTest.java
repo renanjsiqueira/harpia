@@ -61,8 +61,9 @@ class SecurityProviderTest {
         assertThat(files.get(CONFIG))
                 .contains(".oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}))")
                 .as("which endpoints need an identity does not change with how one is proved")
-                .contains(".requestMatchers(\"/customers\").permitAll()")
-                .contains(".requestMatchers(\"/customers/{id}\").authenticated()");
+                .contains(".requestMatchers(HttpMethod.GET, \"/customers\").permitAll()")
+                .contains(".requestMatchers(HttpMethod.DELETE, \"/customers/{id}\")"
+                        + ".authenticated()");
         assertThat(files.get("pom.xml")).contains("spring-boot-starter-oauth2-resource-server");
     }
 

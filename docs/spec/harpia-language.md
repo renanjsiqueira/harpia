@@ -217,9 +217,11 @@ server OAuth2. A cadeia é a mesma nos dois casos: **quais** endpoints exigem id
 (`${JWT_JWK_SET_URI}`) e não uma URL cozida no código gerado, que seria um ambiente escrito no
 código-fonte de todos os ambientes.
 
-Quando duas operações compartilham um path, a regra mais estrita vence: um role sobre
-`authenticated`, e qualquer um dos dois sobre `public`. Uma regra que deixasse uma delas passar
-seria uma regra com a qual a outra nunca concordou.
+Cada operação declarada vira sua própria regra, chaveada por método **e** path. Duas operações
+podem compartilhar um path e pedir coisas diferentes — um `GET /customers` público ao lado de um
+`POST /customers` autenticado — e uma regra só para o path faria o código gerado contradizer a
+especificação: qualquer que fosse o vencedor, uma das duas nunca concordou com ele. Um método que
+nenhuma operação declarou naquele path cai no `denyAll` final, em vez de herdar a regra de outro.
 
 Um endpoint `authenticated` ou com `role` exige a capability `security`, que o target implementa por conta
 própria, como já faz com HTTP. No Java/Spring isso vira uma filter chain: cada rota declarada

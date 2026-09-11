@@ -44,7 +44,8 @@ class RoleAccessTest {
                 .contains("access=ROLE admin");
         assertThat(result.tree().orElseThrow().files().get(CONFIG))
                 .as("the upper-case authority is the framework's spelling of the same thing")
-                .contains(".requestMatchers(\"/customers/{id}\").hasAnyRole(\"ADMIN\")");
+                .contains(".requestMatchers(HttpMethod.DELETE, \"/customers/{id}\")"
+                        + ".hasAnyRole(\"ADMIN\")");
     }
 
     @Test

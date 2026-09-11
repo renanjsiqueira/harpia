@@ -41,7 +41,7 @@ public final class JavaSpringSecurityTransformer {
         if (!context.application().capabilities().requires(Capability.SECURITY)) {
             return List.of();
         }
-        Map<String, ApplicationOperation.Access> routes = routes(context);
+        List<Route> routes = routes(context);
         SourceRef where = context.application().entities().stream()
                 .flatMap(entity -> entity.operations().stream())
                 .flatMap(operation -> operation.endpoint().stream())
@@ -58,8 +58,9 @@ public final class JavaSpringSecurityTransformer {
         statements.add("                session.sessionCreationPolicy(SessionCreationPolicy"
                 + ".STATELESS))");
         statements.add("        .authorizeHttpRequests(requests -> requests");
-        routes.forEach((pattern, access) -> statements.add(
-                "                .requestMatchers(\"" + pattern + "\")." + rule(access)));
+        routes.forEach(route -> statements.add(
+                "                .requestMatchers(HttpMethod." + route.method() + ", \""
+                        + route.path() + "\")." + rule(route.access())));
         statements.add("                .anyRequest().denyAll())");
         // A refusal here happens in the filter chain, before any @ExceptionHandler can see it, so
         // without this the generated API would answer refusals in a shape of Spring's choosing
@@ -87,6 +88,7 @@ public final class JavaSpringSecurityTransformer {
                         new JavaImportModel("org.springframework.context.annotation.Bean"),
                         new JavaImportModel(
                                 "org.springframework.security.config.http.SessionCreationPolicy"),
+                        new JavaImportModel("org.springframework.http.HttpMethod"),
                         new JavaImportModel("org.springframework.http.MediaType"),
                         new JavaImportModel(
                                 context.layout().packageName(JavaLayout.ERROR) + ".ApiError")),
@@ -126,23 +128,30 @@ public final class JavaSpringSecurityTransformer {
     }
 
     /**
-     * Every declared route and the access it asked for.
+     * Every declared operation, with the access it asked for.
      *
-     * <p>Sorted, so two identical specifications produce the same chain. A path that two
-     * operations share keeps the stricter of the two: a rule that let one of them through would
-     * be a rule the other never agreed to.
+     * <p>Keyed by method as well as path, because two operations can share a path and ask for
+     * different things: a public {@code GET /customers} beside an authenticated
+     * {@code POST /customers}. Collapsing those into one rule would make the generated code
+     * contradict the specification — whichever rule won, one of the two operations never agreed
+     * to it.
+     *
+     * <p>Sorted, so two identical specifications produce the same chain. Two operations cannot
+     * share a method and a path: that is already refused as a duplicate route.
      */
-    private static Map<String, ApplicationOperation.Access> routes(JavaSpringContext context) {
-        Map<String, ApplicationOperation.Access> routes = new TreeMap<>();
-        for (ApplicationEntity entity : context.application().entities()) {
-            for (ApplicationOperation operation : entity.operations()) {
-                operation.endpoint().ifPresent(endpoint -> routes.merge(
-                        endpoint.effectivePath(),
-                        endpoint.access(),
-                        JavaSpringSecurityTransformer::stricter));
-            }
-        }
-        return new LinkedHashMap<>(routes);
+    private static List<Route> routes(JavaSpringContext context) {
+        return context.application().entities().stream()
+                .flatMap(entity -> entity.operations().stream())
+                .flatMap(operation -> operation.endpoint().stream())
+                .map(endpoint -> new Route(
+                        endpoint.method().name(), endpoint.effectivePath(), endpoint.access()))
+                .sorted(java.util.Comparator
+                        .comparing(Route::path)
+                        .thenComparing(Route::method))
+                .toList();
+    }
+
+    private record Route(String method, String path, ApplicationOperation.Access access) {
     }
 
     /** Writes the shared error body, because a refusal is a failure like any other. */
