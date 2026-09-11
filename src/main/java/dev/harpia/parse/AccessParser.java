@@ -19,6 +19,9 @@ public final class AccessParser {
     /** A role reads like the specification's other names: lower_snake_case. */
     private static final Pattern ROLES = Pattern.compile(
             "^role ([a-z][a-z0-9_]*(?: or [a-z][a-z0-9_]*)*)$");
+    /** A scope is spelled by whoever issues the token, so its punctuation is not ours to choose. */
+    private static final Pattern SCOPES = Pattern.compile(
+            "^scope ([a-z][a-z0-9_.:-]*(?: or [a-z][a-z0-9_.:-]*)*)$");
 
     private AccessParser() {
     }
@@ -37,6 +40,10 @@ public final class AccessParser {
             // Listing several is how you say a thing is open to more than one kind of person, so
             // `or` reads the rule out loud and the check is "any of".
             return Optional.of(Access.role(List.of(roles.group(1).split(" or "))));
+        }
+        Matcher scopes = SCOPES.matcher(value);
+        if (scopes.matches()) {
+            return Optional.of(Access.scope(List.of(scopes.group(1).split(" or "))));
         }
         UnsupportedFeatureDetector.reportAccess(value, diagnostics, where);
         return Optional.empty();

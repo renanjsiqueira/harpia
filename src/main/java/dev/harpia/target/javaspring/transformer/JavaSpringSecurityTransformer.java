@@ -213,6 +213,12 @@ public final class JavaSpringSecurityTransformer {
                     .map(role -> "\"" + role.toUpperCase(java.util.Locale.ROOT) + "\"")
                     .reduce((left, right) -> left + ", " + right)
                     .orElseThrow() + ")";
+            // A scope is spelled by whoever issued the token, so it is not upper-cased the way a
+            // role is: `SCOPE_` is the prefix Spring reads, and the rest is the issuer's word.
+            case SCOPE -> "hasAnyAuthority(" + access.roles().stream()
+                    .map(scope -> "\"SCOPE_" + scope + "\"")
+                    .reduce((left, right) -> left + ", " + right)
+                    .orElseThrow() + ")";
         };
     }
 

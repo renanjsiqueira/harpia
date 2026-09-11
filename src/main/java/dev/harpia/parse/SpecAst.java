@@ -136,7 +136,8 @@ public final class SpecAst {
         public enum Kind {
             PUBLIC,
             AUTHENTICATED,
-            ROLE
+            ROLE,
+            SCOPE
         }
 
         public static final Access PUBLIC = new Access(Kind.PUBLIC, java.util.List.of());
@@ -146,13 +147,18 @@ public final class SpecAst {
         public Access {
             java.util.Objects.requireNonNull(kind, "kind");
             roles = java.util.List.copyOf(roles);
-            if (roles.isEmpty() == (kind == Kind.ROLE)) {
-                throw new IllegalArgumentException("ROLE names roles and nothing else does");
+            if (roles.isEmpty() != (kind == Kind.PUBLIC || kind == Kind.AUTHENTICATED)) {
+                throw new IllegalArgumentException(
+                        "ROLE and SCOPE name what they demand; nothing else does");
             }
         }
 
         public static Access role(java.util.List<String> roles) {
             return new Access(Kind.ROLE, roles);
+        }
+
+        public static Access scope(java.util.List<String> scopes) {
+            return new Access(Kind.SCOPE, scopes);
         }
 
         /** True when the request has to carry an identity at all, whatever is asked of it. */
@@ -168,7 +174,9 @@ public final class SpecAst {
          */
         @Override
         public String toString() {
-            return kind == Kind.ROLE ? "ROLE " + String.join(" or ", roles) : kind.name();
+            return roles.isEmpty()
+                    ? kind.name()
+                    : kind.name() + " " + String.join(" or ", roles);
         }
     }
 

@@ -581,7 +581,7 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
   - Evidence: [`AuthenticatedAccessTest`](src/test/java/dev/harpia/target/javaspring/AuthenticatedAccessTest.java), [`JavaSpringSecurityTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringSecurityTransformer.java), [`CapabilityAnalyzer`](src/main/java/dev/harpia/capability/CapabilityAnalyzer.java).
   - Nota: o projeto gerado precisa de Spring Boot >= 3.4 para `spring-boot-starter-security` resolver no cache offline desta máquina.
 
-- [ ] `SEC-003` **Role e scope** — `PARTIAL`; role pronto. `### Access` aceita `role admin` e `role admin or auditor`, com verificação "qualquer um deles" — listar mais de um é como se diz que algo está aberto a mais de um tipo de pessoa. O nome é `lower_snake_case` como tudo o mais na especificação e vira `hasAnyRole("ADMIN", ...)`, a grafia do framework para a mesma coisa. Um role exige identidade, então também exige a capability `security`. Cada operação vira sua própria regra, chaveada por método e path. Falta **scope**, que pertence junto de `SEC-005`: é de um token que escopos vêm · `P0` · `L` · Area: `Security`
+- [x] `SEC-003` **Role e scope** — `DONE`. `### Access` aceita `role admin` e `role admin or auditor`, com verificação "qualquer um deles" — listar mais de um é como se diz que algo está aberto a mais de um tipo de pessoa. O nome é `lower_snake_case` como tudo o mais na especificação e vira `hasAnyRole("ADMIN", ...)`, a grafia do framework para a mesma coisa. Um role exige identidade, então também exige a capability `security`. Cada operação vira sua própria regra, chaveada por método e path. `scope orders:read or orders:write` pede uma permissão em vez de um tipo de pessoa: não é convertido para maiúsculas como um role, porque a grafia é de quem emite o token, e vira `hasAnyAuthority("SCOPE_...")`. Declarar scope com `security.provider: basic` é `HRP6002` — a regra não casaria com nada e o endpoint se leria aberto e se comportaria fechado · `P0` · `L` · Area: `Security`
   - Evidence: [`RoleAccessTest`](src/test/java/dev/harpia/target/javaspring/RoleAccessTest.java), [`AccessParser`](src/main/java/dev/harpia/parse/AccessParser.java), [`AccessRule`](src/main/java/dev/harpia/model/AccessRule.java), [`JavaSpringSecurityTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringSecurityTransformer.java).
   - Depends on: `SEC-002`, `RULE-003`.
 
@@ -834,7 +834,7 @@ Em ordem de dependência e valor para a Reference Application:
 1. `FLOW-014` e `FLOW-020`: calls e iteração controlada.
 2. `INTEG-003`–`INTEG-004`, `INTEG-010`, `RELY-001`: chamada e provider HTTP do FraudService.
 3. `EVENT-001`, `EVENT-003`, `EVENT-005`, `EVENT-007`, `FLOW-015`: Event local e emit.
-4. `API-008` e o `scope` de `SEC-003`: `SEC-002`, `SEC-005` e `SEC-007` fechados — access declarado, filter chain gerada, `basic`/`jwt` e recusa no mesmo corpo de erro da API.
+4. `API-008`: `SEC-002`, `SEC-003`, `SEC-005` e `SEC-007` fechados — access declarado, filter chain gerada, `basic`/`jwt` e recusa no mesmo corpo de erro da API.
 5. `CUSTOM-002`, `CUSTOM-003`: contract, DI e layout custom protegido.
 6. `GREEN-003`: baseline integrada verificável (`SPRING-012` fechado: `mvn package` e jar executável são gate).
 7. `HARNESS-001`–`HARNESS-004`: fechados — contrato Java versionado, JSON dos cinco comandos, `.harpia/handoff.json` e os quatro gates.

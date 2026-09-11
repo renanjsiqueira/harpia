@@ -152,7 +152,8 @@ public final class HarpiaCompiler {
         }
 
         Optional<ResolvedCapabilities> capabilities =
-                CapabilityResolver.resolve(requirements, config, diagnostics);
+                CapabilityResolver.resolve(
+                        requirements, config, Optional.of(business), diagnostics);
         if (capabilities.isEmpty()) {
             return failed(stages, diagnostics);
         }

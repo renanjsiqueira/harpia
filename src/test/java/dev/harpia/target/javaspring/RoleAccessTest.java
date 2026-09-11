@@ -71,6 +71,34 @@ class RoleAccessTest {
     }
 
     @Test
+    void aScopeIsSpelledByWhoeverIssuesTheToken() throws IOException {
+        project(1, "scope orders:read or orders:write", "jwt");
+
+        CompileResult result = compile();
+        assertThat(result.diagnostics()).isEmpty();
+        assertThat(Inspector.render(result, Stage.APPLICATION_IR).orElseThrow())
+                .contains("access=SCOPE orders:read or orders:write");
+        assertThat(result.tree().orElseThrow().files().get(CONFIG))
+                .as("SCOPE_ is the prefix Spring reads; the rest is the issuer's word, not ours")
+                .contains(".hasAnyAuthority(\"SCOPE_orders:read\", \"SCOPE_orders:write\")");
+    }
+
+    @Test
+    void aScopeWithoutATokenIsRefused() throws IOException {
+        project(1, "scope orders:read", "basic");
+
+        // With basic authentication there are no scopes to carry, so the rule would match nothing
+        // and every request would be refused: an access rule that reads open and behaves closed.
+        assertThat(compile().diagnostics())
+                .filteredOn(diagnostic ->
+                        diagnostic.code().equals(ErrorCodes.CAPABILITY_PROVIDER_UNSUPPORTED))
+                .singleElement()
+                .satisfies(diagnostic -> assertThat(diagnostic.message())
+                        .contains("access 'scope orders:read' needs a token")
+                        .contains("which carries no scopes"));
+    }
+
+    @Test
     void v0HasOnlyPublicEndpoints() throws IOException {
         project(0, "role admin");
 
@@ -128,6 +156,10 @@ class RoleAccessTest {
     }
 
     private void project(int languageVersion, String access) throws IOException {
+        project(languageVersion, access, "basic");
+    }
+
+    private void project(int languageVersion, String access, String provider) throws IOException {
         Files.createDirectories(projectRoot.resolve("specs"));
         Files.writeString(projectRoot.resolve("specs/customer.harpia.md"), """
                 # Customer
@@ -202,6 +234,9 @@ class RoleAccessTest {
                   options:
                     springBootVersion: "3.4.4"
 
+                security:
+                  provider: %s
+
                 database:
                   vendor: postgres
 
@@ -212,6 +247,6 @@ class RoleAccessTest {
                 generation:
                   migrations: true
                   tests: true
-                """.formatted(languageVersion), StandardCharsets.UTF_8);
+                """.formatted(languageVersion, provider), StandardCharsets.UTF_8);
     }
 }

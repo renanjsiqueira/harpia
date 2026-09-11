@@ -217,6 +217,21 @@ server OAuth2. A cadeia é a mesma nos dois casos: **quais** endpoints exigem id
 (`${JWT_JWK_SET_URI}`) e não uma URL cozida no código gerado, que seria um ambiente escrito no
 código-fonte de todos os ambientes.
 
+`scope` pede uma permissão em vez de um tipo de pessoa:
+
+```markdown
+### Access
+
+scope orders:read or orders:write
+```
+
+Um scope é grafado por quem emite o token, então a pontuação não é nossa para escolher e ele não é
+convertido para maiúsculas como um role: no Java/Spring vira
+`hasAnyAuthority("SCOPE_orders:read", ...)`, onde `SCOPE_` é o prefixo que o Spring lê e o resto é a
+palavra do emissor. Como scopes vêm de um token, declarar um com `security.provider: basic` é
+`HRP6002` — a regra não casaria com nada e o endpoint responderia recusa a toda requisição, uma
+regra de acesso que se lê aberta e se comporta fechada.
+
 Cada operação declarada vira sua própria regra, chaveada por método **e** path. Duas operações
 podem compartilhar um path e pedir coisas diferentes — um `GET /customers` público ao lado de um
 `POST /customers` autenticado — e uma regra só para o path faria o código gerado contradizer a

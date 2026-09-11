@@ -18,7 +18,8 @@ public record AccessRule(Kind kind, List<String> roles) {
     public enum Kind {
         PUBLIC,
         AUTHENTICATED,
-        ROLE
+        ROLE,
+        SCOPE
     }
 
     public static final AccessRule PUBLIC = new AccessRule(Kind.PUBLIC, List.of());
@@ -27,13 +28,18 @@ public record AccessRule(Kind kind, List<String> roles) {
     public AccessRule {
         Objects.requireNonNull(kind, "kind");
         roles = List.copyOf(roles);
-        if (roles.isEmpty() == (kind == Kind.ROLE)) {
-            throw new IllegalArgumentException("ROLE names roles and nothing else does");
+        if (roles.isEmpty() != (kind == Kind.PUBLIC || kind == Kind.AUTHENTICATED)) {
+            throw new IllegalArgumentException(
+                    "ROLE and SCOPE name what they demand; nothing else does");
         }
     }
 
     public static AccessRule role(List<String> roles) {
         return new AccessRule(Kind.ROLE, roles);
+    }
+
+    public static AccessRule scope(List<String> scopes) {
+        return new AccessRule(Kind.SCOPE, scopes);
     }
 
     /** True when the request has to carry an identity at all, whatever is asked of it. */
@@ -44,6 +50,6 @@ public record AccessRule(Kind kind, List<String> roles) {
     /** The stable form the inspect stages print; the first two read as the enum did. */
     @Override
     public String toString() {
-        return kind == Kind.ROLE ? "ROLE " + String.join(" or ", roles) : kind.name();
+        return roles.isEmpty() ? kind.name() : kind.name() + " " + String.join(" or ", roles);
     }
 }
