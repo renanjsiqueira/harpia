@@ -58,8 +58,11 @@ final class DeclarationParserRegistry {
                             new DataDeclarationParser(),
                             new EnumDeclarationParser(),
                             new ValueDeclarationParser(),
+                            new InvariantDeclarationParser(),
                             new UseCaseDeclarationParser(DeclarationKind.COMMAND, "Command"),
                             new UseCaseDeclarationParser(DeclarationKind.QUERY, "Query"),
+                            new IntegrationDeclarationParser(),
+                            new EventDeclarationParser(),
                             new LogicDeclarationParser(),
                             new ScenarioDeclarationParser()),
                     new UseCaseDeclarationParser(DeclarationKind.USE_CASE, null, true));

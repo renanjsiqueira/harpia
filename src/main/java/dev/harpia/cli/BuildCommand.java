@@ -3,10 +3,13 @@ package dev.harpia.cli;
 import dev.harpia.CompileRequest;
 import dev.harpia.CompileResult;
 import dev.harpia.HarpiaCompiler;
+import dev.harpia.diag.Diagnostic;
 import dev.harpia.diag.DiagnosticCollector;
 import dev.harpia.emit.OutputWriter;
 import dev.harpia.emit.WriteReport;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
@@ -26,6 +29,9 @@ public final class BuildCommand implements Callable<Integer> {
     @Option(names = "--force", description = "Allow clean when unknown files are present.")
     private boolean force;
 
+    @Option(names = "--json", description = "Report the result as one JSON object on stdout.")
+    private boolean json;
+
     @Spec
     private CommandSpec spec;
 
@@ -33,26 +39,68 @@ public final class BuildCommand implements Callable<Integer> {
     public Integer call() {
         CompileResult result = new HarpiaCompiler().compile(
                 new CompileRequest(directory, CompileRequest.Mode.BUILD));
-        DiagnosticPrinter.print(result.diagnostics(), spec.commandLine().getErr());
         int exitCode = CommandSupport.exitCode(result);
         if (exitCode != ExitCode.SUCCESS) {
-            return exitCode;
+            return report(exitCode, result.diagnostics());
         }
 
         DiagnosticCollector writeDiagnostics = new DiagnosticCollector();
-        Optional<WriteReport> report = OutputWriter.sync(
+        Optional<WriteReport> written = OutputWriter.sync(
                 directory,
                 result.outputDirectory().orElseThrow(),
                 result.tree().orElseThrow(),
                 clean,
                 force,
                 writeDiagnostics);
-        DiagnosticPrinter.print(writeDiagnostics.diagnostics(), spec.commandLine().getErr());
-        if (report.isEmpty()) {
+        // A build says two things: what the compiler decided and what the directory now holds.
+        // Both diagnostics belong to the same answer, so the report carries them together.
+        List<Diagnostic> diagnostics = new ArrayList<>(result.diagnostics());
+        diagnostics.addAll(writeDiagnostics.diagnostics());
+        if (written.isEmpty()) {
+            return report(ExitCode.USAGE_OR_IO_ERROR, diagnostics);
+        }
+        // The directory is only half of what a build leaves behind; the other half is what the
+        // next person has to know before touching it.
+        try {
+            HandoffManifest.write(
+                    directory,
+                    result.outputDirectory().orElseThrow(),
+                    result.stages().application().orElseThrow(),
+                    dev.harpia.target.TargetId.of(result.targetId().orElseThrow()),
+                    written.orElseThrow());
+        } catch (java.io.IOException exception) {
+            spec.commandLine().getErr().println(
+                    "harpia: could not write " + HandoffManifest.PATH + ": "
+                            + exception.getMessage());
+            spec.commandLine().getErr().flush();
             return ExitCode.USAGE_OR_IO_ERROR;
         }
-        summarize(report.orElseThrow(), result.outputDirectory().orElseThrow());
+        if (json) {
+            spec.commandLine().getOut().println(JsonReport.of(
+                    "build",
+                    ExitCode.SUCCESS,
+                    diagnostics,
+                    result.outputDirectory().orElseThrow(),
+                    written.orElseThrow(),
+                    HandoffManifest.PATH));
+            spec.commandLine().getOut().flush();
+            return ExitCode.SUCCESS;
+        }
+        DiagnosticPrinter.print(diagnostics, spec.commandLine().getErr());
+        summarize(written.orElseThrow(), result.outputDirectory().orElseThrow());
         return ExitCode.SUCCESS;
+    }
+
+    /** Whichever way this build ended, it ends in the form the caller asked for. */
+    private int report(int exitCode, List<Diagnostic> diagnostics) {
+        if (json) {
+            spec.commandLine().getOut().println(
+                    JsonReport.of("build", exitCode, diagnostics));
+            spec.commandLine().getOut().flush();
+        } else {
+            DiagnosticPrinter.print(diagnostics, spec.commandLine().getErr());
+        }
+        return exitCode;
     }
 
     private void summarize(WriteReport report, String outputDirectory) {

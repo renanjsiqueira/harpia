@@ -20,13 +20,16 @@ public final class SpringPersistenceMapper {
                         new Attribute("name", quote(entity.tableName()))));
     }
 
-    /** A value is embedded, so the owner declares no column for the field itself. */
+    /** A value is embedded and a collection has its own table, so neither owns a column here. */
     public boolean ownsColumn(ApplicationField field) {
-        return field.valueType().isEmpty();
+        return field.valueType().isEmpty() && field.elementType().isEmpty();
     }
 
     public List<JavaAnnotationModel> fieldAnnotations(
             ApplicationEntity entity, ApplicationField field) {
+        if (field.relationship().isPresent()) {
+            return relationshipAnnotations(entity, field);
+        }
         boolean identifier = field.equals(entity.idField());
         List<JavaAnnotationModel> annotations = new ArrayList<>();
         if (identifier) {
@@ -49,7 +52,12 @@ public final class SpringPersistenceMapper {
         }
         // A declared type is stored by name, so its column carries a length rather than one of
         // the scalar shapes Postgres has a type for.
-        if (field.enumTypeName().isPresent()) {
+        if (field.reference().isPresent()) {
+            // The identity's own shape decides the column; the foreign key lives in the migration.
+            PostgresTypes.columnAttributes(field.reference().orElseThrow().idType())
+                    .map(SpringPersistenceMapper::attribute)
+                    .ifPresent(attributes::add);
+        } else if (field.enumTypeName().isPresent()) {
             attributes.add(new Attribute("length", "64"));
         } else {
             PostgresTypes.columnAttributes(field.scalarType())
@@ -64,9 +72,56 @@ public final class SpringPersistenceMapper {
 
     public List<JavaImportModel> additionalImports(
             ApplicationEntity entity, ApplicationField field) {
+        if (field.relationship().isPresent()) {
+            List<JavaImportModel> imports = new ArrayList<>();
+            imports.add(new JavaImportModel("jakarta.persistence.FetchType"));
+            imports.add(new JavaImportModel("jakarta.persistence.ForeignKey"));
+            if (field.relationship().orElseThrow().lifecycle()
+                    == dev.harpia.application.ApplicationFieldType.RelationshipLifecycle.DEPENDENT) {
+                imports.add(new JavaImportModel("jakarta.persistence.CascadeType"));
+            }
+            return List.copyOf(imports);
+        }
         return field.equals(entity.idField())
                 ? List.of(new JavaImportModel("jakarta.persistence.GenerationType"))
                 : List.of();
+    }
+
+    private static List<JavaAnnotationModel> relationshipAnnotations(
+            ApplicationEntity entity, ApplicationField field) {
+        dev.harpia.application.ApplicationFieldType.Relationship relationship =
+                field.relationship().orElseThrow();
+        boolean dependent = relationship.lifecycle()
+                == dev.harpia.application.ApplicationFieldType.RelationshipLifecycle.DEPENDENT;
+        List<Attribute> join = new ArrayList<>();
+        join.add(new Attribute("name", quote(field.columnName())));
+        join.add(new Attribute("nullable", Boolean.toString(!field.required())));
+        if (field.unique() || dependent) {
+            join.add(new Attribute("unique", "true"));
+        }
+        join.add(new Attribute(
+                "foreignKey",
+                "@ForeignKey(name = \""
+                        + SqlConstraintNames.foreignKey(entity.tableName(), field.columnName())
+                        + "\")"));
+        List<Attribute> association = new ArrayList<>();
+        association.add(new Attribute(
+                "fetch", "FetchType." + relationship.loading().name()));
+        if (dependent) {
+            association.add(new Attribute("cascade", "CascadeType.ALL"));
+            association.add(new Attribute("orphanRemoval", "true"));
+        }
+        association.add(new Attribute("optional", Boolean.toString(!field.required())));
+        return List.of(
+                new JavaAnnotationModel(
+                        dev.harpia.target.javaspring.model.JavaTypeRef.of(dependent
+                                ? "jakarta.persistence.OneToOne"
+                                : "jakarta.persistence.ManyToOne"),
+                        association),
+                new JavaAnnotationModel(
+                        dev.harpia.target.javaspring.model.JavaTypeRef.of(
+                                "jakarta.persistence.JoinColumn"),
+                        join));
     }
 
     private static Attribute attribute(String source) {

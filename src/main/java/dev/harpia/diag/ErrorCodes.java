@@ -45,6 +45,12 @@ public final class ErrorCodes {
     public static final String SYNTAX_ENUM_VALUE = "HRP1108";
     /** A value heading or one of its fields is malformed. */
     public static final String SYNTAX_VALUE_FIELD = "HRP1109";
+    /** An invariant list is malformed. */
+    public static final String SYNTAX_INVARIANT = "HRP1110";
+    /** An Integration heading or one of its Operation ports is malformed. */
+    public static final String SYNTAX_INTEGRATION = "HRP1111";
+    /** The structure of a `## Event` declaration is not what the grammar admits. */
+    public static final String SYNTAX_EVENT = "HRP1112";
     /** Indentation inside a {@code logic} block is not a multiple of four spaces. */
     public static final String SYNTAX_LOGIC_INDENT = "HRP1102";
     /** A character or word that does not belong to the Harpia Logic lexicon. */
@@ -122,6 +128,46 @@ public final class ErrorCodes {
     public static final String SEMANTIC_UNKNOWN_TYPE = "HRP2123";
     /** A scenario targets a computation whose implementation Harpia does not own. */
     public static final String SEMANTIC_SCENARIO_CUSTOM = "HRP2124";
+    /** A module declares invariants but no entity for them to constrain. */
+    public static final String SEMANTIC_INVARIANT_WITHOUT_ENTITY = "HRP2125";
+    /** A field is declared both optional and required. */
+    public static final String SEMANTIC_OPTIONAL_REQUIRED = "HRP2126";
+    /** A flow raises an error the operation never declared. */
+    public static final String SEMANTIC_FAIL_UNDECLARED = "HRP2127";
+    /** A find names a field that cannot identify a single record. */
+    public static final String SEMANTIC_FIND_NOT_UNIQUE = "HRP2128";
+    /** A paged listing has no page and size to read. */
+    public static final String SEMANTIC_PAGED_WITHOUT_INPUT = "HRP2129";
+    /** A branch attempts to define a flow variable or return from a nested scope. */
+    public static final String SEMANTIC_FLOW_BRANCH_SCOPE = "HRP2130";
+    /** The owned modifier is attached to something that is not an entity relationship. */
+    public static final String SEMANTIC_OWNED_RELATIONSHIP = "HRP2131";
+    /** Two events share a name in the event namespace. */
+    public static final String SEMANTIC_DUPLICATE_EVENT = "HRP2139";
+    /** An event declares the same payload field more than once. */
+    public static final String SEMANTIC_DUPLICATE_EVENT_FIELD = "HRP2140";
+    /** An event payload carries an entity instead of the identity of one. */
+    public static final String SEMANTIC_EVENT_PAYLOAD_TYPE = "HRP2141";
+    /** Two integrations share a name in the integration namespace. */
+    public static final String SEMANTIC_DUPLICATE_INTEGRATION = "HRP2132";
+    /** An integration contract exposes an entity or identity-bearing reference as a value. */
+    public static final String SEMANTIC_INTEGRATION_TYPE = "HRP2133";
+    /** An integration operation declares the same input name more than once. */
+    public static final String SEMANTIC_DUPLICATE_INTEGRATION_INPUT = "HRP2134";
+    /** A Flow call target is unknown, ambiguous or not callable in the implemented slice. */
+    public static final String SEMANTIC_FLOW_CALL_TARGET = "HRP2142";
+    /** Named arguments do not match the signature of a Flow call target. */
+    public static final String SEMANTIC_FLOW_CALL_ARGUMENT = "HRP2143";
+    /** A Flow call discards a result or assigns an operation that returns nothing. */
+    public static final String SEMANTIC_FLOW_CALL_RESULT = "HRP2144";
+    /** A path parameter names nothing the operation can fill it with. */
+    public static final String SEMANTIC_PATH_PARAM_INPUT = "HRP2135";
+    /** A partial update demands an input the client is free to omit. */
+    public static final String SEMANTIC_PATCH_REQUIRED_INPUT = "HRP2136";
+    /** A partial update is bound to a flow that updates nothing from the request. */
+    public static final String SEMANTIC_PATCH_WITHOUT_UPDATE = "HRP2137";
+    /** An input bound to a path or query carries something a URL cannot spell. */
+    public static final String SEMANTIC_URL_BOUND_INPUT = "HRP2138";
 
     // --- HRP22xx: external binding semantics -------------------------------------------------
     /** A binding references an operation that is not declared. */
@@ -130,6 +176,8 @@ public final class ErrorCodes {
     public static final String SEMANTIC_DUPLICATE_BINDING = "HRP2202";
     /** A request or response mapping does not match the bound operation contract. */
     public static final String SEMANTIC_BINDING_MAPPING = "HRP2203";
+    /** One Integration is bound with more than one authentication scheme. */
+    public static final String SEMANTIC_BINDING_AUTH = "HRP2204";
 
     // --- HRP3xxx: configuration ---------------------------------------------------------------
     /** {@code harpia.yaml} is missing. Exit 2. */

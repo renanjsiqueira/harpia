@@ -26,6 +26,7 @@ final class AstRenderer {
                         .append(field.required() ? " required" : "")
                         .append(field.unique() ? " unique" : "")
                         .append(field.generated() ? " generated" : "")
+                        .append(field.owned() ? " owned" : "")
                         .append(field.defaultValue().map(value -> " default " + value).orElse(""))
                         .append('\n'));
             }
@@ -41,6 +42,25 @@ final class AstRenderer {
                         () -> out.append("    Binding none\n"));
                 useCase.flow().forEach(statement -> out.append("    Flow ")
                         .append(statement.getClass().getSimpleName()).append('\n'));
+            }
+            for (dev.harpia.parse.EventAst.Declaration event : module.events()) {
+                out.append("  Event ").append(event.name()).append('\n');
+                event.payload().forEach(field -> out.append("    Payload ")
+                        .append(field.name()).append(": ").append(field.type())
+                        .append(field.required() ? " required" : "").append('\n'));
+            }
+            for (dev.harpia.parse.IntegrationAst.Declaration integration
+                    : module.integrations()) {
+                out.append("  Integration ").append(integration.name()).append('\n');
+                integration.operations().forEach(operation -> {
+                    out.append("    Operation ").append(operation.name()).append('\n');
+                    operation.input().forEach(parameter -> out.append("      Input ")
+                            .append(parameter.name()).append(": ").append(parameter.type())
+                            .append(parameter.required() ? " required" : "").append('\n'));
+                    out.append("      Output ").append(operation.output().type()).append('\n');
+                    operation.errors().forEach(error -> out.append("      Error ")
+                            .append(error.name()).append('\n'));
+                });
             }
             for (LogicAst.Declaration logic : module.logics()) {
                 out.append("  Logic ").append(logic.name()).append('\n');
@@ -66,6 +86,10 @@ final class AstRenderer {
                     .append(binding.endpoint().method()).append(' ')
                     .append(binding.endpoint().path()).append(" access=")
                     .append(binding.access()).append('\n'));
+            file.integrationHttpBindings().forEach(binding -> out.append("  IntegrationHttp ")
+                    .append(binding.target()).append(' ')
+                    .append(binding.endpoint().method()).append(' ')
+                    .append(binding.endpoint().path()).append('\n'));
         });
         return out.toString();
     }

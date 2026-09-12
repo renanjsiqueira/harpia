@@ -9,6 +9,8 @@ import dev.harpia.binding.BindingModel;
 import dev.harpia.binding.BindingParser;
 import dev.harpia.binding.BindingResolver;
 import dev.harpia.binding.BindingValidator;
+import dev.harpia.binding.IntegrationBindingResolver;
+import dev.harpia.binding.IntegrationBindingValidator;
 import dev.harpia.capability.CapabilityAnalyzer;
 import dev.harpia.capability.CapabilityRequirementSet;
 import dev.harpia.capability.CapabilityResolver;
@@ -101,8 +103,13 @@ public final class HarpiaCompiler {
 
         SymbolTable symbols = SymbolTable.declare(syntax, diagnostics);
         stages = stages.withSymbols(symbols);
-        BindingModel bindings = BindingResolver.resolve(syntax, symbols, diagnostics);
+        BindingModel bindings = IntegrationBindingResolver.enrich(
+                syntax,
+                symbols,
+                BindingResolver.resolve(syntax, symbols, diagnostics),
+                diagnostics);
         BindingValidator.validate(syntax, bindings, diagnostics);
+        IntegrationBindingValidator.validate(syntax, bindings, diagnostics);
         SemanticValidator.validate(syntax, symbols, bindings, diagnostics);
         LogicAnalyzer.Result computations =
                 LogicAnalyzer.analyze(syntax, symbols, diagnostics);
@@ -116,7 +123,13 @@ public final class HarpiaCompiler {
                 bindings,
                 computations.logics(),
                 computations.scenarios(),
-                computations.rules());
+                computations.rules(),
+                computations.invariants(),
+                computations.guards(),
+                computations.assignments(),
+                computations.flowCalls(),
+                computations.integrationCalls(),
+                computations.operationCalls());
         TestCoverage.report(business, config.generation().tests(), diagnostics);
         stages = stages.withBusiness(business);
         CapabilityRequirementSet requirements = CapabilityAnalyzer.analyze(business);
@@ -140,7 +153,8 @@ public final class HarpiaCompiler {
         }
 
         Optional<ResolvedCapabilities> capabilities =
-                CapabilityResolver.resolve(requirements, config, diagnostics);
+                CapabilityResolver.resolve(
+                        requirements, config, Optional.of(business), diagnostics);
         if (capabilities.isEmpty()) {
             return failed(stages, diagnostics);
         }
@@ -175,6 +189,7 @@ public final class HarpiaCompiler {
         return new CompileResult(
                 Optional.of(generated),
                 Optional.of(config.paths().output()),
+                Optional.of(config.target().id()),
                 stages,
                 diagnostics.diagnostics());
     }

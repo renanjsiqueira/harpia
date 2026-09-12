@@ -39,9 +39,12 @@ public final class BindingResolver {
                                         HttpBinding.HttpMethod.valueOf(endpoint.method()),
                                         "",
                                         endpoint.path(),
-                                        endpoint.path().endsWith("/{id}"),
-                                        AccessRule.valueOf(
-                                                operation.access().orElseThrow().name()),
+                                        // Since a path takes {name} in any segment, the record the
+                                        // flow loads can sit anywhere: /accounts/{id}/withdrawals
+                                        // names it as plainly as /accounts/{id} does.
+                                        dev.harpia.parse.EndpointParser.parameters(endpoint.path())
+                                                .contains("id"),
+                                        accessRule(operation.access().orElseThrow()),
                                         inferredRequest(operation, endpoint.where()),
                                         inferredResponse(operation),
                                         operation.where(),
@@ -72,8 +75,10 @@ public final class BindingResolver {
                                                 binding.endpoint().method()),
                                         file.baseUrl().map(BindingAst.BaseUrl::path).orElse(""),
                                         binding.endpoint().path(),
-                                        binding.endpoint().path().endsWith("/{id}"),
-                                        AccessRule.valueOf(binding.access().name()),
+                                        dev.harpia.parse.EndpointParser
+                                                .parameters(binding.endpoint().path())
+                                                .contains("id"),
+                                        accessRule(binding.access()),
                                         binding.request().stream()
                                                 .map(BindingResolver::request)
                                                 .toList(),
@@ -93,13 +98,44 @@ public final class BindingResolver {
             SpecAst.UseCaseDeclaration operation,
             dev.harpia.diag.SourceRef where) {
         java.util.List<HttpBinding.RequestMapping> mappings = new java.util.ArrayList<>();
-        if (operation.flow().stream().anyMatch(SpecAst.LoadById.class::isInstance)) {
-            mappings.add(new HttpBinding.Path("id", "id", where));
+        java.util.Set<String> fromPath = new java.util.LinkedHashSet<>();
+        // An inline endpoint has no mapping section, so a parameter binds to the input that shares
+        // its name. `id` is the record the flow loads and is not an input.
+        for (String parameter : dev.harpia.parse.EndpointParser.parameters(
+                operation.endpoint().map(SpecAst.Endpoint::path).orElse(""))) {
+            mappings.add(new HttpBinding.Path(parameter, parameter, where));
+            if (!parameter.equals("id")) {
+                fromPath.add(parameter);
+            }
         }
-        if (!operation.input().isEmpty()) {
+        java.util.List<SpecAst.InputDeclaration> remaining = operation.input().stream()
+                .filter(field -> !fromPath.contains(field.name()))
+                .toList();
+        if (remaining.isEmpty()) {
+            return java.util.List.copyOf(mappings);
+        }
+        // A request that carries no body still has to carry its inputs, and the only other place
+        // an inline endpoint has for them is the query string. The name is the mapping there too.
+        if (carriesBody(operation)) {
             mappings.add(new HttpBinding.Body("input", operation.where()));
+        } else {
+            for (SpecAst.InputDeclaration field : remaining) {
+                mappings.add(new HttpBinding.Query(field.name(), field.name(), field.where()));
+            }
         }
         return java.util.List.copyOf(mappings);
+    }
+
+    /**
+     * Whether the request has a body to put the remaining inputs in.
+     *
+     * <p>GET and DELETE state what to act on, not a document to act with. A body on either is
+     * something no client expects to send and no proxy promises to forward, so what those verbs
+     * carry goes in the URL.
+     */
+    private static boolean carriesBody(SpecAst.UseCaseDeclaration operation) {
+        String method = operation.endpoint().map(SpecAst.Endpoint::method).orElse("");
+        return !method.equals("GET") && !method.equals("DELETE");
     }
 
     private static HttpBinding.ResponseMapping inferredResponse(
@@ -107,6 +143,14 @@ public final class BindingResolver {
         return operation.output().shape().kind() == SpecAst.OutputKind.NOTHING
                 ? new HttpBinding.NoResponse(operation.output().where())
                 : new HttpBinding.ResponseBody("output", operation.output().where());
+    }
+
+    private static AccessRule accessRule(SpecAst.Access access) {
+        return new AccessRule(AccessRule.Kind.valueOf(access.kind().name()), access.roles());
+    }
+
+    private static AccessRule accessRule(BindingAst.Access access) {
+        return new AccessRule(AccessRule.Kind.valueOf(access.kind().name()), access.roles());
     }
 
     private static HttpBinding.RequestMapping request(BindingAst.RequestMapping mapping) {

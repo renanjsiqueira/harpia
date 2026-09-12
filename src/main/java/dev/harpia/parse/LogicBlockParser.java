@@ -36,53 +36,21 @@ public final class LogicBlockParser {
         Objects.requireNonNull(blockWhere, "blockWhere");
         Objects.requireNonNull(diagnostics, "diagnostics");
 
-        List<Line> lines = new ArrayList<>();
-        boolean valid = true;
-        for (RawSpan span : bodyLines) {
-            String text = span.text().stripTrailing();
-            if (text.isBlank()) {
-                continue;
-            }
-            int tab = text.indexOf('\t');
-            if (tab >= 0) {
-                diagnostics.error(
-                        ErrorCodes.SYNTAX_LOGIC_INDENT,
-                        "tabs are not allowed inside a logic block; indent with four spaces",
-                        LineSyntax.at(span.where(), text, tab));
-                valid = false;
-                continue;
-            }
-            int indent = 0;
-            while (indent < text.length() && text.charAt(indent) == ' ') {
-                indent++;
-            }
-            if (indent % INDENT != 0) {
-                diagnostics.error(
-                        ErrorCodes.SYNTAX_LOGIC_INDENT,
-                        "indentation must be a multiple of four spaces but was " + indent,
-                        span.where());
-                valid = false;
-                continue;
-            }
-            lines.add(new Line(indent / INDENT, text.substring(indent), span, indent));
-        }
-        if (!valid) {
+        Optional<List<IndentedLines.Line>> scanned = IndentedLines.scan(
+                bodyLines,
+                blockWhere,
+                ErrorCodes.SYNTAX_LOGIC_INDENT,
+                ErrorCodes.SYNTAX_LOGIC_STATEMENT,
+                "a logic block must contain at least one statement",
+                "the first statement of a logic block must not be indented",
+                "tabs are not allowed inside a logic block; indent with four spaces",
+                diagnostics);
+        if (scanned.isEmpty()) {
             return Optional.empty();
         }
-        if (lines.isEmpty()) {
-            diagnostics.error(
-                    ErrorCodes.SYNTAX_LOGIC_STATEMENT,
-                    "a logic block must contain at least one statement",
-                    blockWhere);
-            return Optional.empty();
-        }
-        if (lines.getFirst().level() != 0) {
-            diagnostics.error(
-                    ErrorCodes.SYNTAX_LOGIC_INDENT,
-                    "the first statement of a logic block must not be indented",
-                    lines.getFirst().where());
-            return Optional.empty();
-        }
+        List<Line> lines = scanned.orElseThrow().stream()
+                .map(line -> new Line(line.level(), line.text(), line.span(), line.indent()))
+                .toList();
 
         LogicBlockParser parser = new LogicBlockParser(lines, diagnostics);
         List<Statement> statements = parser.block(0, 0);

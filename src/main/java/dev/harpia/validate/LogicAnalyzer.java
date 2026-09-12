@@ -11,12 +11,17 @@ import dev.harpia.logic.TypedExpression;
 import dev.harpia.logic.TypedStatement;
 import dev.harpia.logic.UnaryOperator;
 import dev.harpia.model.LogicModel;
+import dev.harpia.model.FlowCallModel;
+import dev.harpia.model.IntegrationCallModel;
+import dev.harpia.model.OperationCallModel;
+import dev.harpia.model.OutputModel;
 import dev.harpia.parse.SpecAst;
 import dev.harpia.model.Naming;
 import dev.harpia.model.RuleModel;
 import dev.harpia.model.ScenarioModel;
 import dev.harpia.model.TypeRef;
 import dev.harpia.parse.LogicAst;
+import dev.harpia.parse.FieldLineParser;
 import dev.harpia.parse.ModuleAst;
 import dev.harpia.parse.ProjectAst;
 import dev.harpia.symbol.Symbol;
@@ -72,10 +77,772 @@ public final class LogicAnalyzer {
         }
 
         reportCycles(callGraph, symbols, diagnostics);
+        FlowCalls flowCalls = flowCalls(project, symbols, diagnostics);
         return new Result(
                 List.copyOf(models),
                 ScenarioAnalyzer.analyze(project, symbols, diagnostics),
-                rules(project, symbols, diagnostics));
+                rules(project, symbols, diagnostics),
+                invariants(project, symbols, diagnostics),
+                guards(project, symbols, diagnostics),
+                assignments(project, symbols, diagnostics),
+                flowCalls.logics(),
+                flowCalls.integrations(),
+                flowCalls.operations());
+    }
+
+    /** Resolves Flow calls in source order, extending scope with each typed result. */
+    private static FlowCalls flowCalls(
+            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+        Map<SourceRef, FlowCallModel> resolved = new LinkedHashMap<>();
+        Map<SourceRef, IntegrationCallModel> integrations = new LinkedHashMap<>();
+        Map<SourceRef, OperationCallModel> operations = new LinkedHashMap<>();
+        Map<String, String> customLogics = new LinkedHashMap<>();
+        project.modules().stream()
+                .flatMap(module -> module.logics().stream())
+                .filter(declaration -> declaration.custom().isPresent())
+                .forEach(declaration -> customLogics.put(
+                        declaration.name(), declaration.custom().orElseThrow().contract()));
+        Map<String, OperationSignature> commandSignatures = commandSignatures(project, symbols);
+        for (ModuleAst module : project.modules()) {
+            for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
+                LinkedHashMap<String, LogicModel.Parameter> scope = new LinkedHashMap<>();
+                scopeOfBoundaryValues(useCase.input(), symbols)
+                        .forEach(parameter -> scope.put(parameter.name(), parameter));
+                resolveFlowCalls(
+                        useCase.flow(),
+                        Naming.useCaseBaseName(useCase.title()),
+                        scope,
+                        symbols,
+                        customLogics,
+                        commandSignatures,
+                        resolved,
+                        integrations,
+                        operations,
+                        diagnostics);
+            }
+        }
+        return new FlowCalls(
+                Map.copyOf(resolved), Map.copyOf(integrations), Map.copyOf(operations));
+    }
+
+    private static void resolveFlowCalls(
+            List<SpecAst.FlowStatement> flow,
+            String caller,
+            LinkedHashMap<String, LogicModel.Parameter> scope,
+            SymbolTable symbols,
+            Map<String, String> customLogics,
+            Map<String, OperationSignature> commandSignatures,
+            Map<SourceRef, FlowCallModel> resolved,
+            Map<SourceRef, IntegrationCallModel> integrations,
+            Map<SourceRef, OperationCallModel> operations,
+            DiagnosticCollector diagnostics) {
+        for (SpecAst.FlowStatement statement : flow) {
+            if (statement instanceof SpecAst.Conditional conditional) {
+                resolveFlowCalls(
+                        conditional.whenTrue(), caller, new LinkedHashMap<>(scope), symbols,
+                        customLogics, commandSignatures, resolved, integrations, operations,
+                        diagnostics);
+                resolveFlowCalls(
+                        conditional.whenFalse(), caller, new LinkedHashMap<>(scope), symbols,
+                        customLogics, commandSignatures, resolved, integrations, operations,
+                        diagnostics);
+                continue;
+            }
+            if (!(statement instanceof SpecAst.Call call)) {
+                continue;
+            }
+            List<LogicModel.Parameter> visible = List.copyOf(scope.values());
+            if (call.operation().isPresent()) {
+                resolveIntegrationCall(call, visible, symbols, diagnostics).ifPresent(model -> {
+                    integrations.put(call.where(), model);
+                    model.variable().ifPresent(variable -> scope.put(variable,
+                            new LogicModel.Parameter(
+                                    variable, model.resultType().orElseThrow(), call.where())));
+                });
+                continue;
+            }
+
+            Optional<Symbol.Computation> computation = symbols.computation(call.target());
+            Optional<Symbol> operation = symbols.lookup(
+                    dev.harpia.symbol.Namespace.OPERATIONS, call.target());
+            if (computation.isPresent() && operation.isPresent()) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_TARGET,
+                        "call target '" + call.target()
+                                + "' is ambiguous between Logic and Command/Query",
+                        call.where());
+                continue;
+            }
+            if (computation.isPresent()) {
+                if (call.variable().isEmpty()) {
+                    diagnostics.error(
+                            ErrorCodes.SEMANTIC_FLOW_CALL_RESULT,
+                            "Logic '" + call.target()
+                                    + "' returns a value; assign it as '<name> = call ...'",
+                            call.where());
+                    continue;
+                }
+                resolveLogicCall(
+                                call,
+                                computation.orElseThrow(),
+                                visible,
+                                Optional.ofNullable(customLogics.get(call.target())),
+                                symbols,
+                                diagnostics)
+                        .ifPresent(model -> {
+                            resolved.put(call.where(), model);
+                            String variable = model.variable().orElseThrow();
+                            scope.put(variable, new LogicModel.Parameter(
+                                    variable, model.resultType(), call.where()));
+                        });
+                continue;
+            }
+            OperationSignature signature = commandSignatures.get(call.target());
+            if (signature == null) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_TARGET,
+                        operation.isPresent()
+                                ? "Flow can call explicit Commands, but '" + call.target()
+                                        + "' is a Query or legacy operation"
+                                : "unknown Flow call target '" + call.target() + "'",
+                        call.where());
+                continue;
+            }
+            if (call.target().equals(caller)) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_TARGET,
+                        "Command '" + call.target() + "' cannot call itself",
+                        call.where());
+                continue;
+            }
+            resolveOperationCall(call, signature, visible, symbols, diagnostics)
+                    .ifPresent(model -> operations.put(call.where(), model));
+        }
+    }
+
+    private static Optional<IntegrationCallModel> resolveIntegrationCall(
+            SpecAst.Call call,
+            List<LogicModel.Parameter> scope,
+            SymbolTable symbols,
+            DiagnosticCollector diagnostics) {
+        Optional<Symbol.Integration> integration = symbols.integration(call.target());
+        if (integration.isEmpty()) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_FLOW_CALL_TARGET,
+                    "cannot call '" + call.displayTarget() + "': no Integration named '"
+                            + call.target() + "' is declared",
+                    call.where());
+            return Optional.empty();
+        }
+        String operationName = call.operation().orElseThrow();
+        Optional<dev.harpia.parse.IntegrationAst.Operation> operation =
+                integration.orElseThrow().operation(operationName);
+        if (operation.isEmpty()) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_FLOW_CALL_TARGET,
+                    "Integration '" + call.target() + "' has no operation '"
+                            + operationName + "'",
+                    call.where(),
+                    "Integration declared here",
+                    integration.orElseThrow().where());
+            return Optional.empty();
+        }
+
+        dev.harpia.parse.IntegrationAst.Operation signature = operation.orElseThrow();
+        boolean returnsNothing = signature.output().returnsNothing();
+        if (returnsNothing && call.variable().isPresent()) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_FLOW_CALL_RESULT,
+                    "Integration operation '" + call.displayTarget()
+                            + "' returns nothing and cannot be assigned",
+                    call.where());
+            return Optional.empty();
+        }
+        if (!returnsNothing && call.variable().isEmpty()) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_FLOW_CALL_RESULT,
+                    "Integration operation '" + call.displayTarget()
+                            + "' returns a value; assign it as '<name> = call ...'",
+                    call.where());
+            return Optional.empty();
+        }
+
+        Map<String, LogicAst.NamedArgument> supplied = new LinkedHashMap<>();
+        boolean valid = true;
+        for (LogicAst.NamedArgument argument : call.arguments()) {
+            LogicAst.NamedArgument first = supplied.putIfAbsent(argument.name(), argument);
+            if (first != null) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_ARGUMENT,
+                        "call to Integration operation '" + call.displayTarget()
+                                + "' repeats argument '" + argument.name() + "'",
+                        argument.where(),
+                        "first supplied here",
+                        first.where());
+                valid = false;
+            } else if (signature.input().stream()
+                    .noneMatch(parameter -> parameter.name().equals(argument.name()))) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_ARGUMENT,
+                        "Integration operation '" + call.displayTarget()
+                                + "' has no parameter '" + argument.name() + "'",
+                        argument.where());
+                valid = false;
+            }
+        }
+
+        List<IntegrationCallModel.Argument> arguments = new ArrayList<>();
+        for (SpecAst.InputDeclaration parameter : signature.input()) {
+            LogicAst.NamedArgument suppliedArgument = supplied.get(parameter.name());
+            if (suppliedArgument == null) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_ARGUMENT,
+                        "call to Integration operation '" + call.displayTarget()
+                                + "' is missing argument '" + parameter.name() + "'",
+                        call.where());
+                valid = false;
+                continue;
+            }
+            Optional<LogicType> parameterType = boundaryType(parameter.type(), symbols);
+            if (parameterType.isEmpty()) {
+                valid = false;
+                continue;
+            }
+            Optional<TypedExpression> value = analyzeExpression(
+                    "argument '" + parameter.name() + "' of Integration "
+                            + call.displayTarget(),
+                    scope,
+                    parameterType.orElseThrow(),
+                    suppliedArgument.value(),
+                    symbols,
+                    suppliedArgument.where(),
+                    diagnostics);
+            if (value.isEmpty()) {
+                valid = false;
+                continue;
+            }
+            arguments.add(new IntegrationCallModel.Argument(
+                    parameter.name(),
+                    value.orElseThrow(),
+                    parameterType.orElseThrow(),
+                    suppliedArgument.where()));
+        }
+        Optional<LogicType> resultType = returnsNothing
+                ? Optional.empty()
+                : boundaryType(signature.output().type(), symbols);
+        valid &= returnsNothing || resultType.isPresent();
+        return valid
+                ? Optional.of(new IntegrationCallModel(
+                        call.variable(),
+                        call.target(),
+                        operationName,
+                        arguments,
+                        resultType,
+                        call.where()))
+                : Optional.empty();
+    }
+
+    private static Map<String, OperationSignature> commandSignatures(
+            ProjectAst project, SymbolTable symbols) {
+        Map<String, OperationSignature> signatures = new LinkedHashMap<>();
+        for (ModuleAst module : project.modules()) {
+            for (SpecAst.UseCaseDeclaration operation : module.useCases()) {
+                if (operation.declaredKind() != dev.harpia.parse.DeclarationKind.COMMAND) {
+                    continue;
+                }
+                Optional<String> entity = operationEntity(module, operation);
+                if (entity.isEmpty()) {
+                    continue;
+                }
+                boolean requiresId = flattened(operation.flow()).stream()
+                        .anyMatch(SpecAst.LoadById.class::isInstance);
+                List<OperationParameter> parameters = new ArrayList<>();
+                if (requiresId) {
+                    parameters.add(new OperationParameter(
+                            "id", LogicType.of("UUID"), true, operation.where()));
+                }
+                boolean valid = true;
+                for (SpecAst.InputDeclaration parameter : operation.input()) {
+                    Optional<LogicType> type = boundaryType(parameter.type(), symbols);
+                    if (type.isEmpty()) {
+                        valid = false;
+                        continue;
+                    }
+                    parameters.add(new OperationParameter(
+                            parameter.name(), type.orElseThrow(), false, parameter.where()));
+                }
+                if (valid) {
+                    signatures.put(
+                            Naming.useCaseBaseName(operation.title()),
+                            new OperationSignature(
+                                    Naming.useCaseBaseName(operation.title()),
+                                    entity.orElseThrow(),
+                                    requiresId,
+                                    parameters,
+                                    OutputModel.Kind.valueOf(
+                                            operation.output().shape().kind().name()),
+                                    operation.where()));
+                }
+            }
+        }
+        return Map.copyOf(signatures);
+    }
+
+    private static Optional<String> operationEntity(
+            ModuleAst module, SpecAst.UseCaseDeclaration operation) {
+        for (SpecAst.FlowStatement statement : flattened(operation.flow())) {
+            if (statement instanceof SpecAst.CreateFrom value) {
+                return Optional.of(value.entity());
+            }
+            if (statement instanceof SpecAst.LoadById value) {
+                return Optional.of(value.entity());
+            }
+            if (statement instanceof SpecAst.FindBy value) {
+                return Optional.of(value.entity());
+            }
+            if (statement instanceof SpecAst.ListAll value) {
+                return Optional.of(value.entity());
+            }
+            if (statement instanceof SpecAst.ListBy value) {
+                return Optional.of(value.entity());
+            }
+        }
+        return module.declaresEntity()
+                ? Optional.of(module.entity().name())
+                : Optional.empty();
+    }
+
+    private static Optional<OperationCallModel> resolveOperationCall(
+            SpecAst.Call call,
+            OperationSignature signature,
+            List<LogicModel.Parameter> scope,
+            SymbolTable symbols,
+            DiagnosticCollector diagnostics) {
+        boolean returnsNothing = signature.resultKind() == OutputModel.Kind.NOTHING;
+        if (returnsNothing == call.variable().isPresent()) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_FLOW_CALL_RESULT,
+                    returnsNothing
+                            ? "Command '" + call.target()
+                                    + "' returns nothing and cannot be assigned"
+                            : "Command '" + call.target()
+                                    + "' returns a value; assign it as '<name> = call ...'",
+                    call.where());
+            return Optional.empty();
+        }
+        Map<String, LogicAst.NamedArgument> supplied = new LinkedHashMap<>();
+        boolean valid = true;
+        for (LogicAst.NamedArgument argument : call.arguments()) {
+            LogicAst.NamedArgument first = supplied.putIfAbsent(argument.name(), argument);
+            if (first != null) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_ARGUMENT,
+                        "call to Command '" + call.target() + "' repeats argument '"
+                                + argument.name() + "'",
+                        argument.where(),
+                        "first supplied here",
+                        first.where());
+                valid = false;
+            } else if (signature.parameters().stream()
+                    .noneMatch(parameter -> parameter.name().equals(argument.name()))) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_ARGUMENT,
+                        "Command '" + call.target() + "' has no parameter '"
+                                + argument.name() + "'",
+                        argument.where());
+                valid = false;
+            }
+        }
+        List<OperationCallModel.Argument> arguments = new ArrayList<>();
+        for (OperationParameter parameter : signature.parameters()) {
+            LogicAst.NamedArgument suppliedArgument = supplied.get(parameter.name());
+            if (suppliedArgument == null) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_ARGUMENT,
+                        "call to Command '" + call.target() + "' is missing argument '"
+                                + parameter.name() + "'",
+                        call.where());
+                valid = false;
+                continue;
+            }
+            Optional<TypedExpression> value = analyzeExpression(
+                    "argument '" + parameter.name() + "' of Command " + call.target(),
+                    scope,
+                    parameter.type(),
+                    suppliedArgument.value(),
+                    symbols,
+                    suppliedArgument.where(),
+                    diagnostics);
+            if (value.isEmpty()) {
+                valid = false;
+                continue;
+            }
+            arguments.add(new OperationCallModel.Argument(
+                    parameter.name(),
+                    value.orElseThrow(),
+                    parameter.type(),
+                    parameter.identifier(),
+                    suppliedArgument.where()));
+        }
+        return valid
+                ? Optional.of(new OperationCallModel(
+                        call.variable(),
+                        signature.operation(),
+                        signature.entity(),
+                        signature.requiresId(),
+                        arguments,
+                        signature.resultKind(),
+                        call.where()))
+                : Optional.empty();
+    }
+
+    private static List<LogicModel.Parameter> scopeOfBoundaryValues(
+            List<SpecAst.InputDeclaration> input, SymbolTable symbols) {
+        List<LogicModel.Parameter> scope = new ArrayList<>();
+        for (SpecAst.InputDeclaration field : input) {
+            boundaryType(field.type(), symbols).ifPresent(type -> scope.add(
+                    new LogicModel.Parameter(field.name(), type, field.where())));
+        }
+        return List.copyOf(scope);
+    }
+
+    /** Translates a validated Integration type without introducing a target language type. */
+    private static Optional<LogicType> boundaryType(String syntax, SymbolTable symbols) {
+        Optional<String> optional = FieldLineParser.optionalOf(syntax);
+        if (optional.isPresent()) {
+            return boundaryType(optional.orElseThrow(), symbols).map(LogicType.Optionality::new);
+        }
+        Optional<String> element = FieldLineParser.elementOf(syntax);
+        if (element.isPresent()) {
+            return boundaryType(element.orElseThrow(), symbols).map(LogicType.Container::new);
+        }
+        if (FieldLineParser.isScalar(syntax)) {
+            return Optional.of(LogicType.of(syntax));
+        }
+        if (symbols.enumType(syntax).isPresent() || symbols.valueType(syntax).isPresent()) {
+            return Optional.of(new LogicType.Nominal(syntax));
+        }
+        return Optional.empty();
+    }
+
+    private record FlowCalls(
+            Map<SourceRef, FlowCallModel> logics,
+            Map<SourceRef, IntegrationCallModel> integrations,
+            Map<SourceRef, OperationCallModel> operations) {
+    }
+
+    private record OperationSignature(
+            String operation,
+            String entity,
+            boolean requiresId,
+            List<OperationParameter> parameters,
+            OutputModel.Kind resultKind,
+            SourceRef where) {
+        private OperationSignature {
+            parameters = List.copyOf(parameters);
+        }
+    }
+
+    private record OperationParameter(
+            String name, LogicType type, boolean identifier, SourceRef where) {
+    }
+
+    private static Optional<FlowCallModel> resolveLogicCall(
+            SpecAst.Call call,
+            Symbol.Computation computation,
+            List<LogicModel.Parameter> scope,
+            Optional<String> customContract,
+            SymbolTable symbols,
+            DiagnosticCollector diagnostics) {
+        Map<String, LogicAst.NamedArgument> supplied = new LinkedHashMap<>();
+        boolean valid = true;
+        for (LogicAst.NamedArgument argument : call.arguments()) {
+            LogicAst.NamedArgument first = supplied.putIfAbsent(argument.name(), argument);
+            if (first != null) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_ARGUMENT,
+                        "call to Logic '" + call.target() + "' repeats argument '"
+                                + argument.name() + "'",
+                        argument.where(),
+                        "first supplied here",
+                        first.where());
+                valid = false;
+            } else if (computation.parameter(argument.name()).isEmpty()) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_ARGUMENT,
+                        "Logic '" + call.target() + "' has no parameter '"
+                                + argument.name() + "'",
+                        argument.where());
+                valid = false;
+            }
+        }
+
+        List<FlowCallModel.Argument> arguments = new ArrayList<>();
+        for (LogicModel.Parameter parameter : computation.parameters()) {
+            LogicAst.NamedArgument suppliedArgument = supplied.get(parameter.name());
+            if (suppliedArgument == null) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_ARGUMENT,
+                        "call to Logic '" + call.target() + "' is missing argument '"
+                                + parameter.name() + "'",
+                        call.where());
+                valid = false;
+                continue;
+            }
+            Optional<TypedExpression> value = analyzeExpression(
+                    "argument '" + parameter.name() + "' of Logic " + call.target(),
+                    scope,
+                    parameter.type(),
+                    suppliedArgument.value(),
+                    symbols,
+                    suppliedArgument.where(),
+                    diagnostics);
+            if (value.isEmpty()) {
+                valid = false;
+                continue;
+            }
+            arguments.add(new FlowCallModel.Argument(
+                    parameter.name(),
+                    value.orElseThrow(),
+                    parameter.type(),
+                    suppliedArgument.where()));
+        }
+        return valid
+                ? Optional.of(new FlowCallModel(
+                        call.variable(),
+                        call.target(),
+                        arguments,
+                        computation.returnType(),
+                        customContract,
+                        call.where()))
+                : Optional.empty();
+    }
+
+    /**
+     * The typed invariants of every entity, by entity name.
+     *
+     * <p>A rule is a condition over what one operation was asked to do. An invariant is a condition
+     * over what the entity is allowed to be, so its scope is the entity's own fields and it holds
+     * whichever operation ran.
+     */
+    /**
+     * The typed value of every {@code set}, by source position.
+     *
+     * <p>A set assigns to a field, so the field's type is what the expression must produce. Typing
+     * it against that type is what turns "assign something" into "assign this".
+     */
+    public static Map<SourceRef, TypedExpression> assignments(
+            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+        Map<String, Map<String, SpecAst.FieldDeclaration>> entities = new LinkedHashMap<>();
+        for (ModuleAst module : project.modules()) {
+            if (!module.declaresEntity()) {
+                continue;
+            }
+            Map<String, SpecAst.FieldDeclaration> fields = new LinkedHashMap<>();
+            module.entity().fields().forEach(field -> fields.putIfAbsent(field.name(), field));
+            entities.put(module.entity().name(), fields);
+        }
+
+        Map<SourceRef, TypedExpression> typed = new LinkedHashMap<>();
+        for (ModuleAst module : project.modules()) {
+            for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
+                List<SpecAst.FlowStatement> statements = flattened(useCase.flow());
+                boolean assigns = statements.stream().anyMatch(statement ->
+                        statement instanceof SpecAst.SetField
+                                || statement instanceof SpecAst.ChangeCollection);
+                if (!assigns) {
+                    continue;
+                }
+                Map<String, String> variables = new LinkedHashMap<>();
+                for (SpecAst.FlowStatement statement : statements) {
+                    if (statement instanceof SpecAst.CreateFrom create) {
+                        variables.put(create.variable(), create.entity());
+                    } else if (statement instanceof SpecAst.LoadById load) {
+                        variables.put(load.variable(), load.entity());
+                    } else if (statement instanceof SpecAst.FindBy find) {
+                        variables.put(find.variable(), find.entity());
+                    }
+                }
+                List<LogicModel.Parameter> scope = scopeOf(useCase.input());
+                for (SpecAst.FlowStatement statement : statements) {
+                    String variable;
+                    String fieldName;
+                    String text;
+                    LogicAst.Expression expression;
+                    boolean element;
+                    if (statement instanceof SpecAst.SetField set) {
+                        variable = set.variable();
+                        fieldName = set.field();
+                        text = set.text();
+                        expression = set.value();
+                        element = false;
+                    } else if (statement instanceof SpecAst.ChangeCollection change) {
+                        variable = change.variable();
+                        fieldName = change.field();
+                        text = change.text();
+                        expression = change.element();
+                        element = true;
+                    } else {
+                        continue;
+                    }
+                    SpecAst.FieldDeclaration field = Optional.ofNullable(variables.get(variable))
+                            .map(entities::get)
+                            .map(fields -> fields.get(fieldName))
+                            .orElse(null);
+                    if (field == null) {
+                        continue;
+                    }
+                    // An element joins a collection, so what it must be is the collection's
+                    // element type, not the collection.
+                    String expected = element
+                            ? FieldLineParser.elementOf(field.type()).orElse(null)
+                            : field.type();
+                    if (expected == null || !FieldLineParser.isScalar(expected)) {
+                        // Nothing to type against; the structural error is reported elsewhere.
+                        continue;
+                    }
+                    analyzeExpression(
+                            "'" + text + "'",
+                            scope,
+                            LogicType.of(expected),
+                            expression,
+                            symbols,
+                            statement.where(),
+                            diagnostics)
+                            .ifPresent(value -> typed.put(statement.where(), value));
+                }
+            }
+        }
+        return Map.copyOf(typed);
+    }
+
+    private static List<SpecAst.FlowStatement> flattened(List<SpecAst.FlowStatement> flow) {
+        List<SpecAst.FlowStatement> result = new ArrayList<>();
+        for (SpecAst.FlowStatement statement : flow) {
+            result.add(statement);
+            if (statement instanceof SpecAst.Conditional conditional) {
+                result.addAll(flattened(conditional.whenTrue()));
+                result.addAll(flattened(conditional.whenFalse()));
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    /**
+     * The typed condition of every guarded Flow instruction, by source position.
+     *
+     * <p>A guard is a boolean condition over the operation's input, which is the same thing a rule
+     * is. Typing it through the same analysis keeps one definition of what an expression means.
+     */
+    public static Map<SourceRef, TypedExpression> guards(
+            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+        Map<SourceRef, TypedExpression> typed = new LinkedHashMap<>();
+        for (ModuleAst module : project.modules()) {
+            for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
+                List<LogicModel.Parameter> scope = scopeOf(useCase.input());
+                conditions(useCase.flow(), scope, symbols, typed, diagnostics);
+            }
+        }
+        return Map.copyOf(typed);
+    }
+
+    /**
+     * The input values an expression may name.
+     *
+     * <p>Only scalars for now: the expression algebra has no member access, so a nominal-typed
+     * input has nothing an expression could ask of it. Leaving it out means naming it reports an
+     * unknown value, which is true.
+     */
+    private static List<LogicModel.Parameter> scopeOf(
+            List<SpecAst.InputDeclaration> input) {
+        List<LogicModel.Parameter> scope = new ArrayList<>();
+        for (SpecAst.InputDeclaration field : input) {
+            if (!dev.harpia.parse.FieldLineParser.isScalar(field.type())) {
+                continue;
+            }
+            scope.add(new LogicModel.Parameter(
+                    field.name(), LogicType.of(field.type()), field.where()));
+        }
+        return List.copyOf(scope);
+    }
+
+    /** Every boolean condition a flow states, at any nesting depth. */
+    private static void conditions(
+            List<SpecAst.FlowStatement> flow,
+            List<LogicModel.Parameter> scope,
+            SymbolTable symbols,
+            Map<SourceRef, TypedExpression> typed,
+            DiagnosticCollector diagnostics) {
+        for (SpecAst.FlowStatement statement : flow) {
+            if (statement instanceof SpecAst.Fail fail) {
+                analyzeExpression(
+                        "guard '" + fail.text() + "'",
+                        scope,
+                        LogicType.BOOLEAN,
+                        fail.condition(),
+                        symbols,
+                        fail.where(),
+                        diagnostics)
+                        .ifPresent(expression -> typed.put(fail.where(), expression));
+            } else if (statement instanceof SpecAst.Require require) {
+                analyzeExpression(
+                        "precondition '" + require.text() + "'",
+                        scope,
+                        LogicType.BOOLEAN,
+                        require.condition(),
+                        symbols,
+                        require.where(),
+                        diagnostics)
+                        .ifPresent(expression -> typed.put(require.where(), expression));
+            } else if (statement instanceof SpecAst.Conditional conditional) {
+                analyzeExpression(
+                        "condition '" + conditional.text() + "'",
+                        scope,
+                        LogicType.BOOLEAN,
+                        conditional.condition(),
+                        symbols,
+                        conditional.where(),
+                        diagnostics)
+                        .ifPresent(expression -> typed.put(conditional.where(), expression));
+                conditions(conditional.whenTrue(), scope, symbols, typed, diagnostics);
+                conditions(conditional.whenFalse(), scope, symbols, typed, diagnostics);
+            }
+        }
+    }
+
+    private static Map<String, List<RuleModel>> invariants(
+            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+        Map<String, List<RuleModel>> byEntity = new LinkedHashMap<>();
+        for (ModuleAst module : project.modules()) {
+            for (SpecAst.InvariantDeclaration declaration : module.invariants()) {
+                if (!module.declaresEntity()) {
+                    diagnostics.error(
+                            ErrorCodes.SEMANTIC_INVARIANT_WITHOUT_ENTITY,
+                            "'## Invariants' needs a '## Data' in the same module to constrain",
+                            declaration.where());
+                    continue;
+                }
+                List<LogicModel.Parameter> scope = module.entity().fields().stream()
+                        .map(field -> new LogicModel.Parameter(
+                                field.name(), LogicType.of(field.type()), field.where()))
+                        .toList();
+                List<RuleModel> typed = new ArrayList<>();
+                for (SpecAst.RuleDeclaration condition : declaration.conditions()) {
+                    analyzeExpression(
+                            "invariant '" + condition.text() + "'",
+                            scope,
+                            LogicType.BOOLEAN,
+                            condition.condition(),
+                            symbols,
+                            condition.where(),
+                            diagnostics)
+                            .ifPresent(expression -> typed.add(new RuleModel(
+                                    condition.text(), expression, condition.where())));
+                }
+                byEntity.put(module.entity().name(), List.copyOf(typed));
+            }
+        }
+        return Map.copyOf(byEntity);
     }
 
     /**
@@ -93,10 +860,7 @@ public final class LogicAnalyzer {
                 if (useCase.rules().isEmpty() || useCase.input().isEmpty()) {
                     continue;
                 }
-                List<LogicModel.Parameter> scope = useCase.input().stream()
-                        .map(field -> new LogicModel.Parameter(
-                                field.name(), LogicType.of(field.type()), field.where()))
-                        .toList();
+                List<LogicModel.Parameter> scope = scopeOf(useCase.input());
                 List<RuleModel> typed = new ArrayList<>();
                 for (SpecAst.RuleDeclaration rule : useCase.rules()) {
                     analyzeExpression(
@@ -120,9 +884,21 @@ public final class LogicAnalyzer {
     public record Result(
             List<LogicModel> logics,
             List<ScenarioModel> scenarios,
-            Map<String, List<RuleModel>> rules) {
+            Map<String, List<RuleModel>> rules,
+            Map<String, List<RuleModel>> invariants,
+            Map<SourceRef, TypedExpression> guards,
+            Map<SourceRef, TypedExpression> assignments,
+            Map<SourceRef, FlowCallModel> flowCalls,
+            Map<SourceRef, IntegrationCallModel> integrationCalls,
+            Map<SourceRef, OperationCallModel> operationCalls) {
         public Result {
             rules = Map.copyOf(rules);
+            invariants = Map.copyOf(invariants);
+            guards = Map.copyOf(guards);
+            assignments = Map.copyOf(assignments);
+            flowCalls = Map.copyOf(flowCalls);
+            integrationCalls = Map.copyOf(integrationCalls);
+            operationCalls = Map.copyOf(operationCalls);
             logics = List.copyOf(logics);
             scenarios = List.copyOf(scenarios);
         }

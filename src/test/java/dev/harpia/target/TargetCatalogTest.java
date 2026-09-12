@@ -81,7 +81,7 @@ class TargetCatalogTest {
         assertThat(java.status()).isEqualTo(TargetStatus.SUPPORTED);
         assertThat(java.capabilities())
                 .extracting(TargetCapabilityInfo::id)
-                .containsExactly("http", "persistence");
+                .containsExactly("http", "persistence", "security");
         assertThat(TargetCatalog.info())
                 .filteredOn(info -> info.status() == TargetStatus.NOT_SUPPORTED)
                 .allSatisfy(info -> assertThat(info.capabilities()).isEmpty());

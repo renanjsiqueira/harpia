@@ -9,6 +9,8 @@ public record ApplicationProject(
         ProjectSettings settings,
         List<ApplicationEnum> enums,
         List<ApplicationValue> values,
+        List<ApplicationIntegration> integrations,
+        List<ApplicationEvent> events,
         List<ApplicationEntity> entities,
         List<ApplicationLogic> logics,
         List<ApplicationScenario> scenarios,
@@ -17,6 +19,8 @@ public record ApplicationProject(
         Objects.requireNonNull(settings, "settings");
         enums = List.copyOf(enums);
         values = List.copyOf(values);
+        integrations = List.copyOf(integrations);
+        events = List.copyOf(events);
         entities = List.copyOf(entities);
         logics = List.copyOf(logics);
         scenarios = List.copyOf(scenarios);

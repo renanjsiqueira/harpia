@@ -39,6 +39,8 @@ public final class JavaSpringErrorTransformer {
 
     private static final String NOT_FOUND = "NotFoundException";
     private static final String RULE_VIOLATION = "RuleViolationException";
+    private static final String INVARIANT_VIOLATION = "InvariantViolationException";
+    private static final int INVARIANT_STATUS = 422;
     private static final String API_ERROR = "ApiError";
     private static final String HANDLER = "ApiExceptionHandler";
     private static final int DEFAULT_NOT_FOUND_STATUS = 404;
@@ -53,7 +55,11 @@ public final class JavaSpringErrorTransformer {
         if (notFoundWhere.isEmpty() && failures.notFound()) {
             notFoundWhere = Optional.of(failures.where());
         }
-        if (notFoundWhere.isEmpty() && !failures.any()) {
+        // A refusal from the security layer answers with the same body, so the type has to exist
+        // even in a project whose specification declares no failure of its own.
+        boolean secured = context.application().capabilities()
+                .requires(dev.harpia.capability.Capability.SECURITY);
+        if (notFoundWhere.isEmpty() && !failures.any() && !secured) {
             return List.of();
         }
         List<JavaSourceFile> files = new ArrayList<>();
@@ -64,11 +70,16 @@ public final class JavaSpringErrorTransformer {
         if (failures.rules()) {
             files.add(ruleViolationException(context, where));
         }
+        if (failures.invariants()) {
+            files.add(invariantViolationException(context, where));
+        }
         for (Map.Entry<String, DomainError> domain : failures.domains().entrySet()) {
             files.add(domainException(context, domain.getKey(), domain.getValue()));
         }
-        if (failures.any()) {
+        if (failures.any() || secured) {
             files.add(apiError(context, where));
+        }
+        if (failures.any()) {
             files.add(handler(context, failures, where));
         }
         return List.copyOf(files);
@@ -185,6 +196,58 @@ public final class JavaSpringErrorTransformer {
         return file(context, RULE_VIOLATION, type, where);
     }
 
+    /**
+     * Raised when an entity would be stored in a state its own declaration forbids.
+     *
+     * <p>It is not invalid input: the request may have been perfectly well formed and still have
+     * asked for a state the entity does not allow. That is why it answers 422 rather than 400.
+     */
+    private static JavaSourceFile invariantViolationException(
+            JavaSpringContext context, SourceRef where) {
+        JavaTypeModel type = new JavaTypeModel(
+                JavaTypeModel.Kind.CLASS,
+                errorPackage(context),
+                INVARIANT_VIOLATION,
+                JavaVisibility.PUBLIC,
+                Set.of(),
+                Optional.of("Raised when an entity would be stored in a state it declares "
+                        + "impossible."),
+                List.of(),
+                List.of(),
+                List.of(JavaTypeRef.of("java.lang.RuntimeException")),
+                List.of(new JavaFieldModel(
+                        "serialVersionUID",
+                        JavaTypeRef.of("long"),
+                        JavaVisibility.PRIVATE,
+                        Set.of(JavaModifier.STATIC, JavaModifier.FINAL),
+                        List.of(),
+                        Optional.of("1L"),
+                        Optional.of(where))),
+                List.of(new JavaConstructorModel(
+                        JavaVisibility.PUBLIC,
+                        List.of(),
+                        List.of(
+                                new JavaParameterModel(
+                                        "entity", JavaTypeRef.of("java.lang.String")),
+                                new JavaParameterModel(
+                                        "invariant", JavaTypeRef.of("java.lang.String"))),
+                        List.of("super(entity + \" does not allow: \" + invariant);"),
+                        Optional.of(where))),
+                List.of(),
+                Optional.of(where));
+        return file(context, INVARIANT_VIOLATION, type, where);
+    }
+
+    private static JavaMethodModel invariantHandler(SourceRef where) {
+        return handlerMethod(
+                "invariantViolation",
+                INVARIANT_VIOLATION,
+                List.of("return ResponseEntity.status(" + INVARIANT_STATUS + ")",
+                        "        .body(new " + API_ERROR + "(" + INVARIANT_STATUS
+                                + ", \"invariant violated\", exception.getMessage()));"),
+                where);
+    }
+
     private static JavaMethodModel ruleHandler(Failures failures, SourceRef where) {
         int status = failures.invalidInputStatus();
         return handlerMethod(
@@ -232,6 +295,9 @@ public final class JavaSpringErrorTransformer {
         }
         if (failures.rules()) {
             methods.add(ruleHandler(failures, where));
+        }
+        if (failures.invariants()) {
+            methods.add(invariantHandler(where));
         }
         if (!failures.duplicates().isEmpty()) {
             methods.add(duplicateHandler(failures, where));
@@ -427,6 +493,7 @@ public final class JavaSpringErrorTransformer {
             int duplicateStatus,
             Map<String, DomainError> domains,
             boolean rules,
+            boolean invariants,
             SourceRef where) {
 
         private static Failures of(JavaSpringContext context) {
@@ -438,9 +505,14 @@ public final class JavaSpringErrorTransformer {
             Map<String, String> duplicates = new LinkedHashMap<>();
             Map<String, DomainError> domains = new java.util.TreeMap<>();
             boolean rules = false;
+            boolean invariants = false;
             SourceRef where = SourceRef.file("harpia.yaml");
 
             for (ApplicationEntity entity : context.application().entities()) {
+                if (!entity.invariants().isEmpty()) {
+                    invariants = true;
+                    where = entity.where();
+                }
                 for (ApplicationOperation operation : entity.operations()) {
                     if (operation.endpoint().isEmpty()) {
                         continue;
@@ -495,6 +567,7 @@ public final class JavaSpringErrorTransformer {
                     duplicateStatus,
                     Map.copyOf(domains).isEmpty() ? Map.of() : new java.util.TreeMap<>(domains),
                     rules,
+                    invariants,
                     where);
         }
 
@@ -506,7 +579,8 @@ public final class JavaSpringErrorTransformer {
         }
 
         private boolean any() {
-            return notFound || invalidInput || !duplicates.isEmpty() || !domains.isEmpty() || rules;
+            return notFound || invalidInput || !duplicates.isEmpty() || !domains.isEmpty()
+                    || rules || invariants;
         }
     }
 }

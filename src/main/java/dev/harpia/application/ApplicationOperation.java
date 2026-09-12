@@ -1,6 +1,8 @@
 package dev.harpia.application;
 
 import dev.harpia.diag.SourceRef;
+import dev.harpia.logic.LogicType;
+import dev.harpia.logic.TypedExpression;
 import dev.harpia.model.OperationNature;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -51,9 +53,39 @@ public record ApplicationOperation(
         }
     }
 
+    /**
+     * Whether an update applies only the fields the request actually carried.
+     *
+     * <p>A full update states the whole resource, so a field the request left out is a field set to
+     * nothing. A partial update states only the changes, so a field left out is not a change at
+     * all and the stored value stands. Only a binding can say which of the two was meant, because
+     * only a binding says how the request arrives.
+     */
+    public boolean partialUpdate() {
+        return endpoint.map(exposed -> exposed.method() == HttpMethod.PATCH).orElse(false);
+    }
+
     /** Whether the semantic flow needs the entity identifier, independently of any binding. */
     public boolean requiresId() {
-        return flow.stream().anyMatch(instruction -> instruction.command() == FlowCommand.LOAD_BY_ID);
+        return allInstructions().stream()
+                .anyMatch(instruction -> instruction.command() == FlowCommand.LOAD_BY_ID);
+    }
+
+    /** Every instruction in source order, including instructions in conditional branches. */
+    public List<FlowInstruction> allInstructions() {
+        java.util.ArrayList<FlowInstruction> result = new java.util.ArrayList<>();
+        append(flow, result);
+        return List.copyOf(result);
+    }
+
+    private static void append(List<FlowInstruction> source, List<FlowInstruction> target) {
+        for (FlowInstruction instruction : source) {
+            target.add(instruction);
+            if (instruction.command() == FlowCommand.IF) {
+                append(instruction.whenTrue(), target);
+                append(instruction.whenFalse(), target);
+            }
+        }
     }
 
     public enum Kind {
@@ -155,30 +187,273 @@ public record ApplicationOperation(
         GET,
         POST,
         PUT,
+        PATCH,
         DELETE
     }
 
-    public enum Access {
-        PUBLIC
+    /**
+     * Who may reach an operation.
+     *
+     * <p>{@code AUTHENTICATED} says the request must carry an identity. {@code ROLE} says the
+     * identity must also hold one of the named roles — any of them, because listing several is
+     * how you say a thing is open to more than one kind of person.
+     *
+     * <p>How an identity is proved, and where its roles come from, is a provider's decision. What
+     * is declared here is which endpoints are reachable without one.
+     */
+    public record Access(Kind kind, java.util.List<String> roles) {
+
+        public enum Kind {
+            PUBLIC,
+            AUTHENTICATED,
+            ROLE,
+            SCOPE
+        }
+
+        public static final Access PUBLIC = new Access(Kind.PUBLIC, java.util.List.of());
+        public static final Access AUTHENTICATED =
+                new Access(Kind.AUTHENTICATED, java.util.List.of());
+
+        public Access {
+            java.util.Objects.requireNonNull(kind, "kind");
+            roles = java.util.List.copyOf(roles);
+            if (roles.isEmpty() != (kind == Kind.PUBLIC || kind == Kind.AUTHENTICATED)) {
+                throw new IllegalArgumentException(
+                        "ROLE and SCOPE name what they demand; nothing else does");
+            }
+        }
+
+        public static Access role(java.util.List<String> roles) {
+            return new Access(Kind.ROLE, roles);
+        }
+
+        public static Access scope(java.util.List<String> scopes) {
+            return new Access(Kind.SCOPE, scopes);
+        }
+
+        /** True when the request has to carry an identity at all, whatever is asked of it. */
+        public boolean requiresIdentity() {
+            return kind != Kind.PUBLIC;
+        }
+
+        /**
+         * The stable form the inspect stages print.
+         *
+         * <p>{@code PUBLIC} and {@code AUTHENTICATED} read as they did when this was an enum, so
+         * nothing that was already written down changed meaning.
+         */
+        @Override
+        public String toString() {
+            return roles.isEmpty()
+                    ? kind.name()
+                    : kind.name() + " " + String.join(" or ", roles);
+        }
     }
 
     public record FlowInstruction(
             FlowCommand command,
             Optional<String> variable,
             Optional<String> entity,
+            List<String> fields,
+            List<SortOrder> sort,
+            boolean paged,
+            Optional<TypedValue> value,
+            Optional<Invocation> invocation,
+            Optional<IntegrationInvocation> integrationInvocation,
+            Optional<OperationInvocation> operationInvocation,
+            List<FlowInstruction> whenTrue,
+            List<FlowInstruction> whenFalse,
             SourceRef where) {
+
+        /** One ordering step: a field and whether it descends. */
+        public record SortOrder(String field, boolean descending) {
+            public SortOrder {
+                Objects.requireNonNull(field, "field");
+            }
+        }
+
+        /**
+         * A name, the source it was written as, and the expression it was typed to.
+         *
+         * <p>A {@code fail} or {@code require} names the error and carries its condition; a
+         * {@code set} names the field and carries the assigned value. The shape is the same because
+         * the question is: which thing, written how, meaning what.
+         */
+        public record TypedValue(
+                String name, String text, TypedExpression expression) {
+            public TypedValue {
+                Objects.requireNonNull(name, "name");
+                Objects.requireNonNull(text, "text");
+                Objects.requireNonNull(expression, "expression");
+            }
+        }
+
+        /** A pure Logic invocation whose arguments already follow the declared signature. */
+        public record Invocation(
+                String target,
+                List<Argument> arguments,
+                LogicType resultType,
+                Optional<String> customContract) {
+            public Invocation {
+                Objects.requireNonNull(target, "target");
+                arguments = List.copyOf(arguments);
+                Objects.requireNonNull(resultType, "resultType");
+                Objects.requireNonNull(customContract, "customContract");
+            }
+
+            public record Argument(
+                    String name,
+                    TypedExpression value,
+                    LogicType parameterType) {
+                public Argument {
+                    Objects.requireNonNull(name, "name");
+                    Objects.requireNonNull(value, "value");
+                    Objects.requireNonNull(parameterType, "parameterType");
+                }
+            }
+        }
+
+        /** A call to another declared application Command. */
+        public record OperationInvocation(
+                String operation,
+                String entity,
+                boolean requiresId,
+                List<Argument> arguments,
+                ResultKind resultKind) {
+            public OperationInvocation {
+                Objects.requireNonNull(operation, "operation");
+                Objects.requireNonNull(entity, "entity");
+                arguments = List.copyOf(arguments);
+                Objects.requireNonNull(resultKind, "resultKind");
+            }
+
+            public record Argument(
+                    String name,
+                    TypedExpression value,
+                    LogicType parameterType,
+                    boolean identifier) {
+                public Argument {
+                    Objects.requireNonNull(name, "name");
+                    Objects.requireNonNull(value, "value");
+                    Objects.requireNonNull(parameterType, "parameterType");
+                }
+            }
+        }
+
+        /** A provider-independent call to one operation of an outbound Integration. */
+        public record IntegrationInvocation(
+                String integration,
+                String operation,
+                List<Argument> arguments,
+                Optional<LogicType> resultType) {
+            public IntegrationInvocation {
+                Objects.requireNonNull(integration, "integration");
+                Objects.requireNonNull(operation, "operation");
+                arguments = List.copyOf(arguments);
+                Objects.requireNonNull(resultType, "resultType");
+            }
+
+            public String target() {
+                return integration + "." + operation;
+            }
+
+            public record Argument(
+                    String name,
+                    TypedExpression value,
+                    LogicType parameterType) {
+                public Argument {
+                    Objects.requireNonNull(name, "name");
+                    Objects.requireNonNull(value, "value");
+                    Objects.requireNonNull(parameterType, "parameterType");
+                }
+            }
+        }
+
+        /** Every instruction but a conditional, which is the only one that carries branches. */
+        public FlowInstruction(
+                FlowCommand command,
+                Optional<String> variable,
+                Optional<String> entity,
+                List<String> fields,
+                List<SortOrder> sort,
+                boolean paged,
+                Optional<TypedValue> value,
+                SourceRef where) {
+            this(command, variable, entity, fields, sort, paged, value, Optional.empty(),
+                    Optional.empty(), Optional.empty(), List.of(), List.of(), where);
+        }
+
+        /** An instruction that carries neither a typed expression nor conditional branches. */
+        public FlowInstruction(
+                FlowCommand command,
+                Optional<String> variable,
+                Optional<String> entity,
+                SourceRef where) {
+            this(command, variable, entity, List.of(), List.of(), false, Optional.empty(),
+                    Optional.empty(), Optional.empty(), Optional.empty(), List.of(), List.of(),
+                    where);
+        }
 
         public FlowInstruction {
             Objects.requireNonNull(command, "command");
             Objects.requireNonNull(variable, "variable");
             Objects.requireNonNull(entity, "entity");
+            fields = List.copyOf(fields);
+            sort = List.copyOf(sort);
+            Objects.requireNonNull(value, "value");
+            Objects.requireNonNull(invocation, "invocation");
+            Objects.requireNonNull(integrationInvocation, "integrationInvocation");
+            Objects.requireNonNull(operationInvocation, "operationInvocation");
+            whenTrue = List.copyOf(whenTrue);
+            whenFalse = List.copyOf(whenFalse);
             Objects.requireNonNull(where, "where");
             boolean valid = switch (command) {
                 case VALIDATE_INPUT -> variable.isEmpty() && entity.isEmpty();
+                case FAIL, REQUIRE -> value.isPresent() && variable.isEmpty() && entity.isEmpty();
+                case FIND_BY, LIST_BY ->
+                        variable.isPresent() && entity.isPresent() && !fields.isEmpty();
+                // The assigned field is the value's own name, so it is not repeated in `fields`.
+                case SET_FIELD, ADD_TO, REMOVE_FROM ->
+                        variable.isPresent() && fields.isEmpty() && value.isPresent();
+                case CALL_LOGIC -> variable.isPresent()
+                        && entity.isEmpty()
+                        && fields.isEmpty()
+                        && sort.isEmpty()
+                        && !paged
+                        && value.isEmpty()
+                        && invocation.isPresent();
+                case CALL_INTEGRATION -> entity.isEmpty()
+                        && fields.isEmpty()
+                        && sort.isEmpty()
+                        && !paged
+                        && value.isEmpty()
+                        && integrationInvocation.isPresent()
+                        && (variable.isPresent()
+                                == integrationInvocation.orElseThrow().resultType().isPresent());
+                case CALL_OPERATION -> entity.isEmpty()
+                        && fields.isEmpty()
+                        && sort.isEmpty()
+                        && !paged
+                        && value.isEmpty()
+                        && operationInvocation.isPresent()
+                        && (variable.isPresent()
+                                == (operationInvocation.orElseThrow().resultKind()
+                                        != ResultKind.NOTHING));
+                case IF -> variable.isEmpty()
+                        && entity.isEmpty()
+                        && fields.isEmpty()
+                        && sort.isEmpty()
+                        && !paged
+                        && value.isPresent()
+                        && !whenTrue.isEmpty();
                 case CREATE_FROM, LOAD_BY_ID, LIST_ALL -> variable.isPresent() && entity.isPresent();
                 case UPDATE_FROM, SAVE, DELETE -> variable.isPresent() && entity.isEmpty();
                 case RETURN -> entity.isEmpty();
             };
+            valid &= command == FlowCommand.CALL_LOGIC || invocation.isEmpty();
+            valid &= command == FlowCommand.CALL_INTEGRATION || integrationInvocation.isEmpty();
+            valid &= command == FlowCommand.CALL_OPERATION || operationInvocation.isEmpty();
+            valid &= command == FlowCommand.IF || whenTrue.isEmpty() && whenFalse.isEmpty();
             if (!valid) {
                 throw new IllegalArgumentException("invalid operands for flow command " + command);
             }
@@ -187,6 +462,17 @@ public record ApplicationOperation(
 
     public enum FlowCommand {
         VALIDATE_INPUT,
+        FAIL,
+        REQUIRE,
+        CALL_LOGIC,
+        CALL_INTEGRATION,
+        CALL_OPERATION,
+        FIND_BY,
+        LIST_BY,
+        SET_FIELD,
+        ADD_TO,
+        REMOVE_FROM,
+        IF,
         CREATE_FROM,
         LOAD_BY_ID,
         UPDATE_FROM,
@@ -205,7 +491,9 @@ public record ApplicationOperation(
 
     public enum VariableKind {
         ENTITY,
-        LIST
+        LIST,
+        SCALAR,
+        VALUE
     }
 
     public record Result(int status, ResultKind kind, Optional<String> responseTypeName) {
@@ -222,6 +510,7 @@ public record ApplicationOperation(
     public enum ResultKind {
         ENTITY,
         LIST,
+        PAGE,
         NOTHING
     }
 

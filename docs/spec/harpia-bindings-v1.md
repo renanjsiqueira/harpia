@@ -28,10 +28,12 @@ Os diretórios de spec e binding devem ser diferentes. Ambos aceitam arquivos UT
 Um arquivo de binding HTTP possui exatamente um H1 `# HTTP Bindings` e uma ou mais declarações:
 
 ```ebnf
-binding-file       = http-bindings-heading, [ base-url-section ],
+binding-file       = http-bindings-heading, [ base-url-section ], [ auth-section ],
                      http-binding, { http-binding } ;
 http-bindings-heading = h1, sp, "HTTP Bindings" ;
 base-url-section   = h2, sp, "Base URL", newline, path-prefix ;
+auth-section       = h2, sp, "Auth", newline,
+                     ( "bearer" | "api key", sp, header-name ) ;
 http-binding       = h2, sp, "Bind", sp, operation-symbol, newline,
                      endpoint-section, access-section,
                      request-section, response-section ;
@@ -48,6 +50,8 @@ operation-symbol   = upper, { letter | digit } ;
 ```
 
 `## Base URL` é opcional, aparece no máximo uma vez e prefixa o path de todo binding do arquivo.
+`## Auth` segue a mesma forma e diz como as chamadas **de saída** daquele arquivo provam quem está
+chamando.
 Cada item de `### Request` liga um campo de `### Input` da operação a uma posição do protocolo; o
 nome externo é o nome no protocolo, não no domínio, e é por isso que ele é escrito explicitamente.
 `body` não aceita nome externo e os demais o exigem.
@@ -68,6 +72,45 @@ GET /customers/{id}
 
 public
 ```
+
+### 2.1 Auth
+
+`## Auth` vale para todo binding do arquivo e só faz sentido em porta de saída: quem **recebe** a
+chamada continua descrevendo acesso em `### Access`, e uma declaração que troca os dois é recusada.
+
+```markdown
+# HTTP Bindings
+
+## Base URL
+
+https://fraud.example
+
+## Auth
+
+bearer
+
+## Bind FraudService.CheckOrder
+
+### Endpoint
+
+POST /checks/{orderId}
+
+### Request
+
+- orderId: path orderId
+
+### Response
+
+output: body
+```
+
+- `bearer` envia o valor em `Authorization`, com o prefixo `Bearer `;
+- `api key <Nome-Do-Header>` envia o valor exatamente como ele foi emitido, no header nomeado;
+- o **esquema** é binding porque é parte de como o outro lado é alcançado. A **credencial** não é:
+  ela muda por ambiente e é segredo, então não aparece em nenhuma declaração versionada;
+- uma mesma Integration alcançada de dois arquivos com esquemas diferentes é `HRP2204`. O client
+  gerado é um objeto com uma credencial só, e uma das duas declarações teria de ser descartada em
+  silêncio.
 
 ## 3. Regras semânticas
 
@@ -104,6 +147,15 @@ o projeto gerado.
 | `output: body` | corpo da `ResponseEntity` no status declarado em `### Output` |
 | `none` | `ResponseEntity` sem corpo |
 
+Em porta de saída, `## Auth` vira um header instalado no builder do client — uma vez, no construtor
+— e não uma linha repetida em cada operação: assim existe um só lugar que lê a credencial e nenhuma
+operação que possa esquecer de mandá-la. A credencial entra por
+`harpia.integration.<porta>.credential`, cujo valor no `application.yaml` gerado é o placeholder do
+ambiente (`${PORTA_CREDENTIAL}`). O `src/test/resources/application.yaml` gerado dá aos testes um
+valor próprio, porque teste não tem deployment para preencher placeholder — e sem ele o Spring
+deixa o placeholder como está, e o client mandaria a string `${PORTA_CREDENTIAL}` como se fosse
+segredo.
+
 Quando o Flow declara `validate input`, a validação vale para a fronteira inteira, não só para o
 corpo: cada parâmetro de path, query ou header recebe as constraints declaradas para aquele campo e
 o controller ganha `@Validated`. Um corpo inválido falha como erro de binding; um parâmetro inválido
@@ -113,7 +165,7 @@ declarado apareceria como 500 apenas por causa de onde o valor entrou.
 
 ## 5. Limite atual
 
-Este slice implementa base URL, method, path, access `public`, os quatro mappings de request e
-`output: body`/`none`. Content negotiation, mapping de response abaixo do corpo inteiro, auth,
-timeout, retry, multipart, messaging e persistence bindings permanecem no backlog (`BIND-007` em
-diante).
+Este slice implementa base URL, method, path, access `public`, os quatro mappings de request,
+`output: body`/`none` e `## Auth` com `bearer` e `api key`. Content negotiation, mapping de response
+abaixo do corpo inteiro, OAuth client credentials, retry, multipart, messaging e persistence
+bindings permanecem no backlog (`BIND-007` em diante).

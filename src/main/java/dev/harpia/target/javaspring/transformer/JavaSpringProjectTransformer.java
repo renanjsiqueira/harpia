@@ -16,15 +16,19 @@ public final class JavaSpringProjectTransformer {
     private final JavaSpringBootstrapTransformer bootstrap = new JavaSpringBootstrapTransformer();
     private final JavaSpringEnumTransformer enums = new JavaSpringEnumTransformer();
     private final JavaSpringValueTransformer values = new JavaSpringValueTransformer();
+    private final JavaSpringEventTransformer events = new JavaSpringEventTransformer();
     private final JavaSpringEntityTransformer entities = new JavaSpringEntityTransformer();
     private final JavaSpringRepositoryTransformer repositories =
             new JavaSpringRepositoryTransformer();
     private final JavaSpringLogicTransformer logics = new JavaSpringLogicTransformer();
+    private final JavaSpringIntegrationClientTransformer integrations =
+            new JavaSpringIntegrationClientTransformer();
     private final JavaSpringDtoTransformer dtos = new JavaSpringDtoTransformer();
     private final JavaSpringServiceTransformer services = new JavaSpringServiceTransformer();
     private final JavaSpringControllerTransformer controllers =
             new JavaSpringControllerTransformer();
     private final JavaSpringErrorTransformer errors = new JavaSpringErrorTransformer();
+    private final JavaSpringSecurityTransformer security = new JavaSpringSecurityTransformer();
     private final JavaSpringServiceTestTransformer serviceTests =
             new JavaSpringServiceTestTransformer();
     private final JavaSpringControllerTestTransformer controllerTests =
@@ -34,15 +38,24 @@ public final class JavaSpringProjectTransformer {
     public JavaProjectModel transform(JavaSpringContext context) {
         Objects.requireNonNull(context, "context");
         List<JavaSourceFile> files = new ArrayList<>();
+        java.util.Optional<dev.harpia.target.javaspring.model.JavaSourceFile> pageResponse =
+                java.util.Optional.empty();
         files.add(bootstrap.transform(context));
         files.addAll(enums.transform(context));
         files.addAll(values.transform(context));
+        files.addAll(events.transform(context));
+        files.addAll(integrations.transform(context));
         for (ApplicationEntity entity : context.application().entities()) {
             boolean hasHttpBindings = entity.operations().stream()
                     .anyMatch(operation -> operation.endpoint().isPresent());
             files.add(entities.transform(context, entity));
             files.add(repositories.transform(context, entity));
             files.add(dtos.response(context, entity));
+            // One envelope serves every paged operation, so it is emitted once.
+            if (pageResponse.isEmpty() && entity.operations().stream().anyMatch(operation ->
+                    operation.result().kind() == ApplicationOperation.ResultKind.PAGE)) {
+                pageResponse = java.util.Optional.of(dtos.pageResponse(context, entity));
+            }
             for (ApplicationOperation operation : entity.operations()) {
                 operation.requestTypeName().ifPresent(request ->
                         files.add(dtos.request(context, operation, request)));
@@ -60,12 +73,14 @@ public final class JavaSpringProjectTransformer {
             }
         }
         files.addAll(errors.transform(context));
+        files.addAll(security.transform(context));
         if (context.application().settings().generation().tests()) {
             files.addAll(logicTests.transform(context));
         }
         for (ApplicationLogic logic : context.application().logics()) {
             files.add(logics.transform(context, logic));
         }
+        pageResponse.ifPresent(files::add);
         return new JavaProjectModel(files);
     }
 }

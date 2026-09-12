@@ -13,10 +13,28 @@ public final class SpringValidationMapper {
     public List<JavaAnnotationModel> map(ApplicationField field) {
         Objects.requireNonNull(field, "field");
         List<JavaAnnotationModel> annotations = new ArrayList<>();
+        if (field.elementType().isPresent()) {
+            // "required" on a collection is about having something in it. A collection that must
+            // exist but may be empty is the same as one that is simply absent.
+            if (field.required()) {
+                annotations.add(
+                        JavaAnnotationModel.marker("jakarta.validation.constraints.NotEmpty"));
+            }
+            return List.copyOf(annotations);
+        }
         if (field.valueType().isPresent()) {
             // The value validates its own fields, so the owner asks for that to happen.
             annotations.add(JavaAnnotationModel.marker("jakarta.validation.Valid"));
             if (field.required()) {
+                annotations.add(
+                        JavaAnnotationModel.marker("jakarta.validation.constraints.NotNull"));
+            }
+            return List.copyOf(annotations);
+        }
+        if (field.reference().isPresent() || field.relationship().isPresent()) {
+            // For both an identity reference and an association, presence is the only validation
+            // local to the field. Whether the row exists is the foreign key's job.
+            if (field.required() && !field.generated()) {
                 annotations.add(
                         JavaAnnotationModel.marker("jakarta.validation.constraints.NotNull"));
             }

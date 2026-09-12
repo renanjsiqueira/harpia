@@ -34,6 +34,7 @@ final class UseCaseDeclarationParser implements DeclarationParser {
     private final DeclarationKind declaredKind;
     private final String prefix;
     private final boolean executableRules;
+    private final boolean conditionalFlow;
 
     /**
      * Prefixes a later language version gives meaning to. The fallback only sees them when the
@@ -41,15 +42,22 @@ final class UseCaseDeclarationParser implements DeclarationParser {
      * a use case called {@code CommandRegisterCustomer} would be a silent misunderstanding.
      */
     private static final Map<String, String> LATER_KINDS =
-            Map.of("Command", "1", "Query", "1", "Enum", "1", "Value", "1");
+            Map.of(
+                    "Command", "1",
+                    "Query", "1",
+                    "Enum", "1",
+                    "Value", "1",
+                    "Integration", "1",
+                    "Event", "1");
+    private static final Map<String, String> LATER_SECTIONS = Map.of("Invariants", "1");
 
     /** The legacy V0 form: any heading, kind inferred later, `### Rules` documentary. */
     UseCaseDeclarationParser() {
-        this(DeclarationKind.USE_CASE, null, false);
+        this(DeclarationKind.USE_CASE, null, false, false);
     }
 
     UseCaseDeclarationParser(DeclarationKind declaredKind, String prefix) {
-        this(declaredKind, prefix, true);
+        this(declaredKind, prefix, true, true);
     }
 
     /**
@@ -59,9 +67,18 @@ final class UseCaseDeclarationParser implements DeclarationParser {
      */
     UseCaseDeclarationParser(
             DeclarationKind declaredKind, String prefix, boolean executableRules) {
+        this(declaredKind, prefix, executableRules, executableRules);
+    }
+
+    private UseCaseDeclarationParser(
+            DeclarationKind declaredKind,
+            String prefix,
+            boolean executableRules,
+            boolean conditionalFlow) {
         this.declaredKind = declaredKind;
         this.prefix = prefix;
         this.executableRules = executableRules;
+        this.conditionalFlow = conditionalFlow;
     }
 
     private static final Pattern TITLE =
@@ -94,8 +111,9 @@ final class UseCaseDeclarationParser implements DeclarationParser {
                 if (useCase.name().startsWith(later.getKey() + " ")) {
                     diagnostics.error(
                             ErrorCodes.SYNTAX_DECLARATION_TOO_NEW,
-                            "'## " + useCase.name() + "' declares a "
-                                    + later.getKey() + ", which needs harpia.languageVersion "
+                            "'## " + useCase.name() + "' declares "
+                                    + article(later.getKey()) + " " + later.getKey()
+                                    + ", which needs harpia.languageVersion "
                                     + later.getValue(),
                             useCase.heading().raw().where(),
                             "set harpia.languageVersion to " + later.getValue()
@@ -266,7 +284,7 @@ final class UseCaseDeclarationParser implements DeclarationParser {
         return new ParseItems<>(input, valid);
     }
 
-    private static ParseItems<FlowStatement> parseFlow(
+    private ParseItems<FlowStatement> parseFlow(
             Optional<Section> section, DiagnosticCollector diagnostics) {
         if (section.isEmpty()) {
             return new ParseItems<>(List.of(), false);
@@ -282,21 +300,12 @@ final class UseCaseDeclarationParser implements DeclarationParser {
             return new ParseItems<>(List.of(), false);
         }
 
-        List<FlowStatement> flow = new ArrayList<>();
-        boolean valid = true;
-        for (RawSpan line : values.getFirst().fencedBodyLines()) {
-            if (line.text().isBlank()) {
-                continue;
-            }
-            Optional<FlowStatement> statement =
-                    FlowLineParser.parse(line.text(), line.where(), diagnostics);
-            if (statement.isPresent()) {
-                flow.add(statement.orElseThrow());
-            } else {
-                valid = false;
-            }
-        }
-        return new ParseItems<>(flow, valid);
+        Optional<List<FlowStatement>> flow = FlowBlockParser.parse(
+                values.getFirst().fencedBodyLines(),
+                values.getFirst().raw().where(),
+                conditionalFlow,
+                diagnostics);
+        return new ParseItems<>(flow.orElse(List.of()), flow.isPresent());
     }
 
     private static Optional<Output> parseOutput(
@@ -409,5 +418,10 @@ final class UseCaseDeclarationParser implements DeclarationParser {
         private ParseItems {
             items = List.copyOf(items);
         }
+    }
+
+    /** Enum, Event and Integration all start with a vowel, and "a Enum" reads like a typo. */
+    private static String article(String kind) {
+        return "AEIOU".indexOf(kind.charAt(0)) >= 0 ? "an" : "a";
     }
 }

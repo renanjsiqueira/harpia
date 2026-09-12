@@ -9,12 +9,14 @@ import java.util.Optional;
 public record BindingAst(
         String file,
         Optional<BaseUrl> baseUrl,
+        Optional<Auth> auth,
         List<Declaration> declarations,
         SourceRef where) {
 
     public BindingAst {
         Objects.requireNonNull(file, "file");
         Objects.requireNonNull(baseUrl, "baseUrl");
+        Objects.requireNonNull(auth, "auth");
         declarations = List.copyOf(declarations);
         Objects.requireNonNull(where, "where");
     }
@@ -23,9 +25,39 @@ public record BindingAst(
         return declarations.stream().filter(Http.class::isInstance).map(Http.class::cast).toList();
     }
 
+    public List<IntegrationHttp> integrationHttpBindings() {
+        return declarations.stream()
+                .filter(IntegrationHttp.class::isInstance)
+                .map(IntegrationHttp.class::cast)
+                .toList();
+    }
+
     /** Closed binding kinds; messaging and persistence can add nodes without changing the file. */
-    public sealed interface Declaration permits Http {
+    public sealed interface Declaration permits Http, IntegrationHttp {
         SourceRef where();
+    }
+
+    /** One outbound HTTP adapter binding for an Integration operation. */
+    public record IntegrationHttp(
+            String integration,
+            String operation,
+            Endpoint endpoint,
+            List<RequestMapping> request,
+            ResponseMapping response,
+            SourceRef where)
+            implements Declaration {
+        public IntegrationHttp {
+            Objects.requireNonNull(integration, "integration");
+            Objects.requireNonNull(operation, "operation");
+            Objects.requireNonNull(endpoint, "endpoint");
+            request = List.copyOf(request);
+            Objects.requireNonNull(response, "response");
+            Objects.requireNonNull(where, "where");
+        }
+
+        public String target() {
+            return integration + "." + operation;
+        }
     }
 
     /** One HTTP exposure referring to an operation symbol by its canonical name. */
@@ -43,6 +75,25 @@ public record BindingAst(
             Objects.requireNonNull(access, "access");
             request = List.copyOf(request);
             Objects.requireNonNull(response, "response");
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
+    /**
+     * How this file's calls prove who is calling, without saying with what.
+     *
+     * <p>The scheme is part of how the other side is reached, so it is a binding. The credential
+     * is not: it differs per deployment, it is a secret, and a secret written into a specification
+     * is a secret in version control. The generated project reads it from configuration.
+     */
+    public record Auth(Kind kind, String header, SourceRef where) {
+
+        /** {@code bearer} carries the credential in {@code Authorization}; an API key names it. */
+        public enum Kind { BEARER, API_KEY }
+
+        public Auth {
+            Objects.requireNonNull(kind, "kind");
+            Objects.requireNonNull(header, "header");
             Objects.requireNonNull(where, "where");
         }
     }
@@ -120,7 +171,62 @@ public record BindingAst(
         }
     }
 
-    public enum Access {
-        PUBLIC
+    /**
+     * Who may reach an operation.
+     *
+     * <p>{@code AUTHENTICATED} says the request must carry an identity. {@code ROLE} says the
+     * identity must also hold one of the named roles — any of them, because listing several is
+     * how you say a thing is open to more than one kind of person.
+     *
+     * <p>How an identity is proved, and where its roles come from, is a provider's decision. What
+     * is declared here is which endpoints are reachable without one.
+     */
+    public record Access(Kind kind, java.util.List<String> roles) {
+
+        public enum Kind {
+            PUBLIC,
+            AUTHENTICATED,
+            ROLE,
+            SCOPE
+        }
+
+        public static final Access PUBLIC = new Access(Kind.PUBLIC, java.util.List.of());
+        public static final Access AUTHENTICATED =
+                new Access(Kind.AUTHENTICATED, java.util.List.of());
+
+        public Access {
+            java.util.Objects.requireNonNull(kind, "kind");
+            roles = java.util.List.copyOf(roles);
+            if (roles.isEmpty() != (kind == Kind.PUBLIC || kind == Kind.AUTHENTICATED)) {
+                throw new IllegalArgumentException(
+                        "ROLE and SCOPE name what they demand; nothing else does");
+            }
+        }
+
+        public static Access role(java.util.List<String> roles) {
+            return new Access(Kind.ROLE, roles);
+        }
+
+        public static Access scope(java.util.List<String> scopes) {
+            return new Access(Kind.SCOPE, scopes);
+        }
+
+        /** True when the request has to carry an identity at all, whatever is asked of it. */
+        public boolean requiresIdentity() {
+            return kind != Kind.PUBLIC;
+        }
+
+        /**
+         * The stable form the inspect stages print.
+         *
+         * <p>{@code PUBLIC} and {@code AUTHENTICATED} read as they did when this was an enum, so
+         * nothing that was already written down changed meaning.
+         */
+        @Override
+        public String toString() {
+            return roles.isEmpty()
+                    ? kind.name()
+                    : kind.name() + " " + String.join(" or ", roles);
+        }
     }
 }

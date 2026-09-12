@@ -122,6 +122,7 @@ field-item = bullet, sp, field-name, ":", sp, type, { sp, field-modifier } ;
 field-modifier = "required"
                | "unique"
                | "generated"
+               | "indexed"
                | "default", sp, literal ;
 
 literal = boolean-literal | integer-literal | decimal-literal
@@ -142,6 +143,12 @@ consome o restante da linha como um único literal. Literais são:
 Um default de tipo incompatível gera `HRP2004`. `required` e `default` podem coexistir; o default é
 usado quando o campo não foi enviado, enquanto valor `null` continua inválido.
 
+`indexed` pede um índice não único para a coluna, e é a única forma de obter um: o compilador não
+adivinha índices a partir dos filtros de um `find` ou de um `list ... where`. `unique` já é indexado
+pela própria constraint, então `unique indexed` é recusado como `HRP1004` — o segundo modificador
+criaria uma estrutura para o trabalho que a primeira já faz. Um índice é um fato sobre
+armazenamento; `indexed` não aparece em `### Input` nem muda o contrato exposto.
+
 Toda entidade possui exatamente este campo:
 
 ```md
@@ -157,7 +164,7 @@ O conteúdo de `### Endpoint` é exatamente uma linha:
 
 ```ebnf
 endpoint = method, sp, path ;
-method   = "GET" | "POST" | "PUT" | "DELETE" ;
+method   = "GET" | "POST" | "PUT" | "DELETE" ;  (* V1 acrescenta "PATCH"; ver § 8.10 *)
 path     = "/", path-segment, { "/", path-segment }, [ "/{id}" ] ;
 path-segment = lower, { lower | digit | "-" } ;
 ```
@@ -171,7 +178,71 @@ O conteúdo de `### Access` é exatamente:
 public
 ```
 
-`authenticated`, listas de roles ou qualquer outro valor geram `HRP4001`.
+Na V1, `### Access` também aceita `authenticated`: a requisição precisa carregar uma identidade.
+Qual mecanismo a comprova é decisão de um provider, do mesmo jeito que o vendor do banco — a
+especificação decide **quais** endpoints são alcançáveis sem uma, não como se prova. Na V0 o
+conjunto continua sendo só `public`, e `authenticated` ali é `HRP4001`. Listas de roles e qualquer
+outro valor seguem sendo `HRP4001` nas duas versões.
+
+`role` vai um passo além: a identidade precisa ser de um tipo específico de pessoa.
+
+```markdown
+### Access
+
+role admin
+```
+
+Vários se escrevem com `or` — `role admin or auditor` — e a verificação é "qualquer um deles",
+porque listar mais de um é justamente como se diz que algo está aberto a mais de um tipo de pessoa.
+Um role é nomeado como tudo o mais na especificação, em `lower_snake_case`; no Java/Spring ele vira
+`hasAnyRole("ADMIN", "AUDITOR")`, que é a grafia do framework para a mesma coisa. De onde vêm os
+roles de uma identidade é decisão de um provider, como é o mecanismo que a comprova.
+
+Esse mecanismo é declarado em `harpia.yaml`, do mesmo jeito que o vendor do banco:
+
+```yaml
+security:
+  provider: jwt
+```
+
+Uma recusa responde com o mesmo corpo de erro que qualquer outra falha da API. Ela acontece na
+filter chain, antes de qualquer handler de exceção, então sem isso a API responderia recusas numa
+forma escolhida pelo framework e todas as demais falhas na sua própria — e quem chama teria dois
+contratos de erro para tratar. `401` diz que a requisição não trouxe identidade; `403`, que a
+identidade trazida não serve ali.
+
+`basic` é o padrão — é o que o framework dá de graça — e `jwt` faz o projeto gerado ser um resource
+server OAuth2. A cadeia é a mesma nos dois casos: **quais** endpoints exigem identidade não muda com
+**como** uma identidade é provada. Com `jwt`, o conjunto de chaves é a resposta do deployment
+(`${JWT_JWK_SET_URI}`) e não uma URL cozida no código gerado, que seria um ambiente escrito no
+código-fonte de todos os ambientes.
+
+`scope` pede uma permissão em vez de um tipo de pessoa:
+
+```markdown
+### Access
+
+scope orders:read or orders:write
+```
+
+Um scope é grafado por quem emite o token, então a pontuação não é nossa para escolher e ele não é
+convertido para maiúsculas como um role: no Java/Spring vira
+`hasAnyAuthority("SCOPE_orders:read", ...)`, onde `SCOPE_` é o prefixo que o Spring lê e o resto é a
+palavra do emissor. Como scopes vêm de um token, declarar um com `security.provider: basic` é
+`HRP6002` — a regra não casaria com nada e o endpoint responderia recusa a toda requisição, uma
+regra de acesso que se lê aberta e se comporta fechada.
+
+Cada operação declarada vira sua própria regra, chaveada por método **e** path. Duas operações
+podem compartilhar um path e pedir coisas diferentes — um `GET /customers` público ao lado de um
+`POST /customers` autenticado — e uma regra só para o path faria o código gerado contradizer a
+especificação: qualquer que fosse o vencedor, uma das duas nunca concordou com ele. Um método que
+nenhuma operação declarou naquele path cai no `denyAll` final, em vez de herdar a regra de outro.
+
+Um endpoint `authenticated` ou com `role` exige a capability `security`, que o target implementa por conta
+própria, como já faz com HTTP. No Java/Spring isso vira uma filter chain: cada rota declarada
+aparece com a regra que pediu, e a cadeia termina em `denyAll` — o padrão só alcança um caminho que
+ninguém declarou, e recusá-lo é mais seguro do que deixá-lo herdar a última regra que passou. Um
+projeto sem nenhum endpoint autenticado não ganha dependência nem configuração de segurança.
 
 ## 6. Input
 
@@ -182,7 +253,8 @@ input-item = bullet, sp, field-name, ":", sp, type, [ sp, "required" ] ;
 ```
 
 O campo deve existir em `## Data` e repetir exatamente seu tipo. `id` e campos `generated` não podem
-ser input. `unique` e `default` são propriedades do dado e não são repetidos no input.
+ser input. `unique`, `indexed` e `default` são propriedades do dado e não são
+repetidos no input.
 
 Ausência de `### Input` representa input vazio. `validate input` é permitido somente quando a seção
 existe e possui ao menos um campo.
@@ -246,6 +318,109 @@ O status deve estar entre 200 e 299. O valor retornado pelo flow deve ter a mesm
 `return nothing` exige `nothing`; uma variável `E` exige `E`; e uma variável `List<E>` exige
 `List<E>`. Status 204 exige `nothing` e `nothing` exige status 204.
 
+## 7.0 Coleções
+
+Na V1, um campo pode ser `List<T>`, onde `T` é um escalar, um `Enum` declarado ou uma entidade:
+
+```markdown
+- tags: List<String> required
+- channels: List<Channel>
+```
+
+Uma coleção tem tantas linhas por dono quantos elementos tiver, então **não cabe na linha do dono**.
+Esse único fato decide o mapeamento inteiro: ela ganha tabela própria, `<tabela>_<campo>`, ligada ao
+dono por chave estrangeira, e a entidade que a declara não tem coluna para ela.
+
+`required` numa coleção significa **não-vazia**: uma coleção que precisa existir mas pode estar
+vazia é o mesmo que uma coleção ausente.
+
+Quando `T` é escalar ou Enum, a tabela guarda valores. Quando `T` é Entity, a coleção é um
+relacionamento conforme a seção 7.0.3. `List<Value>` e `List<List<...>>` são recusados. Coleção como
+parâmetro ou retorno de Logic é `LOGIC-006`.
+
+### 7.0.2 Reference
+
+Na V1, `Reference<Entidade>` declara que o campo aponta para outra entidade:
+
+```markdown
+- buyer: Reference<Customer> required
+```
+
+É um **tipo**, não um relacionamento. Ele diz qual entidade é a alvo e qual linha, e não carrega,
+cascateia nem possui o ciclo de vida dela.
+
+| | Resultado |
+|---|---|
+| coluna | `<campo>_id`, com o tipo do id do alvo |
+| migração | `FOREIGN KEY (<campo>_id) REFERENCES <alvo> (id)` |
+| campo JPA | o escalar do id (`UUID`), sem `@ManyToOne` nem `@JoinColumn` |
+
+O alvo precisa ser uma entidade declarada: uma referência aponta para algo que tem identidade.
+Integridade referencial é a única promessa que ela faz, e por isso o esquema a declara enquanto o
+mapeamento não importa estratégia de fetch nenhuma.
+
+### 7.0.3 Relationships
+
+Um nome de Entity usado diretamente como tipo declara uma associação carregável; uma lista desse
+tipo declara uma associação múltipla:
+
+```markdown
+- buyer: Customer required
+- items: List<OrderItem> required
+```
+
+Os defaults fazem parte da semântica V1, e aparecem na Application IR para não dependerem de uma
+escolha implícita do target:
+
+| Forma | Cardinalidade | Loading | Ciclo de vida | Cascade |
+|---|---|---|---|---|
+| `Customer` | uma | lazy | independente | nenhum |
+| `List<OrderItem>` | muitas, compartilháveis | lazy | independente | nenhum |
+| `Customer owned` | uma, exclusiva | lazy | dependente | total + orphan removal |
+| `List<OrderItem> owned` | muitas, exclusivas | lazy | dependente | total + orphan removal |
+
+No target Java/Spring, a forma singular usa uma coluna `<campo>_id`, `@ManyToOne` e `@JoinColumn`.
+A forma múltipla usa `@ManyToMany` e uma join table `<dono>_<campo>` com chave primária composta e
+chaves estrangeiras para dono e alvo. A migration cria primeiro todas as tabelas e só então adiciona
+as FKs, portanto ordem reversa, autorreferência e ciclos são válidos. Sem `owned`, remover ou salvar
+o dono não remove nem salva o alvo por cascade.
+
+`owned` declara que o alvo não tem ciclo de vida independente daquele campo:
+
+```markdown
+- billingContact: Customer owned required
+- items: List<OrderItem> owned required
+```
+
+Ele só é válido em `Entity` ou `List<Entity>` (`HRP2131`). A associação singular vira one-to-one; a
+coleção vira one-to-many e sua FK de alvo é única, impedindo dois donos. O target Java/Spring usa
+`cascade = ALL` e `orphanRemoval = true`: salvar o dono salva os dependentes e removê-los da relação
+os elimina. `owned` não é aceito em escalar, ValueObject ou `Reference<T>`.
+
+Por contraste, `Reference<Customer>` guarda só a identidade e nunca carrega um `Customer`.
+
+### 7.0.1 Optional
+
+Na V1, `Optional<T>` declara que o valor pode não estar lá:
+
+```markdown
+- nickname: Optional<String>
+```
+
+Um campo sem `required` já é nullable, mas nada no contrato gerado diz isso — quem consome recebe um
+`String` e descobre em tempo de execução. `Optional<T>` move esse fato para o tipo entregue ao
+chamador, **sem mudar como o valor é armazenado**:
+
+| | Tipo |
+|---|---|
+| campo JPA e coluna | `String`, nullable — JPA mapeia pelo tipo declarado e não entende `Optional` |
+| getter e response DTO | `Optional<String>` |
+| setter | `String` — recebe o valor, não a possibilidade de um |
+
+`Optional<T> required` é contradição e é recusada (`HRP2126`). Esse é o ganho de tornar a
+opcionalidade um tipo: as duas formas de dizê-la agora podem se contradizer, e uma contradição que o
+compilador resolvesse em silêncio seria um bug atribuído ao gerador.
+
 ## 7.1 Enum
 
 Na V1, `## Enum <Nome>` declara um conjunto fechado de valores que o projeto nomeia:
@@ -297,6 +472,136 @@ permanece. O valor **não ganha tabela**: seus campos viram colunas da entidade 
 prefixadas pelo nome do campo (`destination_street`), com `@AttributeOverride` correspondente. O
 prefixo existe para que dois valores na mesma tabela não colidam.
 
+## 7.3 Invariants
+
+Na V1, `## Invariants` declara condições que a entidade do módulo satisfaz sempre:
+
+```markdown
+## Data
+
+- id: UUID generated
+- total: Decimal required
+- discount: Decimal required
+
+## Invariants
+
+- discount <= total
+- total > 0
+```
+
+A diferença para `### Rules` (§8.1) é de escopo e de momento:
+
+| | Escopo | Quando vale |
+|---|---|---|
+| `### Rules` | o input de **uma** operação | onde o flow declara `validate input` |
+| `## Invariants` | os campos da **entidade** | antes de cada `save`, em qualquer operação |
+
+- a condição é tipada contra os campos da entidade pelo mesmo analisador de expressões de Logic;
+- o módulo precisa declarar `## Data`, senão não há o que restringir (`HRP2125`);
+- violar um invariante responde **422**, não 400: uma requisição bem formada pedindo um estado que
+  a entidade não permite não é input inválido.
+
+A verificação acontece antes do `save` porque depois dele o estado proibido já está armazenado.
+
+## 7.4 Integration e Operation
+
+Na V1, uma dependência externa começa como uma porta de negócio, sem escolher HTTP, biblioteca ou
+configuração de ambiente:
+
+```markdown
+## Integration FraudService
+
+Análise externa usada no checkout.
+
+### Operation CheckOrder
+
+#### Input
+
+- customerId: UUID required
+- orderId: UUID required
+- total: Decimal required
+
+#### Output
+
+FraudResult
+
+#### Errors
+
+- InvalidRequest
+- RateLimited
+- ServiceUnavailable
+
+### Operation CheckCustomer
+
+#### Output
+
+Boolean
+
+## Value FraudResult
+
+- approved: Boolean required
+- score: Decimal required
+```
+
+- o nome da Integration e de cada Operation é PascalCase;
+- uma Integration declara ao menos uma Operation e não pode repetir nomes localmente;
+- cada Operation declara exatamente um `#### Output`; `nothing` torna explícita a ausência de
+  retorno;
+- `#### Input`, quando presente, aceita campos escalares, Enum e Value, com `required` opcional;
+  os nomes dos campos não se repetem na operação;
+- o Output aceita o mesmo conjunto de tipos de valor, inclusive `List<T>` e `Optional<T>`;
+- `#### Errors` declara variantes PascalCase que o provider poderá mapear para falhas externas;
+  status HTTP, timeout e retry não pertencem a esta declaração;
+- Entity e `Reference<Entity>` não atravessam a porta (`HRP2133`): integrações trocam valores, não
+  objetos de persistência;
+- nomes de Integration são únicos no projeto e vivem no namespace `integrations`, separado de
+  types, operações da aplicação e computations;
+- AST, SymbolTable, Business IR e Application IR preservam a fronteira como outbound port;
+- declarar a porta não escolhe transporte nem exige capability. O provider só é necessário quando
+  um Flow chama a operação.
+
+`languageVersion: 0` recusa `## Integration` com `HRP1107`: nunca a interpreta como um caso de uso
+legado cujo título começaria com “Integration”.
+
+## 7.5 Event
+
+Na V1, um fato consumado é declarado como Event. Um Event não é uma chamada: ninguém espera por ele
+e ninguém responde, então ele não tem `#### Output` nem `#### Errors` — a declaração inteira é o que
+ele carrega.
+
+```markdown
+## Event PurchasePlaced
+
+### Payload
+
+- purchase: Reference<Purchase> required
+- status: Status required
+- total: Decimal required
+```
+
+- o nome é PascalCase e vive no namespace `events`, separado de types, operações, integrations e
+  computations; nomes de Event não se repetem no projeto (`HRP2139`);
+- um Event declara exatamente uma `### Payload`, e só ela (`HRP1112`); um Event sem payload anuncia
+  que algo aconteceu sem dizer a quê, e é recusado;
+- os campos do payload usam a gramática de `### Input`, com `required` opcional, e não se repetem
+  (`HRP2140`);
+- o payload aceita escalares, Enum, Value, `List<T>`, `Optional<T>` e `Reference<Entity>`;
+- uma Entity **não** atravessa o payload (`HRP2141`). Um evento diz que algo aconteceu a um registro
+  específico, então precisa dizer a qual: `Reference<T>` é essa identidade e nada mais. A entidade
+  seria a linha em si, cuja vida o leitor não compartilha — quando alguém lê o evento, a linha pode
+  já ter mudado, e o que chegaria seria uma cópia se passando pelo registro. É por isso que a regra
+  do Event difere da de Integration (`HRP2133`), que recusa também a referência: ali o contrato sai
+  do processo para um serviço que não tem a tabela;
+- declarar o Event não escolhe transporte nem exige capability. Se os assinantes estão neste
+  processo ou atrás de um broker é decisão de um provider, e nenhum estágio do compilador nomeia
+  tópico, broker ou listener.
+
+No target Java/Spring, cada Event vira um `record` imutável no pacote `event` do projeto gerado —
+um record porque um evento é um fato: aconteceu, e o que aconteceu não se edita depois. O payload
+usa os mesmos tipos dos DTOs, e um `Reference<T>` chega como a identidade, não como a linha.
+
+`languageVersion: 0` recusa `## Event` com `HRP1107`, pelo mesmo motivo de `## Integration`.
+
 ## 8.1 Rules
 
 Na V1, cada item de lista sob `### Rules` é uma condição booleana sobre o input da operação:
@@ -324,6 +629,367 @@ analisador — uma regra não pode discordar de uma computação sobre o que um 
 
 Regra é a parte da validação de input que nenhuma anotação de campo consegue expressar, porque
 relaciona dois valores. O que um campo diz sobre si mesmo continua em `### Input`.
+
+## 8.3 find
+
+Na V1, o Flow pode buscar um registro por um campo que não é o id:
+
+```flow
+account = find Account by email
+return account
+```
+
+- o campo precisa ser `unique` na entidade (`HRP2128`). `load ... by id` sempre responde no máximo
+  um registro porque um id é único; um `find` precisa merecer a mesma promessa, senão o flow
+  atribuiria uma pergunta de muitas respostas a uma variável só;
+- o campo precisa existir no `### Input` da operação, que é de onde vem o valor buscado;
+- não encontrar é a mesma falha que um `load ... by id` reporta: `not found`.
+
+O target gera um finder derivado no repositório (`Optional<Account> findByEmail(String email)`) —
+Spring Data lê o nome do método, então o nome **é** a consulta.
+
+Busca por campo não-único, com filtros e mais de um resultado, é `QUERY-003`.
+
+## 8.4 list ... by
+
+Na V1, o Flow pode listar só os registros que casam com um valor:
+
+```flow
+tickets = list Ticket by status and owner
+return tickets
+```
+
+É a contrapartida de `find` (§8.3):
+
+| | Responde | Campo |
+|---|---|---|
+| `find Entity by campo` | no máximo um | precisa ser `unique` |
+| `list Entity by campo` | muitos | não precisa ser único |
+
+Muitos registros compartilharem um valor é exatamente o que uma lista filtrada pede, então a
+exigência de unicidade não se aplica aqui. Cada campo precisa existir na entidade e no `### Input`.
+
+O target gera um finder derivado multi-campo (`findByStatusAndOwner(...)`) e mantém a **mesma ordem
+estável por id** que uma listagem sem filtro já tem — filtrar muda quais registros voltam, não a
+ordem em que voltam.
+
+Fora do recorte: operadores além de igualdade, filtro opcional e combinação com `or`.
+
+## 8.5 sorted by
+
+Na V1, uma listagem pode declarar a ordem em que devolve os registros:
+
+```flow
+tickets = list Ticket sorted by priority desc and title
+tickets = list Ticket by status sorted by priority desc
+```
+
+- vale para `list` com e sem filtro;
+- direção omitida é ascendente;
+- cada campo precisa existir na entidade.
+
+**O id permanece como desempate final.** Ordenar por um campo que muitos registros compartilham
+deixaria os empates na ordem que o banco preferisse, e Harpia promete os mesmos bytes para a mesma
+entrada. Então a ordem declarada **refina** a ordem estável em vez de substituí-la:
+
+```java
+Sort.by(Sort.Order.desc("priority"), Sort.Order.asc("title"), Sort.Order.asc("id"))
+```
+
+## 8.6 paged
+
+Na V1, uma listagem pode devolver só uma fatia:
+
+```flow
+tickets = list Ticket by status sorted by title paged
+```
+
+`page` e `size` vêm do `### Input` da própria operação e precisam estar declarados como `Int`
+(`HRP2129`):
+
+```markdown
+### Input
+
+- status: String required
+- page: Int required
+- size: Int required
+```
+
+Eles são a **única exceção** à regra de que todo input nomeia um campo da entidade — descrevem a
+requisição, não a entidade. Declará-los em vez de inventá-los é o que faz o request model gerado
+mostrar ao chamador o que ele precisa enviar.
+
+Uma página é uma fatia de uma ordem, então a paginação se apoia na ordem estável (§8.5) em vez de
+substituí-la:
+
+```java
+PageRequest.of(request.page(), request.size(),
+        Sort.by(Sort.Order.asc("title"), Sort.Order.asc("id")))
+```
+
+Fora do recorte: o envelope com total de registros e de páginas é `TYPE-025`/`API-010`. Hoje a
+operação devolve `List<Entity>` com os registros da página.
+
+## 8.8 set
+
+Na V1, o Flow pode atribuir um campo a partir de uma expressão:
+
+```flow
+validate input
+invoice = create Invoice from input
+set invoice.total = subtotal + fee
+save invoice
+```
+
+`update x from input` copia o que o input trouxer. `set` **computa** um valor. Os dois existem
+porque são operações diferentes, e o flow diz qual aconteceu.
+
+- a expressão é tipada contra o tipo do campo — atribuir `Boolean` a um `Decimal` é recusado;
+- o escopo é o input da operação, o mesmo de `### Rules` e de uma guarda de `fail`;
+- o campo precisa existir na entidade e **não** pode ser `generated`: um campo gerado é do banco, e
+  atribuí-lo seria uma promessa que o flow não pode cumprir;
+- a atribuição acontece onde o flow a coloca, portanto antes do `save` se for para ser armazenada.
+
+Uma coleção não é atribuída com `set`: dizer "mais um" não é o mesmo que dizer "estes".
+
+```flow
+add name to product.tags
+remove name from product.tags
+```
+
+- o elemento é tipado contra o tipo **do elemento** da coleção, não da coleção;
+- usar `add`/`remove` num campo escalar, ou `set` numa coleção, é recusado — a forma diz qual
+  espécie de campo se esperava;
+- a coleção da entidade gerada começa vazia (`new ArrayList<>()`): uma coleção que ninguém atribuiu
+  está vazia, não ausente, e adicionar a uma nula falharia no primeiro elemento.
+
+## 8.2 fail
+
+Na V1, o Flow pode levantar um erro de domínio declarado:
+
+````markdown
+### Flow
+
+```flow
+validate input
+fail insufficient balance when amount > balance
+payment = create Payment from input
+save payment
+return payment
+```
+
+### Errors
+
+- insufficient balance -> 422
+````
+
+- a guarda é obrigatória. Um `fail` incondicional encerraria toda execução da operação, então a
+  condição é o que faz dele uma instrução e não um beco sem saída;
+- a condição é booleana sobre o input, tipada pelo mesmo analisador de `### Rules` e
+  `## Invariants`;
+- o erro precisa estar declarado em `### Errors` da própria operação (`HRP2127`). O status vive lá,
+  e levantar um erro não declarado deixaria o compilador escolhendo um status que ninguém escreveu;
+- o erro é levantado exatamente onde o flow o posiciona.
+
+A diferença para `### Rules`: uma rule diz que o input é inválido e responde o status de
+`invalid input`. Um `fail` nomeia **qual** erro de negócio ocorreu e responde o status daquele erro.
+
+## 8.10 require
+
+Na V1, uma precondition positiva pode ser colocada no ponto exato do Flow em que precisa valer:
+
+````markdown
+### Flow
+
+```flow
+validate input
+require amount <= balance otherwise insufficient balance
+payment = create Payment from input
+save payment
+return payment
+```
+
+### Errors
+
+- insufficient balance -> 422
+````
+
+`require A otherwise E` continua quando `A` é verdadeira e levanta `E` quando ela é falsa. É a
+forma positiva correspondente a `fail E when not A`, preservada no AST e nos IRs como precondition
+em vez de ser reescrita para outra instrução.
+
+- a condição usa a mesma expressão tipada de `### Rules`, precisa ser `Boolean` e, neste recorte,
+  enxerga os campos escalares do input;
+- `otherwise` é obrigatório e recebe o nome de um erro de domínio declarado na própria operação
+  (`HRP2127`);
+- status não é aceito na instrução. `otherwise 422` duplicaria a decisão que pertence a
+  `### Errors`; declare um nome de negócio e mapeie o status uma única vez;
+- `languageVersion: 0` recusa `require` com `HRP1107`.
+
+Condições sobre variáveis carregadas pelo Flow e referência nominal a Rules ficam no alcance maior
+de `RULE-004`; este slice fecha a precondition inline sobre o input sem antecipar member access.
+
+## 8.9 if / else
+
+Na V1, Flow pode escolher entre duas sequências curtas de orquestração:
+
+```flow
+purchase = create Purchase from input
+if premium
+    set purchase.status = "PRIORITY"
+else
+    set purchase.status = "STANDARD"
+save purchase
+return purchase
+```
+
+- a condição usa a expressão tipada de Logic, precisa resultar em `Boolean` e enxerga o input;
+- `else` é opcional e fica sozinho na linha;
+- cada nível usa exatamente quatro espaços, tabs são recusados e há no máximo dois níveis;
+- os ramos podem usar variáveis já definidas, mas não podem definir uma variável nova nem executar
+  `return` (`HRP2130`); assim o valor não escapa do escopo Java de um único ramo e o Flow conserva
+  uma saída final explícita;
+- `languageVersion: 0` recusa `if` com `HRP1107`; a construção pertence à V1;
+- o Java gerado preserva a posição e a ordem dos comandos dos dois ramos.
+
+Esse recorte é branching de aplicação, não uma segunda linguagem de algoritmos. Cálculo reutilizável
+e controle mais profundo devem ser extraídos para `Logic` ou para uma implementação custom.
+
+## 8.7 Page como saída
+
+Na V1, `### Output` aceita `Page<Entidade>`:
+
+```markdown
+### Output
+
+200 Page<Ticket>
+```
+
+`List<Ticket>` sobre uma consulta paginada entrega ao chamador os registros sem nenhuma forma de
+pedir os próximos. `Page<Ticket>` carrega o que ele precisa para continuar:
+
+```java
+public record PageResponse<T>(
+        List<T> content,
+        int page,
+        int size,
+        long totalElements,
+        int totalPages) {
+}
+```
+
+- o envelope é genérico e emitido **uma vez por projeto**: o que uma página reporta sobre si mesma
+  não depende do que ela contém;
+- o finder passa a devolver `Page` para trazer a contagem da **mesma** consulta que fatiou, em vez
+  de uma segunda consulta que poderia discordar;
+- declarar `Page<...>` sem uma listagem `paged` no flow é recusado — não haveria página a reportar;
+- uma listagem paginada pode continuar respondendo `List<...>` quando o chamador não precisa dos
+  metadados, e aí nenhum envelope é gerado.
+
+## 8.8 call
+
+Na V1 um flow chama uma Logic ou uma Operation de Integration. Os argumentos são nomeados, porque
+a ordem em que alguém os digitou não é o que dá sentido a eles:
+
+```flow
+discount = call CalculateDiscount(total = total, vip = vip)
+approved = call FraudService.CheckOrder(total = total)
+```
+
+- o alvo simples é uma Logic; o alvo pontilhado é `Integration.Operation`;
+- a chamada multilinha significa o mesmo, e existe para quando a lista de argumentos é longa;
+- os argumentos são conferidos por nome, completude e tipo contra a assinatura declarada, que é uma
+  só no projeto inteiro;
+- um alvo que ninguém declarou é recusado ali, e não deixado para o Java gerado descobrir;
+- uma chamada que devolve valor precisa ser atribuída, e uma que devolve `nothing` não pode ser: a
+  presença do resultado é parte do contrato, não preferência de quem chama;
+- declarar uma Integration é livre, mas **chamá-la** exige o binding que diz como ela é alcançada —
+  sem ele o código gerado não teria para onde mandar a requisição.
+
+## 8.9 Parâmetros de path
+
+Na V1, um path aceita `{nome}` em qualquer segmento e em qualquer quantidade:
+
+```markdown
+### Endpoint
+
+GET /tenants/{tenant}/items/{id}
+
+### Input
+
+- tenant: String required
+```
+
+Um endpoint inline não tem seção de mapeamento, então **o nome é o mapeamento**: `{tenant}` é
+preenchido pelo input chamado `tenant`. Um parâmetro sem input correspondente é `HRP2135` — o
+segmento ficaria sem valor no momento da requisição.
+
+`{id}` continua com o significado de sempre: o registro que o flow carrega com `load ... by id`,
+não um input.
+
+Um segmento de path — como um query parameter — carrega **um** valor escrito como texto. Um escalar
+é um valor; um `## Enum` declarado também é, por ser um conjunto fechado de nomes, e chega ao
+parâmetro com o tipo declarado, grafado na URL como o corpo JSON já o grafa. Uma coleção são muitos
+valores e um `## Value` são muitos campos: nenhum dos dois tem grafia que a URL aceite, e ambos são
+`HRP2138`.
+
+Um input consumido pelo path não aparece de novo no corpo. Um binding externo (§ `harpia-bindings-v1`)
+continua podendo mapear explicitamente com `- x: path nome`.
+
+## 8.9.1 Query parameters
+
+Um endpoint inline coloca no corpo os inputs que o path não consumiu — exceto quando o método não
+tem corpo. `GET` e `DELETE` enunciam *sobre o que* agir, não um documento *com o que* agir: um corpo
+neles é algo que nenhum cliente envia e nenhum proxy promete encaminhar. Nesses dois verbos, o que
+sobra vira query parameter, e o nome continua sendo o mapeamento:
+
+```markdown
+### Endpoint
+
+GET /customers
+
+### Input
+
+- page: Int required
+- size: Int required
+```
+
+gera `GET /customers?page=…&size=…`. Nada muda em `POST`, `PUT` e `PATCH`, que continuam com corpo.
+Um input já consumido pelo path não é pedido de novo.
+
+Onde cada input chega é visível na Application IR (`harpia inspect --stage=application-ir`), uma
+linha `Request <input> from path {p} | query p | header h | body` por mapeamento.
+
+## 8.10 PATCH
+
+Na V1 o método `PATCH` entra na gramática de `### Endpoint`. Na V0 o conjunto continua sendo
+`GET`, `POST`, `PUT` e `DELETE`; escrever `PATCH` ali é `HRP1010`.
+
+O que separa `PATCH` de `PUT` é uma frase: **`PUT` enuncia o recurso inteiro, `PATCH` enuncia
+apenas as mudanças**. Num `PUT`, um campo que a requisição omitiu é um campo posto em nada; num
+`PATCH`, o mesmo campo omitido não é mudança alguma e o valor armazenado permanece. `update ... from
+input` copia, no `PATCH`, somente os campos que chegaram.
+
+```markdown
+### Endpoint
+
+PATCH /customers/{id}
+
+### Input
+
+- name: String
+- email: Email
+```
+
+Duas recusas vêm da mesma frase:
+
+- um input `required` é `HRP2136` — a requisição pode omitir o campo, então exigi-lo contradiz o
+  método que permite omiti-lo;
+- um flow sem `update ... from input` é `HRP2137` — não há mudança nenhuma a enunciar, e chamar a
+  operação de parcial não diz nada sobre ela.
+
+Só um binding decide entre atualização total e parcial, porque só um binding diz como a requisição
+chega. Uma operação sem exposição HTTP não é parcial.
 
 ## 9. Errors
 

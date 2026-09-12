@@ -58,7 +58,66 @@ public final class ApplicationModelBuilder {
                                         .toList(),
                                 source.where()))
                         .toList(),
-                business.entities().stream().map(ApplicationModelBuilder::entity).toList(),
+                business.integrations().stream()
+                        .map(source -> new ApplicationIntegration(
+                                source.name(),
+                                source.operations().stream()
+                                        .map(operation -> new ApplicationIntegration.Operation(
+                                                operation.name(),
+                                                operation.input().stream()
+                                                        .map(parameter ->
+                                                                new ApplicationIntegration.Parameter(
+                                                                        parameter.name(),
+                                                                        fieldType(parameter.type()),
+                                                                        parameter.required(),
+                                                                        parameter.where()))
+                                                        .toList(),
+                                                new ApplicationIntegration.Result(
+                                                        operation.output().type()
+                                                                .map(ApplicationModelBuilder::fieldType),
+                                                        operation.output().where()),
+                                                operation.errors().stream()
+                                                        .map(failure ->
+                                                                new ApplicationIntegration.Failure(
+                                                                        failure.name(),
+                                                                        failure.where()))
+                                                        .toList(),
+                                                operation.http().map(http ->
+                                                        new ApplicationIntegration.Http(
+                                                                ApplicationOperation.HttpMethod
+                                                                        .valueOf(http.method()
+                                                                                .name()),
+                                                                http.baseUrl(),
+                                                                http.path(),
+                                                                http.request().stream()
+                                                                        .map(ApplicationModelBuilder
+                                                                                ::requestMapping)
+                                                                        .toList(),
+                                                                responseMapping(http.response()),
+                                                                http.auth().map(
+                                                                        ApplicationModelBuilder
+                                                                                ::integrationAuth),
+                                                                http.where(),
+                                                                http.endpointWhere())),
+                                                operation.where()))
+                                        .toList(),
+                                source.where()))
+                        .toList(),
+                business.events().stream()
+                        .map(source -> new ApplicationEvent(
+                                source.name(),
+                                source.payload().stream()
+                                        .map(field -> new ApplicationEvent.Field(
+                                                field.name(),
+                                                fieldType(field.type()),
+                                                field.required(),
+                                                field.where()))
+                                        .toList(),
+                                source.where()))
+                        .toList(),
+                business.entities().stream()
+                        .map(source -> entity(source, identities(business)))
+                        .toList(),
                 business.logics().stream().map(ApplicationModelBuilder::logic).toList(),
                 business.scenarios().stream().map(ApplicationModelBuilder::scenario).toList(),
                 capabilities);
@@ -91,9 +150,26 @@ public final class ApplicationModelBuilder {
                 source.where());
     }
 
-    private static ApplicationEntity entity(EntityModel source) {
+    /**
+     * The scalar each entity is identified by.
+     *
+     * <p>A reference stores the identity of what it points at, so it has to be told what shape that
+     * identity has. Only the whole project knows.
+     */
+    private static Map<String, ApplicationScalarType> identities(
+            dev.harpia.model.ProjectModel business) {
+        Map<String, ApplicationScalarType> identities = new LinkedHashMap<>();
+        for (EntityModel entity : business.entities()) {
+            entity.idField().type().scalarKind().ifPresent(scalar ->
+                    identities.put(entity.name(), ApplicationScalarType.valueOf(scalar.name())));
+        }
+        return Map.copyOf(identities);
+    }
+
+    private static ApplicationEntity entity(
+            EntityModel source, Map<String, ApplicationScalarType> identities) {
         List<ApplicationField> fields = source.fields().stream()
-                .map(ApplicationModelBuilder::field)
+                .map(field -> field(field, identities))
                 .toList();
         Map<String, ApplicationField> fieldsByName = new LinkedHashMap<>();
         fields.forEach(field -> fieldsByName.put(field.name(), field));
@@ -106,6 +182,10 @@ public final class ApplicationModelBuilder {
                 fieldsByName.get(source.idField().name()),
                 source.useCases().stream()
                         .map(useCase -> operation(useCase, entityName))
+                        .toList(),
+                source.invariants().stream()
+                        .map(invariant -> new ApplicationRule(
+                                invariant.text(), invariant.condition(), invariant.where()))
                         .toList(),
                 source.where());
     }
@@ -123,18 +203,57 @@ public final class ApplicationModelBuilder {
         };
     }
 
-    private static ApplicationField field(FieldModel source) {
-        ApplicationFieldType type = source.type().scalarKind()
+    private static ApplicationFieldType fieldType(dev.harpia.model.FieldType type) {
+        return fieldType(type, Map.of());
+    }
+
+    private static ApplicationFieldType fieldType(
+            dev.harpia.model.FieldType type, Map<String, ApplicationScalarType> identities) {
+        if (type instanceof dev.harpia.model.FieldType.Container container) {
+            return ApplicationFieldType.list(fieldType(container.element(), identities));
+        }
+        if (type instanceof dev.harpia.model.FieldType.Optionality optional) {
+            return ApplicationFieldType.optional(fieldType(optional.element(), identities));
+        }
+        if (type instanceof dev.harpia.model.FieldType.Reference reference) {
+            return ApplicationFieldType.reference(
+                    reference.entity(),
+                    identities.getOrDefault(reference.entity(), ApplicationScalarType.UUID));
+        }
+        if (type instanceof dev.harpia.model.FieldType.Relationship relationship) {
+            return ApplicationFieldType.relationship(
+                    relationship.entity(),
+                    identities.getOrDefault(relationship.entity(), ApplicationScalarType.UUID),
+                    ApplicationFieldType.RelationshipLoading.valueOf(
+                            relationship.loading().name()),
+                    ApplicationFieldType.RelationshipLifecycle.valueOf(
+                            relationship.lifecycle().name()));
+        }
+        return type.scalarKind()
                 .<ApplicationFieldType>map(scalar ->
                         ApplicationFieldType.scalar(ApplicationScalarType.valueOf(scalar.name())))
-                .orElseGet(() -> nominal(source.type()));
+                .orElseGet(() -> nominal(type));
+    }
+
+    private static ApplicationField field(FieldModel source) {
+        return field(source, Map.of());
+    }
+
+    private static ApplicationField field(
+            FieldModel source, Map<String, ApplicationScalarType> identities) {
+        ApplicationFieldType type = fieldType(source.type(), identities);
         return new ApplicationField(
                 source.name(),
-                SqlNaming.identifier(source.name()),
+                // A reference stores an identity and a direct relationship joins through one.
+                type instanceof ApplicationFieldType.Reference
+                                || type instanceof ApplicationFieldType.Relationship
+                        ? SqlNaming.identifier(source.name()) + "_id"
+                        : SqlNaming.identifier(source.name()),
                 type,
                 source.required(),
                 source.unique(),
                 source.generated(),
+                source.indexed(),
                 source.defaultValue().map(value -> value.source()),
                 source.where());
     }
@@ -146,7 +265,7 @@ public final class ApplicationModelBuilder {
         List<FlowInstruction> flow = source.flow().steps().stream()
                 .map(ApplicationModelBuilder::instruction)
                 .toList();
-        Kind kind = operationKind(source.flow().steps());
+        Kind kind = operationKind(source.flow().allSteps());
         return new ApplicationOperation(
                 source.title(),
                 lowerFirst(source.baseName()),
@@ -157,7 +276,9 @@ public final class ApplicationModelBuilder {
                         binding.baseUrl(),
                         binding.path(),
                         binding.hasIdPathVariable(),
-                        Access.valueOf(binding.access().name()),
+                        new Access(
+                                Access.Kind.valueOf(binding.access().kind().name()),
+                                binding.access().roles()),
                         binding.request().stream()
                                 .map(ApplicationModelBuilder::requestMapping)
                                 .toList(),
@@ -176,6 +297,14 @@ public final class ApplicationModelBuilder {
                 source.errors().stream().map(ApplicationModelBuilder::failure).toList(),
                 transactional(source.nature(), kind),
                 source.where());
+    }
+
+    private static ApplicationIntegration.Auth integrationAuth(
+            dev.harpia.model.IntegrationHttpBinding.Auth auth) {
+        return new ApplicationIntegration.Auth(
+                ApplicationIntegration.Auth.Kind.valueOf(auth.kind().name()),
+                auth.header(),
+                auth.where());
     }
 
     private static ApplicationOperation.RequestMapping requestMapping(
@@ -230,10 +359,120 @@ public final class ApplicationModelBuilder {
         return Kind.READ;
     }
 
+    private static java.util.List<FlowInstruction.SortOrder> sortOrders(
+            java.util.List<FlowStep.SortOrder> source) {
+        return source.stream()
+                .map(order -> new FlowInstruction.SortOrder(order.field(), order.descending()))
+                .toList();
+    }
+
     private static FlowInstruction instruction(FlowStep source) {
         if (source instanceof FlowStep.ValidateInput value) {
             return new FlowInstruction(
                     FlowCommand.VALIDATE_INPUT, Optional.empty(), Optional.empty(), value.where());
+        }
+        if (source instanceof FlowStep.Fail value) {
+            return new FlowInstruction(
+                    FlowCommand.FAIL,
+                    Optional.empty(),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    false,
+                    Optional.of(new FlowInstruction.TypedValue(
+                            value.error(), value.text(), value.condition())),
+                    value.where());
+        }
+        if (source instanceof FlowStep.Require value) {
+            return new FlowInstruction(
+                    FlowCommand.REQUIRE,
+                    Optional.empty(),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    false,
+                    Optional.of(new FlowInstruction.TypedValue(
+                            value.error(), value.text(), value.condition())),
+                    value.where());
+        }
+        if (source instanceof FlowStep.Call value) {
+            return new FlowInstruction(
+                    FlowCommand.CALL_LOGIC,
+                    Optional.of(value.variable()),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    false,
+                    Optional.empty(),
+                    Optional.of(new FlowInstruction.Invocation(
+                            value.logic(),
+                            value.arguments().stream()
+                                    .map(argument -> new FlowInstruction.Invocation.Argument(
+                                            argument.name(),
+                                            argument.value(),
+                                            argument.parameterType()))
+                                    .toList(),
+                            value.resultType(),
+                            value.customContract())),
+                    Optional.empty(),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    value.where());
+        }
+        if (source instanceof FlowStep.IntegrationCall value) {
+            return new FlowInstruction(
+                    FlowCommand.CALL_INTEGRATION,
+                    value.variable(),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    false,
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(new FlowInstruction.IntegrationInvocation(
+                            value.integration(),
+                            value.operation(),
+                            value.arguments().stream()
+                                    .map(argument ->
+                                            new FlowInstruction.IntegrationInvocation.Argument(
+                                                    argument.name(),
+                                                    argument.value(),
+                                                    argument.parameterType()))
+                                    .toList(),
+                            value.resultType())),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    value.where());
+        }
+        if (source instanceof FlowStep.OperationCall value) {
+            return new FlowInstruction(
+                    FlowCommand.CALL_OPERATION,
+                    value.variable(),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    false,
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(new FlowInstruction.OperationInvocation(
+                            value.operation(),
+                            value.entity(),
+                            value.requiresId(),
+                            value.arguments().stream()
+                                    .map(argument ->
+                                            new FlowInstruction.OperationInvocation.Argument(
+                                                    argument.name(),
+                                                    argument.value(),
+                                                    argument.parameterType(),
+                                                    argument.identifier()))
+                                    .toList(),
+                            ResultKind.valueOf(value.resultKind().name()))),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    value.where());
         }
         if (source instanceof FlowStep.CreateFrom value) {
             return new FlowInstruction(
@@ -249,6 +488,75 @@ public final class ApplicationModelBuilder {
                     Optional.of(value.entity()),
                     value.where());
         }
+        if (source instanceof FlowStep.FindBy value) {
+            return new FlowInstruction(
+                    FlowCommand.FIND_BY,
+                    Optional.of(value.variable()),
+                    Optional.of(value.entity()),
+                    java.util.List.of(value.field()),
+                    java.util.List.of(),
+                    false,
+                    Optional.empty(),
+                    value.where());
+        }
+        if (source instanceof FlowStep.ListBy value) {
+            return new FlowInstruction(
+                    FlowCommand.LIST_BY,
+                    Optional.of(value.variable()),
+                    Optional.of(value.entity()),
+                    value.fields(),
+                    sortOrders(value.sort()),
+                    value.paged(),
+                    Optional.empty(),
+                    value.where());
+        }
+        if (source instanceof FlowStep.Conditional value) {
+            return new FlowInstruction(
+                    FlowCommand.IF,
+                    Optional.empty(),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    false,
+                    Optional.of(new FlowInstruction.TypedValue(
+                            "if", value.text(), value.condition())),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    value.whenTrue().stream()
+                            .map(ApplicationModelBuilder::instruction)
+                            .toList(),
+                    value.whenFalse().stream()
+                            .map(ApplicationModelBuilder::instruction)
+                            .toList(),
+                    value.where());
+        }
+        if (source instanceof FlowStep.ChangeCollection value) {
+            return new FlowInstruction(
+                    value.change() == dev.harpia.parse.SpecAst.CollectionChange.ADD
+                            ? FlowCommand.ADD_TO
+                            : FlowCommand.REMOVE_FROM,
+                    Optional.of(value.variable()),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    false,
+                    Optional.of(new FlowInstruction.TypedValue(
+                            value.field(), value.text(), value.element())),
+                    value.where());
+        }
+        if (source instanceof FlowStep.SetField value) {
+            return new FlowInstruction(
+                    FlowCommand.SET_FIELD,
+                    Optional.of(value.variable()),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    false,
+                    Optional.of(new FlowInstruction.TypedValue(
+                            value.field(), value.text(), value.value())),
+                    value.where());
+        }
         if (source instanceof FlowStep.UpdateFrom value) {
             return new FlowInstruction(
                     FlowCommand.UPDATE_FROM,
@@ -261,6 +569,10 @@ public final class ApplicationModelBuilder {
                     FlowCommand.LIST_ALL,
                     Optional.of(value.variable()),
                     Optional.of(value.entity()),
+                    java.util.List.of(),
+                    sortOrders(value.sort()),
+                    value.paged(),
+                    Optional.empty(),
                     value.where());
         }
         if (source instanceof FlowStep.Save value) {
@@ -289,9 +601,12 @@ public final class ApplicationModelBuilder {
         flow.variables().forEach((name, type) -> result.put(
                 name,
                 new VariableType(
-                        type.kind() == FlowModel.Kind.ENTITY
-                                ? VariableKind.ENTITY
-                                : VariableKind.LIST,
+                        switch (type.kind()) {
+                            case ENTITY -> VariableKind.ENTITY;
+                            case LIST -> VariableKind.LIST;
+                            case SCALAR -> VariableKind.SCALAR;
+                            case VALUE -> VariableKind.VALUE;
+                        },
                         type.entity())));
         return result;
     }
@@ -300,6 +615,7 @@ public final class ApplicationModelBuilder {
         ResultKind kind = switch (output.shape().kind()) {
             case ENTITY -> ResultKind.ENTITY;
             case LIST -> ResultKind.LIST;
+            case PAGE -> ResultKind.PAGE;
             case NOTHING -> ResultKind.NOTHING;
         };
         return new Result(

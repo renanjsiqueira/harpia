@@ -17,6 +17,9 @@ public record JavaLayout(String packageName, String applicationClassName) {
     public static final String SERVICE = "service";
     public static final String WEB = "web";
     public static final String ERROR = "error";
+    public static final String EVENT = "event";
+    public static final String CONFIG = "config";
+    public static final String INTEGRATION = "integration";
 
     public JavaLayout {
         Objects.requireNonNull(packageName, "packageName");

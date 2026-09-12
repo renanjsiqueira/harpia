@@ -85,6 +85,56 @@ public sealed interface Symbol {
         }
     }
 
+    /** An outbound system boundary and the operations callers may invoke on it. */
+    record Integration(
+            String name,
+            String module,
+            List<dev.harpia.parse.IntegrationAst.Operation> operations,
+            SourceRef where) implements Symbol {
+        public Integration {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(module, "module");
+            operations = List.copyOf(operations);
+            Objects.requireNonNull(where, "where");
+        }
+
+        @Override
+        public Namespace namespace() {
+            return Namespace.INTEGRATIONS;
+        }
+
+        public java.util.Optional<dev.harpia.parse.IntegrationAst.Operation> operation(
+                String operationName) {
+            return operations.stream()
+                    .filter(operation -> operation.name().equals(operationName))
+                    .findFirst();
+        }
+    }
+
+    /**
+     * Something that happened, and the payload that announces it.
+     *
+     * <p>An event has no operations because nobody calls it: it is published and read, so the
+     * whole declaration is what it carries.
+     */
+    record Event(
+            String name,
+            String module,
+            List<dev.harpia.parse.SpecAst.InputDeclaration> payload,
+            SourceRef where) implements Symbol {
+        public Event {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(module, "module");
+            payload = List.copyOf(payload);
+            Objects.requireNonNull(where, "where");
+        }
+
+        @Override
+        public Namespace namespace() {
+            return Namespace.EVENTS;
+        }
+    }
+
     /** A pure computation, with the signature every call and scenario is checked against. */
     record Computation(
             String name,

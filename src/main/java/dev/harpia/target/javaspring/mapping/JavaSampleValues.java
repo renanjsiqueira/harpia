@@ -23,12 +23,53 @@ public final class JavaSampleValues {
     private JavaSampleValues() {
     }
 
+    private static String jsonOf(ApplicationScalarType type) {
+        return switch (type) {
+            case STRING, TEXT -> "\\\"value\\\"";
+            case EMAIL -> "\\\"value@example.com\\\"";
+            case INT, LONG -> "1";
+            case DECIMAL -> "1.00";
+            case BOOLEAN -> "true";
+            case UUID -> "\\\"" + UUID_VALUE + "\\\"";
+            case DATE -> "\\\"" + DATE_VALUE + "\\\"";
+            case DATE_TIME -> "\\\"" + DATE_TIME_VALUE + "\\\"";
+        };
+    }
+
+    /** A sample of a bare scalar, with no field to take a name from. */
+    private static String sampleOf(ApplicationScalarType type) {
+        return switch (type) {
+            case STRING, TEXT -> "\"value\"";
+            case EMAIL -> "\"value@example.com\"";
+            case INT -> "1";
+            case LONG -> "1L";
+            case DECIMAL -> "new BigDecimal(\"1.00\")";
+            case BOOLEAN -> "true";
+            case UUID -> "UUID.fromString(\"" + UUID_VALUE + "\")";
+            case DATE -> "LocalDate.parse(\"" + DATE_VALUE + "\")";
+            case DATE_TIME -> "OffsetDateTime.parse(\"" + DATE_TIME_VALUE + "\")";
+        };
+    }
+
     /** The value as a Java expression. */
     public static String java(ApplicationField field) {
         Objects.requireNonNull(field, "field");
+        if (field.optionalType().isPresent()) {
+            return "Optional.of(" + java(present(field)) + ")";
+        }
+        if (field.reference().isPresent()) {
+            return sampleOf(field.reference().orElseThrow().idType());
+        }
+        if (field.relationship().isPresent()) {
+            return "new " + field.relationship().orElseThrow().entity() + "()";
+        }
         Optional<String> declared = field.enumTypeName();
         if (declared.isPresent()) {
             return declared.orElseThrow() + "." + enumSample(field);
+        }
+        if (field.elementType().isPresent()) {
+            // A flow may add to this collection, and an immutable one would refuse.
+            return "new ArrayList<>(List.of(" + element(field) + "))";
         }
         if (field.valueType().isPresent()) {
             ApplicationFieldType.ValueType value = field.valueType().orElseThrow();
@@ -55,12 +96,21 @@ public final class JavaSampleValues {
     /** The same value as a JSON literal, for a request body. */
     public static String json(ApplicationField field) {
         Objects.requireNonNull(field, "field");
+        if (field.elementType().isPresent()) {
+            return "[" + json(sample(field)) + "]";
+        }
         if (field.valueType().isPresent()) {
             ApplicationFieldType.ValueType value = field.valueType().orElseThrow();
             return "{" + value.components().stream()
                     .map(component -> "\\\"" + component.name() + "\\\":" + json(component))
                     .reduce((left, right) -> left + "," + right)
                     .orElse("") + "}";
+        }
+        if (field.reference().isPresent()) {
+            return jsonOf(field.reference().orElseThrow().idType());
+        }
+        if (field.relationship().isPresent()) {
+            return "{}";
         }
         if (field.enumTypeName().isPresent()) {
             return "\\\"" + enumSample(field) + "\\\"";
@@ -84,6 +134,17 @@ public final class JavaSampleValues {
      */
     public static String plain(ApplicationField field) {
         Objects.requireNonNull(field, "field");
+        if (field.relationship().isPresent()) {
+            return plainOf(field.relationship().orElseThrow().idType());
+        }
+        if (field.reference().isPresent()) {
+            return plainOf(field.reference().orElseThrow().idType());
+        }
+        // The wire already spells a declared enum as its constant, which is what the JSON body
+        // carries. A URL is a different place to write the same value, not a different value.
+        if (field.enumTypeName().isPresent()) {
+            return enumSample(field);
+        }
         return switch (field.scalarType()) {
             case STRING, TEXT, EMAIL -> text(field);
             case INT, LONG -> "1";
@@ -107,10 +168,27 @@ public final class JavaSampleValues {
         Objects.requireNonNull(domainPackage, "domainPackage");
         java.util.List<String> imports = new java.util.ArrayList<>();
         field.declaredType().ifPresent(name -> imports.add(domainPackage + "." + name));
+        field.optionalType().ifPresent(inner -> {
+            imports.add("java.util.Optional");
+            imports.addAll(requiredImports(present(field), domainPackage));
+        });
+        field.elementType().ifPresent(element -> {
+            imports.add("java.util.ArrayList");
+            imports.add("java.util.List");
+            imports.addAll(requiredImports(sample(field), domainPackage));
+        });
         // Building a value's sample means naming its components' types too.
         field.valueType().ifPresent(value -> value.components()
                 .forEach(component -> imports.addAll(requiredImports(component, domainPackage))));
-        if (field.declaredType().isEmpty()) {
+        field.reference().ifPresent(reference ->
+                requiredImport(reference.idType()).ifPresent(imports::add));
+        field.relationship().ifPresent(relationship ->
+                imports.add(domainPackage + "." + relationship.entity()));
+        if (field.declaredType().isEmpty()
+                && field.elementType().isEmpty()
+                && field.optionalType().isEmpty()
+                && field.reference().isEmpty()
+                && field.relationship().isEmpty()) {
             requiredImport(field.scalarType()).ifPresent(imports::add);
         }
         return java.util.List.copyOf(imports);
@@ -127,6 +205,49 @@ public final class JavaSampleValues {
         };
     }
 
+    /**
+     * The value as the field is stored, which is what a setter takes.
+     *
+     * <p>A setter takes the type JPA holds, not the type callers are handed back, so a sample that
+     * feeds one is not the same expression as a sample that fills the other.
+     */
+    public static String stored(ApplicationField field) {
+        Objects.requireNonNull(field, "field");
+        return java(present(field));
+    }
+
+    /** The same field as if the value were always there, for building the value itself. */
+    private static ApplicationField present(ApplicationField field) {
+        return new ApplicationField(
+                field.name(),
+                field.columnName(),
+                field.present(),
+                true,
+                field.unique(),
+                field.generated(),
+                field.indexed(),
+                field.defaultValue(),
+                field.where());
+    }
+
+    /** One element of a collection, standing in as a field of the element's own type. */
+    private static ApplicationField sample(ApplicationField field) {
+        return new ApplicationField(
+                field.name(),
+                field.columnName(),
+                field.elementType().orElseThrow(),
+                true,
+                false,
+                false,
+                false,
+                java.util.Optional.empty(),
+                field.where());
+    }
+
+    private static String element(ApplicationField field) {
+        return java(sample(field));
+    }
+
     /** The sample constant of a declared enum, which the field itself cannot know. */
     private static String enumSample(ApplicationField field) {
         return field.enumValues().stream()
@@ -140,5 +261,17 @@ public final class JavaSampleValues {
         return field.scalarType() == ApplicationScalarType.EMAIL
                 ? field.name() + "@example.com"
                 : field.name();
+    }
+
+    private static String plainOf(ApplicationScalarType type) {
+        return switch (type) {
+            case STRING, TEXT, EMAIL -> "value";
+            case INT, LONG -> "1";
+            case DECIMAL -> "1.00";
+            case BOOLEAN -> "true";
+            case UUID -> UUID_VALUE;
+            case DATE -> DATE_VALUE;
+            case DATE_TIME -> DATE_TIME_VALUE;
+        };
     }
 }

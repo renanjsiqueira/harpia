@@ -20,21 +20,34 @@ import java.util.Optional;
 public record CompileResult(
         Optional<GeneratedTree> tree,
         Optional<String> outputDirectory,
+        Optional<String> targetId,
         Stages stages,
         List<Diagnostic> diagnostics) {
 
     public CompileResult(Optional<GeneratedTree> tree, List<Diagnostic> diagnostics) {
-        this(tree, Optional.empty(), Stages.none(), diagnostics);
+        this(tree, Optional.empty(), Optional.empty(), Stages.none(), diagnostics);
     }
 
     public CompileResult(
             Optional<GeneratedTree> tree, Stages stages, List<Diagnostic> diagnostics) {
-        this(tree, Optional.empty(), stages, diagnostics);
+        this(tree, Optional.empty(), Optional.empty(), stages, diagnostics);
+    }
+
+    public CompileResult(
+            Optional<GeneratedTree> tree,
+            Optional<String> outputDirectory,
+            Stages stages,
+            List<Diagnostic> diagnostics) {
+        this(tree, outputDirectory, Optional.empty(), stages, diagnostics);
     }
 
     public CompileResult {
         Objects.requireNonNull(tree, "tree");
         Objects.requireNonNull(outputDirectory, "outputDirectory");
+        // Which target ran is a fact about this compilation, not about the Application IR, which
+        // stays target independent on purpose. It sits here for the same reason the output
+        // directory does: the caller asked for it and would otherwise have to re-read the config.
+        Objects.requireNonNull(targetId, "targetId");
         Objects.requireNonNull(stages, "stages");
         Objects.requireNonNull(diagnostics, "diagnostics");
         diagnostics = DiagnosticOrdering.sorted(diagnostics);

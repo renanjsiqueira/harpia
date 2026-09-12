@@ -149,7 +149,8 @@ public final class JavaSpringControllerTransformer {
         return new JavaMethodModel(
                 operation.methodName(),
                 JavaTypeRef.parameterized(
-                        "org.springframework.http.ResponseEntity", bodyType(operation, responseType)),
+                        "org.springframework.http.ResponseEntity",
+                        bodyType(layout, operation, responseType)),
                 JavaVisibility.PUBLIC,
                 Set.of(),
                 List.of(mapping(endpoint)),
@@ -204,15 +205,21 @@ public final class JavaSpringControllerTransformer {
         annotations.add(JavaAnnotationModel.of(
                 ANNOTATIONS + annotation,
                 new JavaAnnotationModel.Attribute("value", "\"" + externalName + "\"")));
+        // A declared enum is a closed set of names, so the URL carries it as well as it carries a
+        // scalar. Mapping only the scalar kind here used to make the whole target fail on one.
         return new JavaParameterModel(
-                mapping.input(), JavaTypeMapper.map(field.scalarType()), List.copyOf(annotations));
+                mapping.input(),
+                JavaTypeMapper.map(field.type(), layout.packageName(JavaLayout.DOMAIN)),
+                List.copyOf(annotations));
     }
 
     private static JavaTypeRef bodyType(
-            ApplicationOperation operation, JavaTypeRef responseType) {
+            JavaLayout layout, ApplicationOperation operation, JavaTypeRef responseType) {
         return switch (operation.result().kind()) {
             case ENTITY -> responseType;
             case LIST -> JavaTypeRef.parameterized("java.util.List", responseType);
+            case PAGE -> JavaTypeRef.parameterized(
+                    layout.packageName(JavaLayout.DTO) + ".PageResponse", responseType);
             case NOTHING -> JavaTypeRef.of("java.lang.Void");
         };
     }
@@ -222,6 +229,7 @@ public final class JavaSpringControllerTransformer {
             case GET -> "GetMapping";
             case POST -> "PostMapping";
             case PUT -> "PutMapping";
+            case PATCH -> "PatchMapping";
             case DELETE -> "DeleteMapping";
         };
         return JavaAnnotationModel.of(
@@ -231,7 +239,7 @@ public final class JavaSpringControllerTransformer {
     }
 
     private static boolean validates(ApplicationOperation operation) {
-        return operation.flow().stream()
+        return operation.allInstructions().stream()
                 .anyMatch(instruction -> instruction.command()
                         == ApplicationOperation.FlowCommand.VALIDATE_INPUT);
     }

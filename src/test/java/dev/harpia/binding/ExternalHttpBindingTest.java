@@ -89,6 +89,40 @@ class ExternalHttpBindingTest {
     }
 
     @Test
+    void anExternalBindingDeclaresAccessTheSameWayAnInlineEndpointDoes() throws IOException {
+        bindings("""
+                ## Bind GetCustomer
+
+                ### Endpoint
+
+                GET /customers/{id}
+
+                ### Access
+
+                role admin
+
+                ### Request
+
+                - id: path id
+
+                ### Response
+
+                output: body
+                """);
+
+        CompileResult result = compile();
+        assertThat(result.diagnostics()).isEmpty();
+        // Where an operation is exposed from does not change what it asks of the caller: the
+        // binding file and the inline endpoint go through the same access grammar.
+        assertThat(Inspector.render(result, Stage.APPLICATION_IR).orElseThrow())
+                .contains("access=ROLE admin");
+        assertThat(result.tree().orElseThrow().files()
+                        .get("src/main/java/com/example/customer/config/SecurityConfig.java"))
+                .contains(".requestMatchers(HttpMethod.GET, \"/customers/{id}\")"
+                        + ".hasAnyRole(\"ADMIN\")");
+    }
+
+    @Test
     void anExternalBindingExposesAnOtherwiseInternalOperation() throws IOException {
         bindings("""
                 ## Bind GetCustomer
@@ -169,6 +203,22 @@ class ExternalHttpBindingTest {
                 .singleElement()
                 .satisfies(diagnostic -> assertThat(diagnostic.message())
                         .contains("unknown operation 'MissingOperation'"));
+    }
+
+    @Test
+    void anInboundBaseUrlRemainsAPathPrefix() throws IOException {
+        bindings("""
+                ## Base URL
+
+                https://api.example
+
+                """ + binding("GetCustomer", "GET /customers/{id}"));
+
+        assertThat(compile().diagnostics())
+                .filteredOn(diagnostic -> diagnostic.code()
+                        .equals(ErrorCodes.SEMANTIC_BINDING_MAPPING))
+                .anySatisfy(diagnostic -> assertThat(diagnostic.message())
+                        .contains("inbound HTTP binding").contains("path-prefix"));
     }
 
     @Test

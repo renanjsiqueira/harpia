@@ -23,11 +23,27 @@ public final class CapabilityAnalyzer {
                     "entity " + entity.name() + " declares persistent data",
                     entity.where()));
             for (UseCaseModel useCase : entity.useCases()) {
-                useCase.http().ifPresent(ignored -> requirements.add(new CapabilityRequirement(
-                        Capability.HTTP,
-                        "operation " + useCase.baseName() + " declares an HTTP binding",
-                        useCase.where())));
-                for (FlowStep step : useCase.flow().steps()) {
+                useCase.http().ifPresent(binding -> {
+                    requirements.add(new CapabilityRequirement(
+                            Capability.HTTP,
+                            "operation " + useCase.baseName() + " declares an HTTP binding",
+                            useCase.where()));
+                    // Demanding an identity is not free: something has to be there to check one.
+                    if (binding.access().requiresIdentity()) {
+                        requirements.add(new CapabilityRequirement(
+                                Capability.SECURITY,
+                                "operation " + useCase.baseName() + " is authenticated",
+                                useCase.where()));
+                    }
+                });
+                for (FlowStep step : useCase.flow().allSteps()) {
+                    if (step instanceof FlowStep.IntegrationCall call) {
+                        requirements.add(new CapabilityRequirement(
+                                Capability.HTTP,
+                                "integration call " + call.integration() + "." + call.operation()
+                                        + " requires an outbound provider",
+                                step.where()));
+                    }
                     if (usesPersistence(step)) {
                         requirements.add(new CapabilityRequirement(
                                 Capability.PERSISTENCE,
@@ -37,6 +53,12 @@ public final class CapabilityAnalyzer {
                 }
             }
         }
+        project.integrations().forEach(integration -> integration.operations().forEach(operation ->
+                operation.http().ifPresent(binding -> requirements.add(new CapabilityRequirement(
+                        Capability.HTTP,
+                        "Integration operation " + integration.name() + "." + operation.name()
+                                + " declares an outbound HTTP binding",
+                        binding.where())))));
         return new CapabilityRequirementSet(requirements);
     }
 

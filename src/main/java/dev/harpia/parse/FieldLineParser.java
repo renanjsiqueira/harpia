@@ -43,6 +43,8 @@ public final class FieldLineParser {
         boolean required = false;
         boolean unique = false;
         boolean generated = false;
+        boolean owned = false;
+        boolean indexed = false;
         String defaultValue = null;
         Set<String> seen = new HashSet<>();
         String modifiers = matcher.group(3);
@@ -60,7 +62,9 @@ public final class FieldLineParser {
                     remainder = "";
                 } else if (modifier.equals("required")
                         || modifier.equals("unique")
-                        || modifier.equals("generated")) {
+                        || modifier.equals("generated")
+                        || modifier.equals("owned")
+                        || modifier.equals("indexed")) {
                     if (!seen.add(modifier)) {
                         invalid(raw, where, diagnostics, "duplicate field modifier '" + modifier + "'");
                         return Optional.empty();
@@ -68,6 +72,8 @@ public final class FieldLineParser {
                     required |= modifier.equals("required");
                     unique |= modifier.equals("unique");
                     generated |= modifier.equals("generated");
+                    owned |= modifier.equals("owned");
+                    indexed |= modifier.equals("indexed");
                     remainder = separator < 0 ? "" : remainder.substring(separator).stripLeading();
                 } else {
                     invalid(raw, where, diagnostics, "unknown field modifier '" + modifier + "'");
@@ -75,8 +81,15 @@ public final class FieldLineParser {
                 }
             }
         }
+        // A unique column already has an index behind its constraint, so asking for another
+        // would create a second structure that serves the first one's purpose.
+        if (unique && indexed) {
+            invalid(raw, where, diagnostics,
+                    "'unique' already indexes the column; 'indexed' adds nothing");
+            return Optional.empty();
+        }
         return Optional.of(new FieldDeclaration(
-                matcher.group(1), type, required, unique, generated,
+                matcher.group(1), type, required, unique, generated, owned, indexed,
                 Optional.ofNullable(defaultValue), where));
     }
 
@@ -114,11 +127,38 @@ public final class FieldLineParser {
     }
 
     public static boolean knownType(String type) {
-        return TYPES.contains(type) || NOMINAL.matcher(type).matches();
+        if (referenceOf(type).isPresent()) {
+            return NOMINAL.matcher(referenceOf(type).orElseThrow()).matches();
+        }
+        Optional<String> inner = elementOf(type).or(() -> optionalOf(type));
+        return inner.map(FieldLineParser::knownType)
+                .orElseGet(() -> TYPES.contains(type) || NOMINAL.matcher(type).matches());
+    }
+
+    /** The entity a reference points at, when the syntax names one. */
+    public static Optional<String> referenceOf(String type) {
+        Matcher matcher = REFERENCE.matcher(type);
+        return matcher.matches() ? Optional.of(matcher.group(1)) : Optional.empty();
+    }
+
+    /** The type an optional wraps, when the syntax names one. */
+    public static Optional<String> optionalOf(String type) {
+        Matcher matcher = OPTIONAL.matcher(type);
+        return matcher.matches() ? Optional.of(matcher.group(1)) : Optional.empty();
+    }
+
+    /** The element type of a collection, when the syntax names one. */
+    public static Optional<String> elementOf(String type) {
+        Matcher matcher = LIST.matcher(type);
+        return matcher.matches() ? Optional.of(matcher.group(1)) : Optional.empty();
     }
 
     /** A declared type is referenced by its PascalCase name. */
     private static final Pattern NOMINAL = Pattern.compile("[A-Z][A-Za-z0-9]*");
+    /** A collection names its element type, which may itself be declared. */
+    private static final Pattern LIST = Pattern.compile("List<([^<>]+)>");
+    private static final Pattern OPTIONAL = Pattern.compile("Optional<([^<>]+)>");
+    private static final Pattern REFERENCE = Pattern.compile("Reference<([^<>]+)>");
 
     private static void unknownType(
             String raw,

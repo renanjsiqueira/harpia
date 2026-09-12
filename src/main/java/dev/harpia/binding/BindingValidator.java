@@ -37,6 +37,13 @@ public final class BindingValidator {
 
         Map<String, SourceRef> routes = new LinkedHashMap<>();
         for (BindingModel.Http binding : bindings.http().values()) {
+            if (binding.binding().baseUrl().matches("https?://.*")) {
+                mappingError(
+                        "inbound HTTP binding requires a path-prefix '## Base URL', not an "
+                                + "absolute URL",
+                        binding.binding().where(),
+                        diagnostics);
+            }
             String route = binding.binding().method() + " " + binding.binding().effectivePath();
             SourceRef first = routes.putIfAbsent(route, binding.endpointWhere());
             if (first != null) {
@@ -62,7 +69,98 @@ public final class BindingValidator {
                                 + "' must either both be present or both be absent",
                         binding.endpointWhere());
             }
+            validatePathParameters(binding, operation, diagnostics);
+            validatePartialUpdate(project.languageVersion(), binding, operation, diagnostics);
+            validateAccess(project.languageVersion(), binding, diagnostics);
             validateMappings(binding.binding(), operation, loadsById, diagnostics);
+        }
+    }
+
+    /**
+     * A path parameter is named after the value it carries.
+     *
+     * <p>{@code id} is the record the flow loads. Any other name is filled from the operation's
+     * input, so a name with nothing behind it would leave the segment unbound at request time.
+     */
+    private static void validatePathParameters(
+            BindingModel.Http binding,
+            SpecAst.UseCaseDeclaration operation,
+            DiagnosticCollector diagnostics) {
+        java.util.Set<String> inputs = operation.input().stream()
+                .map(SpecAst.InputDeclaration::name)
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        for (String parameter : dev.harpia.parse.EndpointParser.parameters(
+                binding.binding().path())) {
+            if (parameter.equals("id") || inputs.contains(parameter)) {
+                continue;
+            }
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_PATH_PARAM_INPUT,
+                    "path parameter '{" + parameter + "}' has no input '" + parameter
+                            + "' in operation '" + operation.title() + "' to fill it",
+                    binding.endpointWhere());
+        }
+    }
+
+    /**
+     * {@code authenticated} is V1.
+     *
+     * <p>V0 refused it as a feature outside the language. It is inside now, so the refusal moves
+     * to where the version is known and says which version admits it.
+     */
+    private static void validateAccess(
+            dev.harpia.LanguageVersion languageVersion,
+            BindingModel.Http binding,
+            DiagnosticCollector diagnostics) {
+        if (binding.binding().access().requiresIdentity()
+                && languageVersion == dev.harpia.LanguageVersion.V0) {
+            diagnostics.error(
+                    ErrorCodes.UNSUPPORTED_AUTHENTICATION,
+                    "access '" + binding.binding().access().toString().toLowerCase(
+                            java.util.Locale.ROOT) + "' needs harpia.languageVersion 1",
+                    binding.endpointWhere(),
+                    "set harpia.languageVersion to 1");
+        }
+    }
+
+    /**
+     * A partial update states only the changes.
+     *
+     * <p>That is what separates it from a full update, and everything here follows from it: a
+     * field the request may omit cannot also be demanded, and an operation that copies nothing
+     * from the request has no changes to state, so calling it partial says nothing about it.
+     */
+    private static void validatePartialUpdate(
+            dev.harpia.LanguageVersion languageVersion,
+            BindingModel.Http binding,
+            SpecAst.UseCaseDeclaration operation,
+            DiagnosticCollector diagnostics) {
+        if (binding.binding().method() != HttpBinding.HttpMethod.PATCH) {
+            return;
+        }
+        if (languageVersion == dev.harpia.LanguageVersion.V0) {
+            diagnostics.error(
+                    ErrorCodes.SYNTAX_ENDPOINT,
+                    "PATCH needs harpia.languageVersion 1",
+                    binding.endpointWhere(),
+                    "set harpia.languageVersion to 1");
+            return;
+        }
+        if (operation.flow().stream().noneMatch(SpecAst.UpdateFrom.class::isInstance)) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_PATCH_WITHOUT_UPDATE,
+                    "PATCH states a partial update, but operation '" + operation.title()
+                            + "' never updates from input",
+                    binding.endpointWhere());
+        }
+        for (SpecAst.InputDeclaration input : operation.input()) {
+            if (input.required()) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_PATCH_REQUIRED_INPUT,
+                        "input '" + input.name() + "' is required, but PATCH lets the request omit "
+                                + "it; a partial update carries only the fields it changes",
+                        input.where());
+            }
         }
     }
 
@@ -112,10 +210,12 @@ public final class BindingValidator {
                         "request mapping references unknown input '" + mapping.input() + "'",
                         mapping.where(),
                         diagnostics);
-            } else if (mapping instanceof HttpBinding.Path) {
+            } else if (mapping instanceof HttpBinding.Path path
+                    && !binding.path().contains("{" + path.parameter() + "}")) {
                 mappingError(
-                        "only the semantic 'id' can be mapped from the current path grammar",
-                        mapping.where(),
+                        "path parameter '" + path.parameter()
+                                + "' does not occur in endpoint '" + binding.path() + "'",
+                        path.where(),
                         diagnostics);
             }
         }

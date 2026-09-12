@@ -6,11 +6,32 @@ import java.util.Objects;
 import java.util.Optional;
 
 /** Renderer-ready SQL migration model; schema inference has already happened. */
-public record SqlMigrationModel(List<Table> tables, Optional<SourceRef> source) {
+public record SqlMigrationModel(
+        List<Table> tables,
+        List<ForeignKey> foreignKeys,
+        List<Index> indexes,
+        Optional<SourceRef> source) {
 
     public SqlMigrationModel {
         tables = tables.stream().sorted(java.util.Comparator.comparing(Table::name)).toList();
+        foreignKeys = foreignKeys.stream()
+                .sorted(java.util.Comparator.comparing(ForeignKey::table)
+                        .thenComparing(ForeignKey::column))
+                .toList();
+        indexes = indexes.stream()
+                .sorted(java.util.Comparator.comparing(Index::table)
+                        .thenComparing(Index::column))
+                .toList();
         Objects.requireNonNull(source, "source");
+    }
+
+    /** A non-unique index, which a query uses and a constraint does not create. */
+    public record Index(String name, String table, String column) {
+        public Index {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(table, "table");
+            Objects.requireNonNull(column, "column");
+        }
     }
 
     public record Table(String name, List<String> columns, List<String> constraints) {
@@ -18,6 +39,27 @@ public record SqlMigrationModel(List<Table> tables, Optional<SourceRef> source) 
             Objects.requireNonNull(name, "name");
             columns = List.copyOf(columns);
             constraints = List.copyOf(constraints);
+        }
+    }
+
+    /**
+     * A foreign key emitted after every table exists.
+     *
+     * <p>Keeping it outside {@link Table} supports reverse declaration order, self references and
+     * relationship cycles without trying to topologically sort an inherently cyclic graph.
+     */
+    public record ForeignKey(
+            String name,
+            String table,
+            String column,
+            String targetTable,
+            String targetColumn) {
+        public ForeignKey {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(table, "table");
+            Objects.requireNonNull(column, "column");
+            Objects.requireNonNull(targetTable, "targetTable");
+            Objects.requireNonNull(targetColumn, "targetColumn");
         }
     }
 }

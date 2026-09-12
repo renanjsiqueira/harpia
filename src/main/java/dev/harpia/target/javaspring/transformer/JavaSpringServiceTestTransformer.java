@@ -53,6 +53,11 @@ public final class JavaSpringServiceTestTransformer {
         Names names = Names.of(context, entity);
         TreeSet<String> imports = new TreeSet<>(FIXED_IMPORTS);
         imports.add(names.responseImport());
+        // A paged operation answers with the envelope, so the test has to name it too.
+        if (entity.operations().stream().anyMatch(operation ->
+                operation.result().kind() == ApplicationOperation.ResultKind.PAGE)) {
+            imports.add(names.dtoPackage() + ".PageResponse");
+        }
         entity.fields().forEach(field ->
                 imports.addAll(
                         JavaSampleValues.requiredImports(field, names.domainPackage())));
@@ -73,6 +78,22 @@ public final class JavaSpringServiceTestTransformer {
         }
         methods.add(sampleEntity(names, entity));
 
+        List<JavaFieldModel> fields = new ArrayList<>();
+        fields.add(identifier(names, entity));
+        fields.add(mock(names));
+        usedCustomContracts(entity).forEach(contract -> fields.add(dependencyMock(
+                Character.toLowerCase(contract.charAt(0)) + contract.substring(1),
+                JavaTypeRef.of(names.logicPackage() + "." + contract),
+                entity)));
+        usedOperationEntities(entity).forEach(owner -> fields.add(dependencyMock(
+                Character.toLowerCase(owner.charAt(0)) + owner.substring(1) + "Service",
+                JavaTypeRef.of(names.servicePackage() + "."
+                        + JavaLayout.serviceTypeName(owner)),
+                entity)));
+        usedIntegrations(entity).forEach(integration -> fields.add(integrationMock(
+                names, integration, entity)));
+        fields.add(underTest(names));
+
         JavaTypeModel type = new JavaTypeModel(
                 JavaTypeModel.Kind.CLASS,
                 names.servicePackage(),
@@ -86,7 +107,7 @@ public final class JavaSpringServiceTestTransformer {
                         new JavaAnnotationModel.Attribute("value", "MockitoExtension.class"))),
                 imports.stream().map(JavaImportModel::new).toList(),
                 List.of(),
-                List.of(identifier(names, entity), mock(names), underTest(names)),
+                fields,
                 List.of(),
                 methods,
                 Optional.of(entity.where()));
@@ -130,6 +151,120 @@ public final class JavaSpringServiceTestTransformer {
                 Optional.empty());
     }
 
+    private static JavaFieldModel integrationMock(
+            Names names, String integration, ApplicationEntity entity) {
+        return new JavaFieldModel(
+                JavaSpringIntegrationClientTransformer.clientFieldName(integration),
+                JavaTypeRef.of(names.integrationPackage() + "."
+                        + JavaSpringIntegrationClientTransformer.clientTypeName(integration)),
+                JavaVisibility.PRIVATE,
+                Set.of(),
+                List.of(JavaAnnotationModel.marker("org.mockito.Mock")),
+                Optional.empty(),
+                Optional.of(entity.where()));
+    }
+
+    private static JavaFieldModel dependencyMock(
+            String fieldName, JavaTypeRef type, ApplicationEntity entity) {
+        return new JavaFieldModel(
+                fieldName,
+                type,
+                JavaVisibility.PRIVATE,
+                Set.of(),
+                List.of(JavaAnnotationModel.marker("org.mockito.Mock")),
+                Optional.empty(),
+                Optional.of(entity.where()));
+    }
+
+    private static List<String> usedIntegrations(ApplicationEntity entity) {
+        return entity.operations().stream()
+                .flatMap(operation -> operation.allInstructions().stream())
+                .filter(instruction -> instruction.command() == FlowCommand.CALL_INTEGRATION)
+                .map(instruction -> instruction.integrationInvocation()
+                        .orElseThrow().integration())
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    private static List<String> usedCustomContracts(ApplicationEntity entity) {
+        return entity.operations().stream()
+                .flatMap(operation -> operation.allInstructions().stream())
+                .filter(instruction -> instruction.command() == FlowCommand.CALL_LOGIC)
+                .flatMap(instruction -> instruction.invocation().orElseThrow()
+                        .customContract().stream())
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    private static List<String> usedOperationEntities(ApplicationEntity entity) {
+        return entity.operations().stream()
+                .flatMap(operation -> operation.allInstructions().stream())
+                .filter(instruction -> instruction.command() == FlowCommand.CALL_OPERATION)
+                .map(instruction -> instruction.operationInvocation().orElseThrow().entity())
+                .filter(owner -> !owner.equals(entity.typeName()))
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    /**
+     * The order the listing is expected to ask for.
+     *
+     * <p>A declared sort refines the stable one rather than replacing it, so the id stays last —
+     * and the assertion has to say the same thing the service does.
+     */
+    private static String expectedSort(
+            ApplicationEntity entity, ApplicationOperation operation) {
+        List<ApplicationOperation.FlowInstruction.SortOrder> orders = operation.allInstructions().stream()
+                .filter(candidate -> candidate.command() == FlowCommand.LIST_ALL
+                        || candidate.command() == FlowCommand.LIST_BY)
+                .findFirst()
+                .map(ApplicationOperation.FlowInstruction::sort)
+                .orElse(List.of());
+        if (orders.isEmpty()) {
+            return "Sort.by(\"" + entity.idField().name() + "\")";
+        }
+        StringBuilder expected = new StringBuilder("Sort.by(");
+        for (ApplicationOperation.FlowInstruction.SortOrder order : orders) {
+            expected.append("Sort.Order.")
+                    .append(order.descending() ? "desc" : "asc")
+                    .append("(\"").append(order.field()).append("\"), ");
+        }
+        return expected.append("Sort.Order.asc(\"")
+                .append(entity.idField().name())
+                .append("\"))")
+                .toString();
+    }
+
+    private static Optional<ApplicationOperation.FlowInstruction> instruction(
+            ApplicationOperation operation, FlowCommand command) {
+        return operation.allInstructions().stream()
+                .filter(candidate -> candidate.command() == command)
+                .findFirst();
+    }
+
+    /** The derived finder name Spring Data reads, which the stub has to answer. */
+    private static String finderName(ApplicationOperation.FlowInstruction instruction) {
+        StringBuilder name = new StringBuilder("findBy");
+        for (int index = 0; index < instruction.fields().size(); index++) {
+            if (index > 0) {
+                name.append("And");
+            }
+            name.append(JavaLayout.accessor("", instruction.fields().get(index)));
+        }
+        return name.toString();
+    }
+
+    /** The field a {@code find} in this operation searches by, when there is one. */
+    private static Optional<String> finder(ApplicationOperation operation) {
+        return operation.allInstructions().stream()
+                .filter(instruction -> instruction.command() == FlowCommand.FIND_BY)
+                .findFirst()
+                .map(instruction -> instruction.fields().getFirst());
+    }
+
     private JavaMethodModel happyPath(
             Names names,
             ApplicationEntity entity,
@@ -137,27 +272,72 @@ public final class JavaSpringServiceTestTransformer {
             TreeSet<String> imports) {
         String entityName = entity.typeName();
         boolean loads = has(operation, FlowCommand.LOAD_BY_ID);
+        Optional<String> finds = finder(operation);
         boolean lists = has(operation, FlowCommand.LIST_ALL);
+        Optional<ApplicationOperation.FlowInstruction> filters = instruction(
+                operation, FlowCommand.LIST_BY);
         boolean creates = has(operation, FlowCommand.CREATE_FROM);
         boolean updates = has(operation, FlowCommand.UPDATE_FROM);
         boolean saves = has(operation, FlowCommand.SAVE);
         boolean deletes = has(operation, FlowCommand.DELETE);
 
         List<String> statements = new ArrayList<>();
-        if (loads || lists) {
+        if (loads || lists || finds.isPresent() || filters.isPresent()) {
             statements.add(entityName + " entity = sampleEntity();");
         }
         if (loads) {
             statements.add(MOCKITO + ".when(repository.findById(ID))"
                     + ".thenReturn(Optional.of(entity));");
         }
+        // A find searches by the field the flow named, so the stub has to answer that call and
+        // not the one an id lookup would have made.
+        finds.ifPresent(field -> statements.add(MOCKITO + ".when(repository.findBy"
+                + JavaLayout.accessor("", field) + "(" + MATCHERS + ".any()))"
+                + ".thenReturn(Optional.of(entity));"));
         if (lists) {
             imports.add("java.util.List");
             imports.add("org.springframework.data.domain.Sort");
-            statements.add(MOCKITO + ".when(repository.findAll(" + MATCHERS
-                    + ".any(Sort.class)))");
-            statements.add("        .thenReturn(List.of(entity));");
+            boolean pagedList = instruction(operation, FlowCommand.LIST_ALL)
+                    .filter(ApplicationOperation.FlowInstruction::paged)
+                    .isPresent();
+            if (pagedList) {
+                imports.add("org.springframework.data.domain.Page");
+                imports.add("org.springframework.data.domain.PageImpl");
+                imports.add("org.springframework.data.domain.Pageable");
+                statements.add(MOCKITO + ".when(repository.findAll(" + MATCHERS
+                        + ".any(Pageable.class)))");
+                statements.add("        .thenReturn(new PageImpl<>(List.of(entity)));");
+            } else {
+                statements.add(MOCKITO + ".when(repository.findAll(" + MATCHERS
+                        + ".any(Sort.class)))");
+                statements.add("        .thenReturn(List.of(entity));");
+            }
         }
+        // A filtered list calls the derived finder, and every argument it takes has to be matched.
+        filters.ifPresent(instruction -> {
+            imports.add("java.util.List");
+            imports.add("org.springframework.data.domain.Sort");
+            if (instruction.paged()) {
+                imports.add("org.springframework.data.domain.Pageable");
+            }
+            String last = instruction.paged()
+                    ? MATCHERS + ".any(Pageable.class)"
+                    : MATCHERS + ".any(Sort.class)";
+            String matchers = java.util.stream.Stream.concat(
+                            instruction.fields().stream().map(field -> MATCHERS + ".any()"),
+                            java.util.stream.Stream.of(last))
+                    .collect(java.util.stream.Collectors.joining(", "));
+            boolean reportsPage =
+                    operation.result().kind() == ApplicationOperation.ResultKind.PAGE;
+            if (reportsPage) {
+                imports.add("org.springframework.data.domain.PageImpl");
+            }
+            statements.add(MOCKITO + ".when(repository." + finderName(instruction)
+                    + "(" + matchers + "))");
+            statements.add("        .thenReturn("
+                    + (reportsPage ? "new PageImpl<>(List.of(entity))" : "List.of(entity)")
+                    + ");");
+        });
         if (saves) {
             statements.add(MOCKITO + ".when(repository.save(" + MATCHERS + ".any("
                     + entityName + ".class)))");
@@ -203,12 +383,29 @@ public final class JavaSpringServiceTestTransformer {
             statements.add(MOCKITO + ".verify(repository).delete(entity);");
         }
         if (lists) {
-            statements.add(ASSERTIONS + ".assertThat(response).hasSize(1);");
-            statements.add(CAPTOR + "<Sort> order = " + CAPTOR + ".forClass(Sort.class);");
-            statements.add(MOCKITO + ".verify(repository).findAll(order.capture());");
-            statements.add(ASSERTIONS + ".assertThat(order.getValue())"
-                    + ".as(\"Harpia requires a stable order\").isEqualTo(Sort.by(\""
-                    + entity.idField().name() + "\"));");
+            statements.add(ASSERTIONS + ".assertThat(response"
+                    + (operation.result().kind() == ApplicationOperation.ResultKind.PAGE
+                            ? ".content()"
+                            : "")
+                    + ").hasSize(1);");
+            boolean pagedList = instruction(operation, FlowCommand.LIST_ALL)
+                    .filter(ApplicationOperation.FlowInstruction::paged)
+                    .isPresent();
+            if (pagedList) {
+                // A page carries the order it was taken from, so the same claim still holds.
+                statements.add(CAPTOR + "<Pageable> order = " + CAPTOR
+                        + ".forClass(Pageable.class);");
+                statements.add(MOCKITO + ".verify(repository).findAll(order.capture());");
+                statements.add(ASSERTIONS + ".assertThat(order.getValue().getSort())"
+                        + ".as(\"Harpia requires a stable order\").isEqualTo("
+                        + expectedSort(entity, operation) + ");");
+            } else {
+                statements.add(CAPTOR + "<Sort> order = " + CAPTOR + ".forClass(Sort.class);");
+                statements.add(MOCKITO + ".verify(repository).findAll(order.capture());");
+                statements.add(ASSERTIONS + ".assertThat(order.getValue())"
+                        + ".as(\"Harpia requires a stable order\").isEqualTo("
+                        + expectedSort(entity, operation) + ");");
+            }
         } else if (loads
                 && operation.result().kind() == ApplicationOperation.ResultKind.ENTITY
                 && !updates) {
@@ -231,7 +428,11 @@ public final class JavaSpringServiceTestTransformer {
     private JavaMethodModel missing(
             Names names, ApplicationEntity entity, ApplicationOperation operation) {
         List<String> statements = new ArrayList<>();
-        statements.add(MOCKITO + ".when(repository.findById(ID)).thenReturn(Optional.empty());");
+        Optional<String> finds = finder(operation);
+        statements.add(finds
+                .map(field -> MOCKITO + ".when(repository.findBy" + JavaLayout.accessor("", field)
+                        + "(" + MATCHERS + ".any())).thenReturn(Optional.empty());")
+                .orElse(MOCKITO + ".when(repository.findById(ID)).thenReturn(Optional.empty());"));
         statements.add("");
         String request = null;
         if (operation.requestTypeName().isPresent()) {
@@ -260,7 +461,7 @@ public final class JavaSpringServiceTestTransformer {
         statements.add(entity.typeName() + " entity = new " + entity.typeName() + "();");
         for (ApplicationField field : entity.fields()) {
             statements.add("entity." + JavaLayout.accessor("set", field.name()) + "("
-                    + JavaSampleValues.java(field) + ");");
+                    + JavaSampleValues.stored(field) + ");");
         }
         statements.add("return entity;");
         return new JavaMethodModel(
@@ -280,9 +481,11 @@ public final class JavaSpringServiceTestTransformer {
         if (operation.result().kind() == ApplicationOperation.ResultKind.NOTHING) {
             return invocation;
         }
-        String type = operation.result().kind() == ApplicationOperation.ResultKind.LIST
-                ? "List<" + names.responseName() + ">"
-                : names.responseName();
+        String type = switch (operation.result().kind()) {
+            case LIST -> "List<" + names.responseName() + ">";
+            case PAGE -> "PageResponse<" + names.responseName() + ">";
+            case ENTITY, NOTHING -> names.responseName();
+        };
         return type + " response = " + invocation;
     }
 
@@ -325,7 +528,7 @@ public final class JavaSpringServiceTestTransformer {
     }
 
     private static boolean has(ApplicationOperation operation, FlowCommand command) {
-        return operation.flow().stream()
+        return operation.allInstructions().stream()
                 .anyMatch(instruction -> instruction.command() == command);
     }
 
@@ -337,6 +540,8 @@ public final class JavaSpringServiceTestTransformer {
             String responseName,
             String dtoPackage,
             String errorPackage,
+            String integrationPackage,
+            String logicPackage,
             JavaTypeRef entityType,
             JavaTypeRef serviceType,
             JavaTypeRef repositoryType) {
@@ -351,6 +556,8 @@ public final class JavaSpringServiceTestTransformer {
                     entity.responseTypeName(),
                     layout.packageName(JavaLayout.DTO),
                     layout.packageName(JavaLayout.ERROR),
+                    layout.packageName(JavaLayout.INTEGRATION),
+                    layout.packageName(JavaLayout.LOGIC),
                     JavaTypeRef.of(
                             layout.packageName(JavaLayout.DOMAIN) + "." + entity.typeName()),
                     JavaTypeRef.of(layout.packageName(JavaLayout.SERVICE) + "." + serviceName),

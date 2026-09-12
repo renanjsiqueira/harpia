@@ -54,7 +54,34 @@ public final class JavaSpringTarget implements HarpiaTarget {
             for (ApplicationField field : entity.fields()) {
                 reserved(field.name(), "field", field.where(), diagnostics);
             }
+            entity.operations().stream()
+                    .flatMap(operation -> operation.allInstructions().stream())
+                    .filter(instruction -> instruction.command()
+                            == dev.harpia.application.ApplicationOperation.FlowCommand
+                                    .CALL_INTEGRATION)
+                    .forEach(instruction -> {
+                        var invocation = instruction.integrationInvocation().orElseThrow();
+                        boolean bound = application.integrations().stream()
+                                .filter(integration -> integration.name()
+                                        .equals(invocation.integration()))
+                                .flatMap(integration -> integration.operations().stream())
+                                .filter(operation -> operation.name()
+                                        .equals(invocation.operation()))
+                                .anyMatch(operation -> operation.http().isPresent());
+                        if (!bound) {
+                            diagnostics.error(
+                                    ErrorCodes.TARGET_CONSTRUCT_UNSUPPORTED,
+                                    "Integration operation '" + invocation.target()
+                                            + "' has no HTTP binding for target `java-spring`",
+                                    instruction.where(),
+                                    "add '## Bind " + invocation.target()
+                                            + "' to an HTTP binding file");
+                        }
+                    });
         }
+        application.integrations().forEach(integration -> integration.operations().forEach(
+                operation -> operation.input().forEach(parameter -> reserved(
+                        parameter.name(), "Integration parameter", parameter.where(), diagnostics))));
         for (ApplicationLogic logic : application.logics()) {
             for (ApplicationLogic.Parameter parameter : logic.parameters()) {
                 reserved(parameter.name(), "parameter", logic.where(), diagnostics);

@@ -259,6 +259,8 @@ class ScenarioTest {
                         java.util.List.of(),
                         java.util.List.of(),
                         java.util.List.of(),
+                        java.util.List.of(),
+                        java.util.List.of(),
                         analysis.logics(),
                         java.util.List.of()),
                 true,
@@ -282,6 +284,8 @@ class ScenarioTest {
 
         dev.harpia.validate.TestCoverage.report(
                 new dev.harpia.model.ProjectModel(
+                        java.util.List.of(),
+                        java.util.List.of(),
                         java.util.List.of(),
                         java.util.List.of(),
                         java.util.List.of(),

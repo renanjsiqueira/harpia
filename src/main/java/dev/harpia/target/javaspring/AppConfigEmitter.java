@@ -34,6 +34,24 @@ public final class AppConfigEmitter implements Emitter {
                         "provider conflicts with application property '" + property.key() + "'");
             }
         }
+        // The project states the rest. A key a provider already owns is refused rather than
+        // overwritten: the provider chose `ddl-auto: validate` to match the migrations Harpia
+        // generated, and a project quietly flipping it would make those migrations a lie.
+        for (Map.Entry<String, String> declared
+                : context.configuration().properties().entrySet()) {
+            ConfigurationProperty previous = properties.putIfAbsent(
+                    declared.getKey(),
+                    new ConfigurationProperty(declared.getKey(), declared.getValue()));
+            if (previous != null) {
+                throw new dev.harpia.target.TargetGenerationException(
+                        dev.harpia.diag.ErrorCodes.CONFIG_UNSUPPORTED_VALUE,
+                        "target.properties cannot set '" + declared.getKey()
+                                + "': the generated project already sets it to '"
+                                + previous.value() + "'",
+                        dev.harpia.diag.SourceRef.file("harpia.yaml"),
+                        null);
+            }
+        }
 
         List<Map<String, String>> propertyViews = new ArrayList<>();
         for (ConfigurationProperty property : properties.values()) {
@@ -45,6 +63,26 @@ public final class AppConfigEmitter implements Emitter {
         output.put(new GeneratedFile(
                 "src/main/resources/application.yaml",
                 OutputNormalizer.normalize(templates.render("application.yaml.mustache", view)),
+                GeneratedFileType.CONFIGURATION,
+                java.util.Optional.of(dev.harpia.diag.SourceRef.file("harpia.yaml"))));
+
+        // A test has no deployment to fill a placeholder in, so whatever the context reads on the
+        // way up gets a value here instead of a fabricated default in what everyone ships.
+        if (context.contributions().testProperties().isEmpty()
+                || !context.application().settings().generation().tests()) {
+            return;
+        }
+        List<Map<String, String>> testViews = new ArrayList<>();
+        for (ConfigurationProperty property : context.contributions().testProperties()) {
+            testViews.add(Map.of("key", property.key(), "value", yamlString(property.value())));
+        }
+        Map<String, Object> testView = new LinkedHashMap<>();
+        testView.put("header", GeneratedHeader.yamlComment());
+        testView.put("properties", testViews);
+        output.put(new GeneratedFile(
+                "src/test/resources/application.yaml",
+                OutputNormalizer.normalize(
+                        templates.render("application.yaml.mustache", testView)),
                 GeneratedFileType.CONFIGURATION,
                 java.util.Optional.of(dev.harpia.diag.SourceRef.file("harpia.yaml"))));
     }

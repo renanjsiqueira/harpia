@@ -6,6 +6,7 @@ import dev.harpia.target.javaspring.JavaLayout;
 import dev.harpia.target.javaspring.JavaSpringContext;
 import dev.harpia.target.javaspring.mapping.JavaDefaultValueMapper;
 import dev.harpia.target.javaspring.mapping.JavaTypeMapper;
+import dev.harpia.target.javaspring.mapping.SqlConstraintNames;
 import dev.harpia.target.javaspring.mapping.SpringPersistenceMapper;
 import dev.harpia.target.javaspring.mapping.SpringValidationMapper;
 import dev.harpia.target.javaspring.model.JavaAnnotationModel;
@@ -42,7 +43,40 @@ public final class JavaSpringEntityTransformer {
             }
             explicitImports.addAll(persistence.additionalImports(entity, field));
             String domain = context.layout().packageName(JavaLayout.DOMAIN);
-            JavaTypeRef type = JavaTypeMapper.map(field.type(), domain);
+            JavaTypeRef type = JavaTypeMapper.stored(field.type(), domain);
+            field.elementType().ifPresent(element -> {
+                // A collection cannot live in a column of the owner's row, so it gets a table of
+                // its own, keyed back to the owner. The names match what the migration created.
+                String table = entity.tableName() + "_" + field.columnName();
+                explicitImports.add(new JavaImportModel("jakarta.persistence.JoinColumn"));
+                if (element instanceof dev.harpia.application.ApplicationFieldType.Relationship
+                        relationship) {
+                    relationshipCollection(
+                            entity, table, relationship, annotations, explicitImports);
+                } else {
+                    explicitImports.add(
+                            new JavaImportModel("jakarta.persistence.CollectionTable"));
+                    explicitImports.add(new JavaImportModel("jakarta.persistence.Column"));
+                    annotations.add(JavaAnnotationModel.marker(
+                            "jakarta.persistence.ElementCollection"));
+                    annotations.add(JavaAnnotationModel.of(
+                            "jakarta.persistence.CollectionTable",
+                            new JavaAnnotationModel.Attribute("name", "\"" + table + "\""),
+                            new JavaAnnotationModel.Attribute(
+                                    "joinColumns",
+                                    "@JoinColumn(name = \"" + entity.tableName() + "_id\")")));
+                    annotations.add(JavaAnnotationModel.of(
+                            "jakarta.persistence.Column",
+                            new JavaAnnotationModel.Attribute(
+                                    "name", "\"" + field.columnName() + "\"")));
+                    if (element instanceof dev.harpia.application.ApplicationFieldType.EnumType) {
+                        explicitImports.add(new JavaImportModel("jakarta.persistence.EnumType"));
+                        annotations.add(JavaAnnotationModel.of(
+                                "jakarta.persistence.Enumerated",
+                                new JavaAnnotationModel.Attribute("value", "EnumType.STRING")));
+                    }
+                }
+            });
             field.valueType().ifPresent(value -> {
                 annotations.add(JavaAnnotationModel.marker("jakarta.persistence.Embedded"));
                 // Hibernate would default each component to its own bare column name, which two
@@ -68,15 +102,22 @@ public final class JavaSpringEntityTransformer {
                         "jakarta.persistence.Enumerated",
                         new JavaAnnotationModel.Attribute("value", "EnumType.STRING")));
             });
+            // A collection that was never assigned is empty, not absent: adding to a null one
+            // would fail on the first element the flow contributes.
+            Optional<String> initial = field.elementType().isPresent()
+                    ? Optional.of("new ArrayList<>()")
+                    : defaults.map(field);
+            field.elementType().ifPresent(ignored ->
+                    explicitImports.add(new JavaImportModel("java.util.ArrayList")));
             fields.add(new JavaFieldModel(
                     field.name(),
                     type,
                     JavaVisibility.PRIVATE,
                     Set.of(),
                     annotations,
-                    defaults.map(field),
+                    initial,
                     Optional.of(field.where())));
-            methods.add(getter(field, type));
+            methods.add(getter(field, type, JavaTypeMapper.map(field.type(), domain)));
             methods.add(setter(field, type));
         }
 
@@ -109,15 +150,67 @@ public final class JavaSpringEntityTransformer {
                 Optional.of(entity.where()));
     }
 
-    private static JavaMethodModel getter(ApplicationField field, JavaTypeRef type) {
+    /** A non-owned collection is shared and keeps the target's lifecycle independent. */
+    private static void relationshipCollection(
+            ApplicationEntity entity,
+            String table,
+            dev.harpia.application.ApplicationFieldType.Relationship relationship,
+            List<JavaAnnotationModel> annotations,
+            List<JavaImportModel> imports) {
+        String ownerColumn = entity.tableName() + "_id";
+        String targetColumn = dev.harpia.application.SqlNaming.identifier(relationship.entity())
+                + "_id";
+        boolean dependent = relationship.lifecycle()
+                == dev.harpia.application.ApplicationFieldType.RelationshipLifecycle.DEPENDENT;
+        imports.add(new JavaImportModel("jakarta.persistence.FetchType"));
+        imports.add(new JavaImportModel("jakarta.persistence.ForeignKey"));
+        imports.add(new JavaImportModel("jakarta.persistence.JoinTable"));
+        List<JavaAnnotationModel.Attribute> association = new ArrayList<>();
+        association.add(new JavaAnnotationModel.Attribute(
+                "fetch", "FetchType." + relationship.loading().name()));
+        if (dependent) {
+            imports.add(new JavaImportModel("jakarta.persistence.CascadeType"));
+            association.add(new JavaAnnotationModel.Attribute("cascade", "CascadeType.ALL"));
+            association.add(new JavaAnnotationModel.Attribute("orphanRemoval", "true"));
+        }
+        annotations.add(new JavaAnnotationModel(
+                JavaTypeRef.of(dependent
+                        ? "jakarta.persistence.OneToMany"
+                        : "jakarta.persistence.ManyToMany"),
+                association));
+        annotations.add(JavaAnnotationModel.of(
+                "jakarta.persistence.JoinTable",
+                new JavaAnnotationModel.Attribute("name", "\"" + table + "\""),
+                new JavaAnnotationModel.Attribute(
+                        "joinColumns",
+                        "@JoinColumn(name = \"" + ownerColumn
+                                + "\", foreignKey = @ForeignKey(name = \""
+                                + SqlConstraintNames.foreignKey(table, ownerColumn) + "\"))"),
+                new JavaAnnotationModel.Attribute(
+                        "inverseJoinColumns",
+                        "@JoinColumn(name = \"" + targetColumn
+                                + "\"" + (dependent ? ", unique = true" : "")
+                                + ", foreignKey = @ForeignKey(name = \""
+                                + SqlConstraintNames.foreignKey(table, targetColumn) + "\"))")));
+    }
+
+    /**
+     * @param stored the type the field is held in, which JPA reads
+     * @param exposed the type callers see, which says whether the value can be absent
+     */
+    private static JavaMethodModel getter(
+            ApplicationField field, JavaTypeRef stored, JavaTypeRef exposed) {
+        boolean optional = field.optionalType().isPresent();
         return new JavaMethodModel(
                 accessor("get", field.name()),
-                type,
+                exposed,
                 JavaVisibility.PUBLIC,
                 Set.of(),
                 List.of(),
                 List.of(),
-                List.of("return " + field.name() + ";"),
+                List.of(optional
+                        ? "return Optional.ofNullable(" + field.name() + ");"
+                        : "return " + field.name() + ";"),
                 Optional.of(field.where()));
     }
 

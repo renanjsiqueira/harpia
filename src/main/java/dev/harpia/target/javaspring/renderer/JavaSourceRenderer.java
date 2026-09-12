@@ -141,7 +141,8 @@ public final class JavaSourceRenderer {
                 : " extends " + type.superTypes().stream()
                         .map(javaType -> javaType.sourceName())
                         .collect(Collectors.joining(", "));
-        return prefix + type.kind().keyword() + " " + type.name() + components + inheritance;
+        return prefix + type.kind().keyword() + " " + type.declaredName() + components
+                + inheritance;
     }
 
     /** Record components, one per line so annotated components stay readable. */

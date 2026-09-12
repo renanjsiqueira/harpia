@@ -51,6 +51,101 @@ public sealed interface FieldType {
         VALUE
     }
 
+    /** A homogeneous collection of one element type. */
+    record Container(FieldType element) implements FieldType {
+        public Container {
+            Objects.requireNonNull(element, "element");
+        }
+
+        @Override
+        public String syntax() {
+            return "List<" + element.syntax() + ">";
+        }
+    }
+
+    /** A value that may be absent, said out loud instead of inferred from a missing modifier. */
+    record Optionality(FieldType element) implements FieldType {
+        public Optionality {
+            Objects.requireNonNull(element, "element");
+        }
+
+        @Override
+        public String syntax() {
+            return "Optional<" + element.syntax() + ">";
+        }
+    }
+
+    /**
+     * A pointer to another entity's identity.
+     *
+     * <p>It is a type, not a relationship: it holds which entity is meant and which row, and says
+     * nothing about loading it, cascading to it or owning its lifetime. Those are `DOM-012`.
+     */
+    record Reference(String entity) implements FieldType {
+        public Reference {
+            Objects.requireNonNull(entity, "entity");
+        }
+
+        @Override
+        public String syntax() {
+            return "Reference<" + entity + ">";
+        }
+    }
+
+    /**
+     * An association to another entity.
+     *
+     * <p>Unlike {@link Reference}, this field holds and loads the entity itself. A bare entity name
+     * declares an independent to-one association; wrapping it in {@link Container} declares an
+     * independent collection association. Ownership and dependent lifecycle are separate syntax.
+     */
+    record Relationship(
+            String entity,
+            RelationshipLoading loading,
+            RelationshipLifecycle lifecycle) implements FieldType {
+        public Relationship {
+            Objects.requireNonNull(entity, "entity");
+            Objects.requireNonNull(loading, "loading");
+            Objects.requireNonNull(lifecycle, "lifecycle");
+        }
+
+        @Override
+        public String syntax() {
+            return entity;
+        }
+    }
+
+    enum RelationshipLoading {
+        LAZY
+    }
+
+    enum RelationshipLifecycle {
+        INDEPENDENT,
+        DEPENDENT
+    }
+
+    static FieldType reference(String entity) {
+        return new Reference(entity);
+    }
+
+    static FieldType relationship(String entity) {
+        return new Relationship(
+                entity, RelationshipLoading.LAZY, RelationshipLifecycle.INDEPENDENT);
+    }
+
+    static FieldType ownedRelationship(String entity) {
+        return new Relationship(
+                entity, RelationshipLoading.LAZY, RelationshipLifecycle.DEPENDENT);
+    }
+
+    static FieldType optional(FieldType element) {
+        return new Optionality(element);
+    }
+
+    static FieldType list(FieldType element) {
+        return new Container(element);
+    }
+
     static FieldType scalar(TypeRef kind) {
         return new Scalar(kind);
     }

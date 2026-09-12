@@ -14,11 +14,13 @@ recriar Java e sem invalidar specs existentes antes de haver migração e format
 - estabelecer Type System nominal;
 - separar Business IR, requirements de capabilities e Application IR;
 - permitir Event como primeiro slice de comportamento além de CRUD;
-- preparar ValueObject, Enum, Integration e Custom Java sem fingir suporte;
+- introduzir ValueObject, Enum e Integration incrementalmente, sem fingir suporte aos slices
+  ainda ausentes;
 - manter gramática pequena, formal e determinística.
 
-Não são objetivos da V1 inicial: condicionais gerais, loops, async, workflow, cloud providers,
-outras linguagens de destino ou snippets Java na spec.
+Não são objetivos da V1 inicial: loops gerais, async, workflow, cloud providers, outras linguagens
+de destino ou snippets Java na spec. Flow possui apenas branching limitado e tipado; algoritmos
+continuam pertencendo a `Logic` ou a código custom.
 
 ## 2. Versionamento e compatibilidade
 
@@ -128,6 +130,37 @@ deste draft ainda são propostas.
 
 O comportamento transacional default precisa aparecer em `harpia inspect --stage application-ir`.
 
+## 4.1 Integration tipada
+
+Status: **implementado** em `languageVersion: 1`. `Integration` declara uma outbound port sem
+escolher protocolo, framework ou provider. Cada `Operation` possui um contrato de valores:
+
+```markdown
+## Integration FraudService
+
+### Operation CheckOrder
+
+#### Input
+
+- orderId: UUID required
+- total: Decimal required
+
+#### Output
+
+FraudResult
+
+#### Errors
+
+- RateLimited
+- ServiceUnavailable
+```
+
+`Output` é obrigatório e aceita `nothing`, escalar, Enum, Value e os wrappers `List<T>` e
+`Optional<T>`. `Input` usa os mesmos tipos e `Errors` contém variantes PascalCase. Entity e
+`Reference<Entity>` são recusados: identidade de persistência não faz parte de um contrato externo.
+Detalhes como HTTP, path, status remoto, autenticação, timeout e retry pertencem aos bindings e
+providers posteriores.
+
 ## 5. Próximo slice proposto: Command + Event
 
 Forma canônica proposta:
@@ -212,12 +245,23 @@ input-access  = "input.", field-name ;
 O parser produz `EmitEvent(eventSymbol, arguments, sourceRange)`. O Semantic Analyzer resolve o
 Event, valida exatamente os campos obrigatórios e compara o tipo de cada expressão.
 
-Operações seguintes entram uma por vez, com AST e semântica próprias:
+As extensões incrementais já estabilizadas nesse caminho são:
 
 ```text
 require <rule> otherwise <error>
-fail <error>
+fail <error> when <rule>
 set <target> = <expression>
+add <expression> to <collection>
+remove <expression> from <collection>
+if <rule> / else
+```
+
+`require` é uma precondition positiva: continua quando a expressão booleana é verdadeira e levanta
+um erro de domínio declarado quando é falsa. No slice atual, a expressão enxerga o input escalar;
+member access sobre variáveis de Flow permanece fora desse recorte. As próximas operações entram
+uma por vez, com AST e semântica próprias:
+
+```text
 call <integration>.<operation>(named arguments)
 send <email> to <expression>
 ```
@@ -225,8 +269,9 @@ send <email> to <expression>
 `load E by id` mantém semântica de resultado obrigatório e erro `not found`. `find` será reservado
 para buscas que retornam zero, um ou muitos resultados; portanto não é sinônimo de `load`.
 
-`if`, loops, parallel e async não entram até existir evidência de que construções semânticas mais
-específicas não resolvem os casos importantes.
+`if`/`else` está implementado como branching de orquestração: condição booleana sobre o input,
+indentação de quatro espaços, no máximo dois níveis e sem declarar variáveis ou retornar dentro de
+um ramo. Loops, parallel e async continuam fora deste recorte.
 
 ## 7. Rules V1
 
@@ -259,6 +304,7 @@ sealed interface TypeRef {
     record ListOf(TypeRef element) implements TypeRef {}
     record OptionalOf(TypeRef element) implements TypeRef {}
     record ReferenceTo(SymbolId entity) implements TypeRef {}
+    record RelationshipTo(SymbolId entity, Loading loading, Lifecycle lifecycle) implements TypeRef {}
     record PageOf(TypeRef element) implements TypeRef {}
     record FileType(FileConstraints constraints) implements TypeRef {}
 }
@@ -278,8 +324,11 @@ Entity ValueObject Enum EventPayload IntegrationInput IntegrationOutput
 
 Regras de superfície:
 
-- um nome de Entity em campo singular resolve internamente para `ReferenceTo`;
-- `List<Entity>` é relação múltipla, não generic Java arbitrário;
+- `Reference<Entity>` resolve para `ReferenceTo` e preserva somente a identidade tipada;
+- um nome de Entity em campo singular resolve para `RelationshipTo` lazy e independente;
+- `List<Entity>` é uma relação múltipla lazy e independente, não generic Java arbitrário;
+- o modifier `owned` troca o lifecycle da relação para dependente e é inválido em qualquer tipo
+  que não seja `Entity` ou `List<Entity>`;
 - `Optional<T>`, `List<T>` e `Page<T>` são os únicos containers inicialmente planejados;
 - ausência de `required` em input continua significando opcional para compatibilidade V0;
 - o formatter V1 não introduz a keyword redundante `optional`;
@@ -309,9 +358,9 @@ menores. O `DeclarationParserRegistry` despacha `Data`, `Logic`, `Scenario` e o 
 por `DeclarationKind`, permitindo adicionar os kinds V1 sem transformar `SpecParser` em um parser
 monolítico.
 
-A forma alvo ainda acrescentará `LanguageVersion`, `SourceIndex`, nomes tipados e os nós V1
-`ValueObjectAst`, `EnumAst`, `CommandAst`, `QueryAst`, `EventAst`, `IntegrationAst` e
-`CustomContractAst` conforme cada slice for implementado.
+A forma alvo ainda acrescentará `SourceIndex`, nomes tipados e os nós V1 de Event e Custom Contract
+conforme cada slice for implementado. `LanguageVersion`, Value, Enum, Command, Query e
+`IntegrationAst` já atravessam o Project AST incremental.
 
 ## 10. SymbolTable
 
@@ -334,7 +383,8 @@ Namespaces iniciais:
 types       Entity, ValueObject, Enum
 operations  Command, Query
 messages    Event, Email
-ports       Integration, Custom Contract
+integrations Integration e suas Operation ports
+ports        Custom Contract
 tests       Scenario
 policies    Policy
 ```

@@ -35,8 +35,20 @@ public record ModuleAst(
         return declarations(SpecAst.ValueDeclaration.class);
     }
 
+    public List<SpecAst.InvariantDeclaration> invariants() {
+        return declarations(SpecAst.InvariantDeclaration.class);
+    }
+
     public List<SpecAst.UseCaseDeclaration> useCases() {
         return declarations(SpecAst.UseCaseDeclaration.class);
+    }
+
+    public List<IntegrationAst.Declaration> integrations() {
+        return declarations(IntegrationAst.Declaration.class);
+    }
+
+    public List<EventAst.Declaration> events() {
+        return declarations(EventAst.Declaration.class);
     }
 
     public List<LogicAst.Declaration> logics() {

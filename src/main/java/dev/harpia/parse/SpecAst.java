@@ -93,6 +93,8 @@ public final class SpecAst {
             boolean required,
             boolean unique,
             boolean generated,
+            boolean owned,
+            boolean indexed,
             Optional<String> defaultValue,
             SourceRef where) {
         public FieldDeclaration {
@@ -119,24 +121,256 @@ public final class SpecAst {
         }
     }
 
-    public enum Access {
-        PUBLIC
+    /**
+     * Who may reach an operation.
+     *
+     * <p>{@code AUTHENTICATED} says the request must carry an identity. {@code ROLE} says the
+     * identity must also hold one of the named roles — any of them, because listing several is
+     * how you say a thing is open to more than one kind of person.
+     *
+     * <p>How an identity is proved, and where its roles come from, is a provider's decision. What
+     * is declared here is which endpoints are reachable without one.
+     */
+    public record Access(Kind kind, java.util.List<String> roles) {
+
+        public enum Kind {
+            PUBLIC,
+            AUTHENTICATED,
+            ROLE,
+            SCOPE
+        }
+
+        public static final Access PUBLIC = new Access(Kind.PUBLIC, java.util.List.of());
+        public static final Access AUTHENTICATED =
+                new Access(Kind.AUTHENTICATED, java.util.List.of());
+
+        public Access {
+            java.util.Objects.requireNonNull(kind, "kind");
+            roles = java.util.List.copyOf(roles);
+            if (roles.isEmpty() != (kind == Kind.PUBLIC || kind == Kind.AUTHENTICATED)) {
+                throw new IllegalArgumentException(
+                        "ROLE and SCOPE name what they demand; nothing else does");
+            }
+        }
+
+        public static Access role(java.util.List<String> roles) {
+            return new Access(Kind.ROLE, roles);
+        }
+
+        public static Access scope(java.util.List<String> scopes) {
+            return new Access(Kind.SCOPE, scopes);
+        }
+
+        /** True when the request has to carry an identity at all, whatever is asked of it. */
+        public boolean requiresIdentity() {
+            return kind != Kind.PUBLIC;
+        }
+
+        /**
+         * The stable form the inspect stages print.
+         *
+         * <p>{@code PUBLIC} and {@code AUTHENTICATED} read as they did when this was an enum, so
+         * nothing that was already written down changed meaning.
+         */
+        @Override
+        public String toString() {
+            return roles.isEmpty()
+                    ? kind.name()
+                    : kind.name() + " " + String.join(" or ", roles);
+        }
     }
 
     public sealed interface FlowStatement
-            permits ValidateInput, CreateFrom, LoadById, UpdateFrom, ListAll, Save, Delete, Return {
+            permits ValidateInput, CreateFrom, LoadById, FindBy, UpdateFrom, SetField,
+                    ChangeCollection, Conditional, ListAll, ListBy, Save, Delete, Fail, Require,
+                    Call, Return {
         SourceRef where();
     }
 
     public record ValidateInput(SourceRef where) implements FlowStatement {}
 
+    /**
+     * Raises a declared domain error when a condition holds.
+     *
+     * <p>The guard is not decoration: a {@code fail} that always fired would end every run of the
+     * operation, so the condition is what makes it an instruction rather than a dead end.
+     */
+    public record Fail(
+            String error, String text, LogicAst.Expression condition, SourceRef where)
+            implements FlowStatement {
+        public Fail {
+            Objects.requireNonNull(error, "error");
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(condition, "condition");
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
+    /** Continues only when its boolean precondition holds; otherwise raises a declared error. */
+    public record Require(
+            String text, LogicAst.Expression condition, String error, SourceRef where)
+            implements FlowStatement {
+        public Require {
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(condition, "condition");
+            Objects.requireNonNull(error, "error");
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
+    /**
+     * Invokes a named application boundary. A dotted target is an Integration operation; a simple
+     * target is resolved against Logic and Command declarations in the semantic pass.
+     */
+    public record Call(
+            Optional<String> variable,
+            String target,
+            Optional<String> operation,
+            List<LogicAst.NamedArgument> arguments,
+            SourceRef where) implements FlowStatement {
+        public Call {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(target, "target");
+            Objects.requireNonNull(operation, "operation");
+            arguments = List.copyOf(arguments);
+            Objects.requireNonNull(where, "where");
+        }
+
+        public String displayTarget() {
+            return target + operation.map(name -> "." + name).orElse("");
+        }
+    }
+
     public record CreateFrom(String variable, String entity, SourceRef where) implements FlowStatement {}
 
     public record LoadById(String variable, String entity, SourceRef where) implements FlowStatement {}
 
+    /** Finds the single entity whose unique field holds the given input value. */
+    public record FindBy(String variable, String entity, String field, SourceRef where)
+            implements FlowStatement {
+        public FindBy {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(entity, "entity");
+            Objects.requireNonNull(field, "field");
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
     public record UpdateFrom(String variable, SourceRef where) implements FlowStatement {}
 
-    public record ListAll(String variable, String entity, SourceRef where) implements FlowStatement {}
+    /**
+     * Two branches, one of which runs.
+     *
+     * <p>A flow that says {@code fail ... when} answers a question by stopping. A conditional
+     * answers it by doing something different, which is why both exist.
+     */
+    public record Conditional(
+            String text,
+            LogicAst.Expression condition,
+            List<FlowStatement> whenTrue,
+            List<FlowStatement> whenFalse,
+            SourceRef where) implements FlowStatement {
+        public Conditional {
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(condition, "condition");
+            whenTrue = List.copyOf(whenTrue);
+            whenFalse = List.copyOf(whenFalse);
+            Objects.requireNonNull(where, "where");
+            if (whenTrue.isEmpty()) {
+                throw new IllegalArgumentException("conditional true branch must not be empty");
+            }
+        }
+    }
+
+    /** Whether an element joins a collection or leaves it. */
+    public enum CollectionChange {
+        ADD,
+        REMOVE
+    }
+
+    /**
+     * Adds an element to a collection field, or takes one out.
+     *
+     * <p>A collection is changed in place rather than replaced: {@code set} assigns a whole value,
+     * and saying "one more" is not the same as saying "these".
+     */
+    public record ChangeCollection(
+            CollectionChange change,
+            String variable,
+            String field,
+            String text,
+            LogicAst.Expression element,
+            SourceRef where) implements FlowStatement {
+        public ChangeCollection {
+            Objects.requireNonNull(change, "change");
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(field, "field");
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(element, "element");
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
+    /**
+     * Assigns one field of an entity from an expression.
+     *
+     * <p>{@code update ... from input} copies whatever the input carries. This computes a single
+     * value, which is the reason it exists: the two are different operations, and saying which one
+     * happened is the point.
+     */
+    public record SetField(
+            String variable,
+            String field,
+            String text,
+            LogicAst.Expression value,
+            SourceRef where) implements FlowStatement {
+        public SetField {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(field, "field");
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(value, "value");
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
+    /** One ordering step: a field and whether it descends. */
+    public record SortOrder(String field, boolean descending) {
+        public SortOrder {
+            Objects.requireNonNull(field, "field");
+        }
+    }
+
+    public record ListAll(
+            String variable,
+            String entity,
+            List<SortOrder> sort,
+            boolean paged,
+            SourceRef where) implements FlowStatement {
+        public ListAll {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(entity, "entity");
+            sort = List.copyOf(sort);
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
+    /** Lists every entity whose fields all match the given input values. */
+    public record ListBy(
+            String variable,
+            String entity,
+            List<String> fields,
+            List<SortOrder> sort,
+            boolean paged,
+            SourceRef where)
+            implements FlowStatement {
+        public ListBy {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(entity, "entity");
+            fields = List.copyOf(fields);
+            sort = List.copyOf(sort);
+            Objects.requireNonNull(where, "where");
+        }
+    }
 
     public record Save(String variable, SourceRef where) implements FlowStatement {}
 
@@ -153,6 +387,7 @@ public final class SpecAst {
     public enum OutputKind {
         ENTITY,
         LIST,
+        PAGE,
         NOTHING
     }
 
@@ -217,6 +452,27 @@ public final class SpecAst {
             Objects.requireNonNull(text, "text");
             Objects.requireNonNull(condition, "condition");
             Objects.requireNonNull(where, "where");
+        }
+    }
+
+    /** Conditions the module's entity satisfies whenever it is stored. */
+    public record InvariantDeclaration(
+            String entity, List<RuleDeclaration> conditions, SourceRef where)
+            implements DeclarationAst {
+        public InvariantDeclaration {
+            Objects.requireNonNull(entity, "entity");
+            conditions = List.copyOf(conditions);
+            Objects.requireNonNull(where, "where");
+        }
+
+        @Override
+        public DeclarationKind kind() {
+            return DeclarationKind.INVARIANT;
+        }
+
+        @Override
+        public String declaredName() {
+            return entity;
         }
     }
 

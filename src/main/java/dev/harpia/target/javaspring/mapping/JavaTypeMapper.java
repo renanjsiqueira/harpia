@@ -40,7 +40,42 @@ public final class JavaTypeMapper {
         if (type instanceof ApplicationFieldType.ValueType declared) {
             return JavaTypeRef.of(domainPackage + "." + declared.name());
         }
+        if (type instanceof ApplicationFieldType.Reference reference) {
+            // A reference is the identity of the row it points at. Mapping it to the entity class
+            // would import a fetch strategy, a cascade and a lifetime that nothing declared.
+            return map(reference.idType());
+        }
+        if (type instanceof ApplicationFieldType.Relationship relationship) {
+            return JavaTypeRef.of(domainPackage + "." + relationship.entity());
+        }
+        if (type instanceof ApplicationFieldType.Optionality optional) {
+            return JavaTypeRef.parameterized(
+                    "java.util.Optional", map(optional.element(), domainPackage));
+        }
+        if (type instanceof ApplicationFieldType.Container container) {
+            return JavaTypeRef.parameterized(
+                    "java.util.List", map(container.element(), domainPackage));
+        }
         return map(type.scalarKind().orElseThrow());
+    }
+
+    /**
+     * The type a field is stored as.
+     *
+     * <p>JPA maps fields by reflection over their declared type, and it does not understand
+     * {@code Optional}. The column is simply nullable; what the absence means is said in the types
+     * the project exposes, not in the one Hibernate reads.
+     */
+    public static JavaTypeRef stored(ApplicationFieldType type, String domainPackage) {
+        Objects.requireNonNull(type, "type");
+        if (type instanceof ApplicationFieldType.Optionality optional) {
+            return stored(optional.element(), domainPackage);
+        }
+        if (type instanceof ApplicationFieldType.Container container) {
+            return JavaTypeRef.parameterized(
+                    "java.util.List", stored(container.element(), domainPackage));
+        }
+        return map(type, domainPackage);
     }
 
     /** {@code awaiting_payment} names the constant {@code AWAITING_PAYMENT}. */
@@ -53,6 +88,27 @@ public final class JavaTypeMapper {
         Objects.requireNonNull(type, "type");
         if (type instanceof LogicType.Scalar scalar) {
             return map(ApplicationScalarType.valueOf(scalar.kind().name()));
+        }
+        throw new IllegalArgumentException("no Java type for " + type.display());
+    }
+
+    /** Maps the full type algebra used by Integration boundaries. */
+    public static JavaTypeRef map(LogicType type, String domainPackage) {
+        Objects.requireNonNull(type, "type");
+        Objects.requireNonNull(domainPackage, "domainPackage");
+        if (type instanceof LogicType.Scalar scalar) {
+            return map(ApplicationScalarType.valueOf(scalar.kind().name()));
+        }
+        if (type instanceof LogicType.Nominal nominal) {
+            return JavaTypeRef.of(domainPackage + "." + nominal.name());
+        }
+        if (type instanceof LogicType.Container container) {
+            return JavaTypeRef.parameterized(
+                    "java.util.List", map(container.element(), domainPackage));
+        }
+        if (type instanceof LogicType.Optionality optional) {
+            return JavaTypeRef.parameterized(
+                    "java.util.Optional", map(optional.element(), domainPackage));
         }
         throw new IllegalArgumentException("no Java type for " + type.display());
     }

@@ -1,0 +1,10 @@
+# Quem responde por cada parte do repositório.
+#
+# A última regra que casa com um arquivo é a que vale, então a regra específica
+# vem depois da geral.
+
+# Tudo, por padrão.
+*                    @renanjsiqueira
+
+# Este arquivo decide quem revisa os outros, então ele se protege explicitamente.
+/.github/CODEOWNERS  @renanjsiqueira

@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Objects;
+import java.util.Set;
 
 /** Converts a semantically valid syntax tree into the complete emitter-facing model. */
 public final class Resolver {
@@ -23,12 +24,22 @@ public final class Resolver {
             BindingModel bindings,
             List<LogicModel> logics,
             List<ScenarioModel> scenarios,
-            Map<String, List<RuleModel>> rules) {
+            Map<String, List<RuleModel>> rules,
+            Map<String, List<RuleModel>> invariants,
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards,
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments,
+            Map<dev.harpia.diag.SourceRef, FlowCallModel> flowCalls,
+            Map<dev.harpia.diag.SourceRef, IntegrationCallModel> integrationCalls,
+            Map<dev.harpia.diag.SourceRef, OperationCallModel> operationCalls) {
         Objects.requireNonNull(syntax, "syntax");
         Objects.requireNonNull(bindings, "bindings");
         Objects.requireNonNull(logics, "logics");
         Objects.requireNonNull(scenarios, "scenarios");
         Objects.requireNonNull(rules, "rules");
+        Objects.requireNonNull(invariants, "invariants");
+        Objects.requireNonNull(flowCalls, "flowCalls");
+        Objects.requireNonNull(integrationCalls, "integrationCalls");
+        Objects.requireNonNull(operationCalls, "operationCalls");
         Map<String, List<String>> enums = new LinkedHashMap<>();
         Map<String, List<FieldModel>> values = new LinkedHashMap<>();
         for (ModuleAst module : syntax.modules()) {
@@ -38,7 +49,11 @@ public final class Resolver {
                         source.values().stream().map(SpecAst.EnumValue::name).toList());
             }
         }
-        Declared declared = new Declared(enums, values);
+        Set<String> entities = syntax.modules().stream()
+                .filter(ModuleAst::declaresEntity)
+                .map(module -> module.entity().name())
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        Declared declared = new Declared(enums, values, entities);
         // A value's own fields are scalars or enums, never another value: nesting is `DOM-014`.
         for (ModuleAst module : syntax.modules()) {
             for (SpecAst.ValueDeclaration source : module.values()) {
@@ -90,16 +105,72 @@ public final class Resolver {
                                 declaration.where()))
                         .toList(),
                 syntax.modules().stream()
+                        .flatMap(module -> module.integrations().stream())
+                        .map(declaration -> new IntegrationModel(
+                                declaration.name(),
+                                declaration.operations().stream()
+                                        .map(operation -> integrationOperation(
+                                                declaration.name(), operation, declared, bindings))
+                                        .toList(),
+                                declaration.where()))
+                        .toList(),
+                syntax.modules().stream()
+                        .flatMap(module -> module.events().stream())
+                        .map(declaration -> new EventModel(
+                                declaration.name(),
+                                declaration.payload().stream()
+                                        .map(field -> new EventModel.Field(
+                                                field.name(),
+                                                fieldType(field.type(), declared),
+                                                field.required(),
+                                                field.where()))
+                                        .toList(),
+                                declaration.where()))
+                        .toList(),
+                syntax.modules().stream()
                         .filter(ModuleAst::declaresEntity)
                         .map(module -> entity(
                                 module,
                                 byEntity.get(module.entity().name()),
                                 bindings,
                                 rules,
-                                declared))
+                                declared,
+                                invariants,
+                                guards,
+                                assignments,
+                                flowCalls,
+                                integrationCalls,
+                                operationCalls))
                         .toList(),
                 logics,
                 scenarios);
+    }
+
+    private static IntegrationModel.Operation integrationOperation(
+            String integration,
+            dev.harpia.parse.IntegrationAst.Operation operation,
+            Declared declared,
+            BindingModel bindings) {
+        return new IntegrationModel.Operation(
+                operation.name(),
+                operation.input().stream()
+                        .map(parameter -> new IntegrationModel.Parameter(
+                                parameter.name(),
+                                fieldType(parameter.type(), declared),
+                                parameter.required(),
+                                parameter.where()))
+                        .toList(),
+                new IntegrationModel.Result(
+                        operation.output().returnsNothing()
+                                ? Optional.empty()
+                                : Optional.of(fieldType(operation.output().type(), declared)),
+                        operation.output().where()),
+                operation.errors().stream()
+                        .map(failure -> new IntegrationModel.Failure(
+                                failure.name(), failure.where()))
+                        .toList(),
+                bindings.integrationBindingFor(integration + "." + operation.name()),
+                operation.where());
     }
 
     /** The entity named by the flow, when it names one. */
@@ -123,7 +194,13 @@ public final class Resolver {
             List<SpecAst.UseCaseDeclaration> operations,
             BindingModel bindings,
             Map<String, List<RuleModel>> rules,
-            Declared declared) {
+            Declared declared,
+            Map<String, List<RuleModel>> invariants,
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards,
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments,
+            Map<dev.harpia.diag.SourceRef, FlowCallModel> flowCalls,
+            Map<dev.harpia.diag.SourceRef, IntegrationCallModel> integrationCalls,
+            Map<dev.harpia.diag.SourceRef, OperationCallModel> operationCalls) {
         SpecAst.EntityDeclaration declaration = module.entity();
         List<FieldModel> fields = declaration.fields().stream()
                 .map(field -> field(field, declared))
@@ -137,13 +214,16 @@ public final class Resolver {
                         "Resolver requires semantic validation before resolving "
                                 + declaration.name()));
         List<UseCaseModel> useCases = operations.stream()
-                .map(useCase -> useCase(useCase, fields, bindings, rules, declared))
+                .map(useCase -> useCase(
+                        useCase, fields, bindings, rules, declared, guards, assignments,
+                        flowCalls, integrationCalls, operationCalls))
                 .toList();
         return new EntityModel(
                 declaration.name(),
                 fields,
                 idField,
                 useCases,
+                invariants.getOrDefault(declaration.name(), List.of()),
                 module.where());
     }
 
@@ -154,8 +234,29 @@ public final class Resolver {
      * here is only the shape of the reference.
      */
     private static FieldType fieldType(String syntax, Declared declared) {
+        return fieldType(syntax, declared, false);
+    }
+
+    private static FieldType fieldType(String syntax, Declared declared, boolean owned) {
+        Optional<String> element = FieldLineParser.elementOf(syntax);
+        if (element.isPresent()) {
+            return FieldType.list(fieldType(element.orElseThrow(), declared, owned));
+        }
+        Optional<String> reference = FieldLineParser.referenceOf(syntax);
+        if (reference.isPresent()) {
+            return FieldType.reference(reference.orElseThrow());
+        }
+        Optional<String> optional = FieldLineParser.optionalOf(syntax);
+        if (optional.isPresent()) {
+            return FieldType.optional(fieldType(optional.orElseThrow(), declared));
+        }
         if (FieldLineParser.isScalar(syntax)) {
             return FieldType.scalar(TypeRef.fromSyntax(syntax));
+        }
+        if (declared.entities().contains(syntax)) {
+            return owned
+                    ? FieldType.ownedRelationship(syntax)
+                    : FieldType.relationship(syntax);
         }
         if (declared.values().containsKey(syntax)) {
             return FieldType.value(syntax, declared.values().get(syntax));
@@ -165,17 +266,20 @@ public final class Resolver {
 
     /** The nominal types the project declares, resolved once for the whole run. */
     private record Declared(
-            Map<String, List<String>> enums, Map<String, List<FieldModel>> values) {
+            Map<String, List<String>> enums,
+            Map<String, List<FieldModel>> values,
+            Set<String> entities) {
     }
 
     private static FieldModel field(
             SpecAst.FieldDeclaration field, Declared declared) {
         return new FieldModel(
                 field.name(),
-                fieldType(field.type(), declared),
+                fieldType(field.type(), declared, field.owned()),
                 field.required(),
                 field.unique(),
                 field.generated(),
+                field.indexed(),
                 field.defaultValue().map(Literal::new),
                 field.where());
     }
@@ -185,32 +289,43 @@ public final class Resolver {
             List<FieldModel> entityFields,
             BindingModel bindings,
             Map<String, List<RuleModel>> rules,
-            Declared declared) {
+            Declared declared,
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards,
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments,
+            Map<dev.harpia.diag.SourceRef, FlowCallModel> flowCalls,
+            Map<dev.harpia.diag.SourceRef, IntegrationCallModel> integrationCalls,
+            Map<dev.harpia.diag.SourceRef, OperationCallModel> operationCalls) {
         Map<String, FieldModel> fieldsByName = new LinkedHashMap<>();
         entityFields.forEach(field -> fieldsByName.putIfAbsent(field.name(), field));
 
         List<FieldModel> input = new ArrayList<>();
         for (SpecAst.InputDeclaration declaration : useCase.input()) {
+            // A pagination input has no entity field behind it, so it borrows nothing from one.
             FieldModel entityField = fieldsByName.get(declaration.name());
             input.add(new FieldModel(
                     declaration.name(),
                     fieldType(declaration.type(), declared),
                     declaration.required(),
-                    entityField.unique(),
+                    entityField != null && entityField.unique(),
                     false,
-                    entityField.defaultValue(),
+                    // An index is a fact about storage, and an input is not stored.
+                    false,
+                    entityField == null ? Optional.empty() : entityField.defaultValue(),
                     declaration.where()));
         }
 
         LinkedHashMap<String, FlowModel.ValueType> variables = new LinkedHashMap<>();
         List<FlowStep> steps = useCase.flow().stream()
-                .map(statement -> flowStep(statement, variables))
+                .map(statement -> flowStep(
+                        statement, variables, guards, assignments, flowCalls, integrationCalls,
+                        operationCalls))
                 .toList();
 
         OutputModel.Shape shape = new OutputModel.Shape(
                 switch (useCase.output().shape().kind()) {
                     case ENTITY -> OutputModel.Kind.ENTITY;
                     case LIST -> OutputModel.Kind.LIST;
+                    case PAGE -> OutputModel.Kind.PAGE;
                     case NOTHING -> OutputModel.Kind.NOTHING;
                 },
                 useCase.output().shape().entity());
@@ -250,9 +365,20 @@ public final class Resolver {
         };
     }
 
+    private static List<FlowStep.SortOrder> sortOrders(List<SpecAst.SortOrder> source) {
+        return source.stream()
+                .map(order -> new FlowStep.SortOrder(order.field(), order.descending()))
+                .toList();
+    }
+
     private static FlowStep flowStep(
             SpecAst.FlowStatement statement,
-            LinkedHashMap<String, FlowModel.ValueType> variables) {
+            LinkedHashMap<String, FlowModel.ValueType> variables,
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards,
+            Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments,
+            Map<dev.harpia.diag.SourceRef, FlowCallModel> flowCalls,
+            Map<dev.harpia.diag.SourceRef, IntegrationCallModel> integrationCalls,
+            Map<dev.harpia.diag.SourceRef, OperationCallModel> operationCalls) {
         if (statement instanceof SpecAst.ValidateInput value) {
             return new FlowStep.ValidateInput(value.where());
         }
@@ -266,19 +392,132 @@ public final class Resolver {
                     FlowModel.Kind.ENTITY, value.entity()));
             return new FlowStep.LoadById(value.variable(), value.entity(), value.where());
         }
+        if (statement instanceof SpecAst.FindBy value) {
+            variables.put(value.variable(), new FlowModel.ValueType(
+                    FlowModel.Kind.ENTITY, value.entity()));
+            return new FlowStep.FindBy(
+                    value.variable(), value.entity(), value.field(), value.where());
+        }
+        if (statement instanceof SpecAst.Conditional value) {
+            return new FlowStep.Conditional(
+                    value.text(),
+                    guards.get(value.where()),
+                    value.whenTrue().stream()
+                            .map(inner -> flowStep(
+                                    inner, variables, guards, assignments, flowCalls,
+                                    integrationCalls, operationCalls))
+                            .toList(),
+                    value.whenFalse().stream()
+                            .map(inner -> flowStep(
+                                    inner, variables, guards, assignments, flowCalls,
+                                    integrationCalls, operationCalls))
+                            .toList(),
+                    value.where());
+        }
+        if (statement instanceof SpecAst.ChangeCollection value) {
+            return new FlowStep.ChangeCollection(
+                    value.change(),
+                    value.variable(),
+                    value.field(),
+                    value.text(),
+                    assignments.get(value.where()),
+                    value.where());
+        }
+        if (statement instanceof SpecAst.SetField value) {
+            return new FlowStep.SetField(
+                    value.variable(),
+                    value.field(),
+                    value.text(),
+                    assignments.get(value.where()),
+                    value.where());
+        }
         if (statement instanceof SpecAst.UpdateFrom value) {
             return new FlowStep.UpdateFrom(value.variable(), value.where());
         }
         if (statement instanceof SpecAst.ListAll value) {
             variables.put(value.variable(), new FlowModel.ValueType(
                     FlowModel.Kind.LIST, value.entity()));
-            return new FlowStep.ListAll(value.variable(), value.entity(), value.where());
+            return new FlowStep.ListAll(
+                    value.variable(),
+                    value.entity(),
+                    sortOrders(value.sort()),
+                    value.paged(),
+                    value.where());
+        }
+        if (statement instanceof SpecAst.ListBy value) {
+            variables.put(value.variable(), new FlowModel.ValueType(
+                    FlowModel.Kind.LIST, value.entity()));
+            return new FlowStep.ListBy(
+                    value.variable(),
+                    value.entity(),
+                    value.fields(),
+                    sortOrders(value.sort()),
+                    value.paged(),
+                    value.where());
         }
         if (statement instanceof SpecAst.Save value) {
             return new FlowStep.Save(value.variable(), value.where());
         }
         if (statement instanceof SpecAst.Delete value) {
             return new FlowStep.Delete(value.variable(), value.where());
+        }
+        if (statement instanceof SpecAst.Fail value) {
+            return new FlowStep.Fail(
+                    value.error(),
+                    value.text(),
+                    guards.get(value.where()),
+                    value.where());
+        }
+        if (statement instanceof SpecAst.Require value) {
+            return new FlowStep.Require(
+                    value.text(),
+                    guards.get(value.where()),
+                    value.error(),
+                    value.where());
+        }
+        if (statement instanceof SpecAst.Call value && value.operation().isPresent()) {
+            IntegrationCallModel call = integrationCalls.get(value.where());
+            call.variable().ifPresent(variable -> {
+                dev.harpia.logic.LogicType type = call.resultType().orElseThrow();
+                variables.put(variable, new FlowModel.ValueType(
+                        type instanceof dev.harpia.logic.LogicType.Scalar
+                                ? FlowModel.Kind.SCALAR
+                                : FlowModel.Kind.VALUE,
+                        type.display()));
+            });
+            return new FlowStep.IntegrationCall(
+                    call.variable(),
+                    call.integration(),
+                    call.operation(),
+                    call.arguments(),
+                    call.resultType(),
+                    call.where());
+        }
+        if (statement instanceof SpecAst.Call value) {
+            OperationCallModel operation = operationCalls.get(value.where());
+            if (operation != null) {
+                operation.variable().ifPresent(variable -> variables.put(
+                        variable,
+                        new FlowModel.ValueType(FlowModel.Kind.VALUE, operation.entity())));
+                return new FlowStep.OperationCall(
+                        operation.variable(),
+                        operation.operation(),
+                        operation.entity(),
+                        operation.requiresId(),
+                        operation.arguments(),
+                        operation.resultKind(),
+                        operation.where());
+            }
+            FlowCallModel call = flowCalls.get(value.where());
+            variables.put(call.variable().orElseThrow(), new FlowModel.ValueType(
+                    FlowModel.Kind.SCALAR, call.resultType().display()));
+            return new FlowStep.Call(
+                    call.variable().orElseThrow(),
+                    call.logic(),
+                    call.arguments(),
+                    call.resultType(),
+                    call.customContract(),
+                    call.where());
         }
         if (statement instanceof SpecAst.Return value) {
             return new FlowStep.Return(value.variable(), value.where());

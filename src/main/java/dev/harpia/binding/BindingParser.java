@@ -23,14 +23,20 @@ public final class BindingParser {
 
     private static final String FILE_HEADING = "HTTP Bindings";
     private static final String BASE_URL_HEADING = "Base URL";
+    private static final String AUTH_HEADING = "Auth";
     private static final String DECLARATION_PREFIX = "Bind ";
-    private static final Pattern OPERATION = Pattern.compile("[A-Z][A-Za-z0-9]*");
+    private static final Pattern OPERATION = Pattern.compile(
+            "[A-Z][A-Za-z0-9]*(?:\\.[A-Z][A-Za-z0-9]*)?");
     private static final Pattern BASE_URL = Pattern.compile(
-            "^/(?:[a-z][a-z0-9-]*(?:/[a-z][a-z0-9-]*)*)?$");
+            "^(?:https?://[A-Za-z0-9.-]+(?::[0-9]+)?(?:/[A-Za-z0-9._~-]*)*"
+                    + "|/(?:[a-z][a-z0-9-]*(?:/[a-z][a-z0-9-]*)*)?)$");
     private static final Pattern REQUEST = Pattern.compile(
             "^([a-z][A-Za-z0-9]*): +(body|path|query|header)(?: +([^ ]+))?$");
+    private static final Pattern AUTH = Pattern.compile(
+            "^(?:bearer|api key ([A-Za-z][A-Za-z0-9-]*))$");
     private static final Set<String> SECTIONS = Set.of(
             "Endpoint", "Access", "Request", "Response");
+    private static final Set<String> FILE_SECTIONS = Set.of(BASE_URL_HEADING, AUTH_HEADING);
 
     private BindingParser() {
     }
@@ -84,7 +90,8 @@ public final class BindingParser {
             if (value.isEmpty() || !BASE_URL.matcher(value.orElseThrow().text().strip()).matches()) {
                 diagnostics.error(
                         ErrorCodes.SYNTAX_BINDING_SECTION,
-                        "'## Base URL' requires a path prefix such as '/api/v1'",
+                        "'## Base URL' requires '/api/v1' or an absolute URL such as "
+                                + "'https://service.example'",
                         value.map(dev.harpia.ast.RawSpan::where)
                                 .orElse(baseUrls.getFirst().heading().raw().where()));
                 valid = false;
@@ -94,8 +101,43 @@ public final class BindingParser {
             }
         }
 
+        List<Section> auths = topLevel.stream()
+                .filter(section -> section.heading().headingText().equals(AUTH_HEADING))
+                .toList();
+        Optional<BindingAst.Auth> auth = Optional.empty();
+        if (auths.size() > 1) {
+            diagnostics.error(
+                    ErrorCodes.SYNTAX_BINDING_FILE,
+                    "binding file repeats '## " + AUTH_HEADING + "'",
+                    auths.get(1).heading().raw().where());
+            valid = false;
+        }
+        if (!auths.isEmpty()) {
+            Optional<dev.harpia.ast.RawSpan> value =
+                    paragraph(auths.getFirst(), AUTH_HEADING, diagnostics);
+            java.util.regex.Matcher matcher = value
+                    .map(raw -> AUTH.matcher(raw.text().strip()))
+                    .filter(java.util.regex.Matcher::matches)
+                    .orElse(null);
+            if (matcher == null) {
+                diagnostics.error(
+                        ErrorCodes.SYNTAX_BINDING_SECTION,
+                        "'## Auth' requires 'bearer' or 'api key <Header-Name>'",
+                        value.map(dev.harpia.ast.RawSpan::where)
+                                .orElse(auths.getFirst().heading().raw().where()));
+                valid = false;
+            } else {
+                dev.harpia.ast.RawSpan raw = value.orElseThrow();
+                auth = Optional.of(matcher.group(1) == null
+                        ? new BindingAst.Auth(
+                                BindingAst.Auth.Kind.BEARER, "Authorization", raw.where())
+                        : new BindingAst.Auth(
+                                BindingAst.Auth.Kind.API_KEY, matcher.group(1), raw.where()));
+            }
+        }
+
         List<Section> declarations = topLevel.stream()
-                .filter(section -> !section.heading().headingText().equals(BASE_URL_HEADING))
+                .filter(section -> !FILE_SECTIONS.contains(section.heading().headingText()))
                 .toList();
         if (declarations.isEmpty()) {
             diagnostics.error(
@@ -107,7 +149,7 @@ public final class BindingParser {
 
         List<BindingAst.Declaration> bindings = new ArrayList<>();
         for (Section declaration : declarations) {
-            Optional<BindingAst.Http> binding = parseBinding(declaration, diagnostics);
+            Optional<BindingAst.Declaration> binding = parseBinding(declaration, diagnostics);
             if (binding.isPresent()) {
                 bindings.add(binding.orElseThrow());
             } else {
@@ -116,11 +158,11 @@ public final class BindingParser {
         }
         return valid
                 ? Optional.of(new BindingAst(
-                        source.relativePath(), baseUrl, bindings, fileWhere))
+                        source.relativePath(), baseUrl, auth, bindings, fileWhere))
                 : Optional.empty();
     }
 
-    private static Optional<BindingAst.Http> parseBinding(
+    private static Optional<BindingAst.Declaration> parseBinding(
             Section declaration, DiagnosticCollector diagnostics) {
         boolean valid = true;
         String heading = declaration.heading().headingText();
@@ -135,6 +177,7 @@ public final class BindingParser {
                     declaration.heading().raw().where());
             valid = false;
         }
+        boolean outbound = operation.contains(".");
 
         Map<String, List<Section>> byName = new LinkedHashMap<>();
         for (Section section : sections(declaration.content(), 3)) {
@@ -150,7 +193,10 @@ public final class BindingParser {
             byName.computeIfAbsent(section.heading().headingText(), ignored -> new ArrayList<>())
                     .add(section);
         }
-        for (String required : List.of("Endpoint", "Access", "Request", "Response")) {
+        List<String> requiredSections = outbound
+                ? List.of("Endpoint", "Request", "Response")
+                : List.of("Endpoint", "Access", "Request", "Response");
+        for (String required : requiredSections) {
             List<Section> found = byName.getOrDefault(required, List.of());
             if (found.isEmpty()) {
                 diagnostics.error(
@@ -166,30 +212,54 @@ public final class BindingParser {
                 valid = false;
             }
         }
+        if (outbound && byName.containsKey("Access")) {
+            diagnostics.error(
+                    ErrorCodes.SYNTAX_BINDING_SECTION,
+                    "outbound Integration binding '" + operation
+                            + "' cannot declare '### Access'",
+                    byName.get("Access").getFirst().heading().raw().where(),
+                    "Access controls inbound callers; how this file's calls prove who they "
+                            + "are is '## Auth'");
+            valid = false;
+        }
 
         Optional<dev.harpia.parse.SpecAst.Endpoint> endpoint = first(byName, "Endpoint")
                 .flatMap(section -> paragraph(section, "Endpoint", diagnostics))
                 .flatMap(raw -> EndpointParser.parse(raw.text(), raw.where(), diagnostics));
-        Optional<dev.harpia.parse.SpecAst.Access> access = first(byName, "Access")
-                .flatMap(section -> paragraph(section, "Access", diagnostics))
-                .flatMap(raw -> AccessParser.parse(raw.text(), raw.where(), diagnostics));
+        Optional<dev.harpia.parse.SpecAst.Access> access = outbound
+                ? Optional.empty()
+                : first(byName, "Access")
+                        .flatMap(section -> paragraph(section, "Access", diagnostics))
+                        .flatMap(raw -> AccessParser.parse(raw.text(), raw.where(), diagnostics));
         ParseMappings request = first(byName, "Request")
                 .map(section -> request(section, diagnostics))
                 .orElseGet(() -> new ParseMappings(List.of(), false));
         Optional<BindingAst.ResponseMapping> response = first(byName, "Response")
                 .flatMap(section -> response(section, diagnostics));
         valid &= endpoint.isPresent();
-        valid &= access.isPresent();
+        valid &= outbound || access.isPresent();
         valid &= request.valid();
         valid &= response.isPresent();
         if (!valid) {
             return Optional.empty();
         }
         dev.harpia.parse.SpecAst.Endpoint parsed = endpoint.orElseThrow();
+        if (outbound) {
+            String[] target = operation.split("\\.", 2);
+            return Optional.of(new BindingAst.IntegrationHttp(
+                    target[0],
+                    target[1],
+                    new BindingAst.Endpoint(parsed.method(), parsed.path(), parsed.where()),
+                    request.mappings(),
+                    response.orElseThrow(),
+                    declaration.heading().raw().where()));
+        }
         return Optional.of(new BindingAst.Http(
                 operation,
                 new BindingAst.Endpoint(parsed.method(), parsed.path(), parsed.where()),
-                BindingAst.Access.valueOf(access.orElseThrow().name()),
+                new BindingAst.Access(
+                        BindingAst.Access.Kind.valueOf(access.orElseThrow().kind().name()),
+                        access.orElseThrow().roles()),
                 request.mappings(),
                 response.orElseThrow(),
                 declaration.heading().raw().where()));

@@ -52,9 +52,38 @@ final class SymbolRenderer {
                     .reduce((left, right) -> left + ", " + right)
                     .orElse("") + ")";
         }
+        if (symbol instanceof Symbol.Integration integration) {
+            return " operations(" + integration.operations().stream()
+                    .map(SymbolRenderer::integrationOperation)
+                    .reduce((left, right) -> left + ", " + right)
+                    .orElse("") + ")";
+        }
+        if (symbol instanceof Symbol.Event event) {
+            return " payload(" + event.payload().stream()
+                    .map(field -> field.name() + ": " + field.type()
+                            + (field.required() ? " required" : ""))
+                    .reduce((left, right) -> left + ", " + right)
+                    .orElse("") + ")";
+        }
         if (symbol instanceof Symbol.Scenario scenario) {
             return " -> " + scenario.computation();
         }
         return "";
+    }
+
+    private static String integrationOperation(
+            dev.harpia.parse.IntegrationAst.Operation operation) {
+        String input = operation.input().stream()
+                .map(parameter -> parameter.name() + ": " + parameter.type()
+                        + (parameter.required() ? " required" : ""))
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("");
+        String errors = operation.errors().isEmpty()
+                ? ""
+                : " throws " + operation.errors().stream()
+                        .map(dev.harpia.parse.IntegrationAst.Failure::name)
+                        .reduce((left, right) -> left + "|" + right)
+                        .orElse("");
+        return operation.name() + "(" + input + ") -> " + operation.output().type() + errors;
     }
 }

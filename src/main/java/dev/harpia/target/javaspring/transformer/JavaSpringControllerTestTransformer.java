@@ -55,6 +55,11 @@ public final class JavaSpringControllerTestTransformer {
                 .toList();
         TreeSet<String> imports = new TreeSet<>(FIXED_IMPORTS);
         imports.add(names.responseImport());
+        // A paged operation answers with the envelope, so the test has to name it too.
+        if (entity.operations().stream().anyMatch(operation ->
+                operation.result().kind() == ApplicationOperation.ResultKind.PAGE)) {
+            imports.add(names.dtoPackage() + ".PageResponse");
+        }
         entity.fields().forEach(field ->
                 imports.addAll(JavaSampleValues.requiredImports(
                         field, context.layout().packageName(JavaLayout.DOMAIN))));
@@ -68,8 +73,20 @@ public final class JavaSpringControllerTestTransformer {
             }
         }
 
+        boolean secured = context.application().capabilities()
+                .requires(dev.harpia.capability.Capability.SECURITY);
+        if (secured) {
+            imports.add(context.layout().packageName(JavaLayout.CONFIG) + ".SecurityConfig");
+        }
         List<JavaMethodModel> methods = new ArrayList<>();
         for (ApplicationOperation operation : operations) {
+            // An authenticated endpoint cannot be exercised without an identity, and asserting
+            // its declared status from an anonymous request would only assert the refusal wearing
+            // the wrong number. What it can prove is that the refusal happens.
+            if (authenticated(operation)) {
+                methods.add(refusesAnonymous(names, entity, operation, imports));
+                continue;
+            }
             methods.add(declaredStatus(names, entity, operation, imports));
             for (ApplicationOperation.Failure failure : operation.failures()) {
                 failure(names, entity, operation, failure, imports).ifPresent(methods::add);
@@ -85,10 +102,25 @@ public final class JavaSpringControllerTestTransformer {
                 Set.of(),
                 Optional.of("Every endpoint declared for " + entity.typeName()
                         + ", and every failure it declares."),
-                List.of(JavaAnnotationModel.of(
-                        "org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest",
-                        new JavaAnnotationModel.Attribute(
-                                "value", names.controllerName() + ".class"))),
+                // A slice test auto-configures security when it is on the classpath, but not the
+                // chain this project declared. Without the import every endpoint would be judged
+                // by Spring Boot's default rule, and even a public one would answer 401.
+                secured
+                        ? List.of(
+                                JavaAnnotationModel.of(
+                                        "org.springframework.boot.test.autoconfigure.web.servlet"
+                                                + ".WebMvcTest",
+                                        new JavaAnnotationModel.Attribute(
+                                                "value", names.controllerName() + ".class")),
+                                JavaAnnotationModel.of(
+                                        "org.springframework.context.annotation.Import",
+                                        new JavaAnnotationModel.Attribute(
+                                                "value", "SecurityConfig.class")))
+                        : List.of(JavaAnnotationModel.of(
+                                "org.springframework.boot.test.autoconfigure.web.servlet"
+                                        + ".WebMvcTest",
+                                new JavaAnnotationModel.Attribute(
+                                        "value", names.controllerName() + ".class"))),
                 imports.stream().map(JavaImportModel::new).toList(),
                 List.of(),
                 List.of(identifier(entity), mockMvc(), mockedService(names)),
@@ -148,6 +180,33 @@ public final class JavaSpringControllerTestTransformer {
         perform(names, entity, operation, statements, body(operation), List.of(
                 MATCHERS_RESULT + ".status().is(" + operation.result().status() + ")"));
         return test(operation, "ReturnsItsDeclaredStatus", statements);
+    }
+
+    /**
+     * The one thing an anonymous request can prove about an authenticated endpoint.
+     *
+     * <p>401 and not 403: the request carried no identity at all, and saying "forbidden" would
+     * describe someone who was recognised and then turned away.
+     */
+    private JavaMethodModel refusesAnonymous(
+            Names names,
+            ApplicationEntity entity,
+            ApplicationOperation operation,
+            TreeSet<String> imports) {
+        List<String> statements = new ArrayList<>();
+        // The body matters as much as the status: a refusal that answered in a shape of Spring's
+        // choosing would leave the API with two error contracts and callers handling both.
+        perform(names, entity, operation, statements, body(operation), List.of(
+                MATCHERS_RESULT + ".status().is(401)",
+                MATCHERS_RESULT + ".jsonPath(\"$.status\").value(401)",
+                MATCHERS_RESULT + ".jsonPath(\"$.error\").value(\"unauthorized\")"));
+        return test(operation, "RefusesAnAnonymousRequest", statements);
+    }
+
+    private static boolean authenticated(ApplicationOperation operation) {
+        return operation.endpoint()
+                .map(endpoint -> endpoint.access().requiresIdentity())
+                .orElse(false);
     }
 
     private Optional<JavaMethodModel> failure(
@@ -229,6 +288,10 @@ public final class JavaSpringControllerTestTransformer {
             imports.add("java.util.List");
             value = "List.of(sampleResponse())";
         }
+        if (operation.result().kind() == ResultKind.PAGE) {
+            imports.add("java.util.List");
+            value = "new PageResponse<>(List.of(sampleResponse()), 0, 1, 1L, 1)";
+        }
         statements.add(MOCKITO + ".when(service." + operation.methodName()
                 + "(" + stubArguments(operation) + "))");
         statements.add("        .thenReturn(" + value + ");");
@@ -280,7 +343,15 @@ public final class JavaSpringControllerTestTransformer {
         ApplicationOperation.Endpoint endpoint = operation.endpoint().orElseThrow();
         String method = endpoint.method().name().toLowerCase(java.util.Locale.ROOT);
         String path = "\"" + endpoint.effectivePath() + "\"";
-        String uriVariables = endpoint.hasIdPathVariable() ? ", ID" : "";
+        // A path expands one value per parameter, in the order the parameters appear.
+        StringBuilder uriVariables = new StringBuilder();
+        for (ApplicationOperation.RequestMapping mapping : endpoint.request()) {
+            if (mapping instanceof ApplicationOperation.Path value) {
+                uriVariables.append(", ").append(value.input().equals("id")
+                        ? "ID"
+                        : requestValue(operation, value.input(), blankInput));
+            }
+        }
         String open = "mockMvc.perform(" + REQUESTS + "." + method
                 + "(" + path + uriVariables + ")";
         for (ApplicationOperation.RequestMapping mapping : endpoint.request()) {
@@ -324,10 +395,13 @@ public final class JavaSpringControllerTestTransformer {
         return Optional.empty();
     }
 
+    /** Whether the field holds text, which a declared enum does not: it holds one of its names. */
     private static boolean isText(ApplicationField field) {
-        return field.scalarType() == dev.harpia.application.ApplicationScalarType.STRING
-                || field.scalarType() == dev.harpia.application.ApplicationScalarType.TEXT
-                || field.scalarType() == dev.harpia.application.ApplicationScalarType.EMAIL;
+        return field.present().scalarKind()
+                .filter(kind -> kind == dev.harpia.application.ApplicationScalarType.STRING
+                        || kind == dev.harpia.application.ApplicationScalarType.TEXT
+                        || kind == dev.harpia.application.ApplicationScalarType.EMAIL)
+                .isPresent();
     }
 
     private static Optional<String> body(ApplicationOperation operation) {
@@ -392,7 +466,7 @@ public final class JavaSpringControllerTestTransformer {
     }
 
     private static boolean has(ApplicationOperation operation, FlowCommand command) {
-        return operation.flow().stream()
+        return operation.allInstructions().stream()
                 .anyMatch(instruction -> instruction.command() == command);
     }
 

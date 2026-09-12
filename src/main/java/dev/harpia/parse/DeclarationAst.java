@@ -7,7 +7,10 @@ public sealed interface DeclarationAst
         permits SpecAst.EntityDeclaration,
                 SpecAst.EnumDeclaration,
                 SpecAst.ValueDeclaration,
+                SpecAst.InvariantDeclaration,
                 SpecAst.UseCaseDeclaration,
+                IntegrationAst.Declaration,
+                EventAst.Declaration,
                 LogicAst.Declaration,
                 LogicAst.Scenario {
 
