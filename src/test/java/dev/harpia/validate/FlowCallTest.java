@@ -129,7 +129,8 @@ class FlowCallTest {
     }
 
     @Test
-    void aCustomLogicWaitsForItsTargetAdapter() throws IOException {
+    void aCustomLogicContractIsInjectedAsTheTargetAdapter(@TempDir Path classes)
+            throws IOException {
         project(1, """
                 discount = call CalculateDiscount(total = total, vip = vip)
                 purchase = create Purchase from input
@@ -141,13 +142,61 @@ class FlowCallTest {
                 custom DiscountCalculator
                 """);
 
-        assertThat(compile().diagnostics())
-                .filteredOn(diagnostic -> diagnostic.code()
-                        .equals(ErrorCodes.SEMANTIC_FLOW_CALL_TARGET))
-                .singleElement()
-                .satisfies(diagnostic -> assertThat(diagnostic.message())
-                        .contains("custom Logic 'CalculateDiscount'")
-                        .contains("target adapter"));
+        CompileResult result = compile();
+
+        assertThat(result.diagnostics()).isEmpty();
+        assertThat(Inspector.render(result, Stage.BUSINESS_IR).orElseThrow())
+                .contains("CalculateDiscount(total: Decimal, vip: Boolean) "
+                        + "custom DiscountCalculator");
+        assertThat(result.tree().orElseThrow().files().get(SERVICE))
+                .contains("private final DiscountCalculator discountCalculator;")
+                .contains("BigDecimal discount = discountCalculator.apply("
+                        + "request.total(), request.vip());");
+        GeneratedJava.compiles(result.tree().orElseThrow().files(), classes);
+    }
+
+    @Test
+    void aPriorScalarResultCanFeedTheNextCall(@TempDir Path classes) throws IOException {
+        project(1, """
+                discount = call CalculateDiscount(total = total, vip = vip)
+                adjusted = call CalculateDiscount(total = discount, vip = vip)
+                purchase = create Purchase from input
+                save purchase
+                return purchase
+                """, "");
+
+        CompileResult result = compile();
+
+        assertThat(result.diagnostics()).isEmpty();
+        assertThat(result.tree().orElseThrow().files().get(SERVICE))
+                .contains("BigDecimal adjusted = CalculateDiscount.apply("
+                        + "discount, request.vip());");
+        GeneratedJava.compiles(result.tree().orElseThrow().files(), classes);
+    }
+
+    @Test
+    void aCommandCanBeCalledWithNamedTypedArguments(@TempDir Path classes)
+            throws IOException {
+        project(1, """
+                discount = call CalculateDiscount(total = total, vip = vip)
+                call RecordAudit(total = discount, vip = vip)
+                purchase = create Purchase from input
+                save purchase
+                return purchase
+                """, "");
+
+        CompileResult result = compile();
+
+        assertThat(result.diagnostics()).isEmpty();
+        assertThat(Inspector.render(result, Stage.BUSINESS_IR).orElseThrow())
+                .contains("Step OperationCall RecordAudit(total: Decimal, vip: Boolean) "
+                        + "-> NOTHING");
+        assertThat(Inspector.render(result, Stage.APPLICATION_IR).orElseThrow())
+                .contains("Instruction CALL_OPERATION RecordAudit("
+                        + "total: Decimal, vip: Boolean) -> NOTHING");
+        assertThat(result.tree().orElseThrow().files().get(SERVICE))
+                .contains("this.recordAudit(new RecordAuditRequest(discount, request.vip()));");
+        GeneratedJava.compiles(result.tree().orElseThrow().files(), classes);
     }
 
     @Test
@@ -217,6 +266,27 @@ class FlowCallTest {
                 ```
                 """ : implementation, scenario) : "";
         String heading = version == 0 ? "Place Purchase" : "Command PlacePurchase";
+        // A Command heading is V1-only, so under V0 declaring one would raise a second HRP1107 and
+        // hide the refusal this fixture exists to show.
+        String audit = version == 0 ? "" : """
+
+                ## Command RecordAudit
+
+                ### Input
+
+                - total: Decimal required
+                - vip: Boolean required
+
+                ### Flow
+
+                ```flow
+                return nothing
+                ```
+
+                ### Output
+
+                204 nothing
+                """;
         Files.writeString(projectRoot.resolve("specs/purchase.harpia.md"), """
                 # Purchase
 
@@ -225,6 +295,7 @@ class FlowCallTest {
                 - id: UUID generated
                 - total: Decimal required
                 - vip: Boolean required
+                %s
                 %s
 
                 ## %s
@@ -242,7 +313,7 @@ class FlowCallTest {
                 ### Output
 
                 201 Purchase
-                """.formatted(logic, heading, flow), StandardCharsets.UTF_8);
+                """.formatted(logic, audit, heading, flow), StandardCharsets.UTF_8);
         Files.writeString(projectRoot.resolve("harpia.yaml"), """
                 harpia:
                   schemaVersion: 1

@@ -7,27 +7,33 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-/** A Flow invocation resolved to a pure Logic signature. */
-public record FlowCallModel(
+/** A Flow invocation resolved to a declared application Command. */
+public record OperationCallModel(
         Optional<String> variable,
-        String logic,
+        String operation,
+        String entity,
+        boolean requiresId,
         List<Argument> arguments,
-        LogicType resultType,
-        Optional<String> customContract,
+        OutputModel.Kind resultKind,
         SourceRef where) {
-    public FlowCallModel {
+    public OperationCallModel {
         Objects.requireNonNull(variable, "variable");
-        Objects.requireNonNull(logic, "logic");
+        Objects.requireNonNull(operation, "operation");
+        Objects.requireNonNull(entity, "entity");
         arguments = List.copyOf(arguments);
-        Objects.requireNonNull(resultType, "resultType");
-        Objects.requireNonNull(customContract, "customContract");
+        Objects.requireNonNull(resultKind, "resultKind");
         Objects.requireNonNull(where, "where");
+        if (variable.isPresent() == (resultKind == OutputModel.Kind.NOTHING)) {
+            throw new IllegalArgumentException(
+                    "a Command result is assigned exactly when it returns a value");
+        }
     }
 
     public record Argument(
             String name,
             TypedExpression value,
             LogicType parameterType,
+            boolean identifier,
             SourceRef where) {
         public Argument {
             Objects.requireNonNull(name, "name");

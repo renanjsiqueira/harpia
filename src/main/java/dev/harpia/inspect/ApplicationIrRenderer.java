@@ -188,6 +188,19 @@ final class ApplicationIrRenderer {
                                             .orElse("")
                                     + ") -> " + invocation.resultType().display())
                             .orElse(""))
+                    .append(instruction.operationInvocation()
+                            .map(invocation -> " "
+                                    + instruction.variable()
+                                            .map(variable -> variable + " = ")
+                                            .orElse("")
+                                    + invocation.operation() + "("
+                                    + invocation.arguments().stream()
+                                            .map(argument -> argument.name() + ": "
+                                                    + argument.parameterType().display())
+                                            .reduce((left, right) -> left + ", " + right)
+                                            .orElse("")
+                                    + ") -> " + invocation.resultKind())
+                            .orElse(""))
                     .append(instruction.integrationInvocation()
                             .map(invocation -> " "
                                     + instruction.variable()

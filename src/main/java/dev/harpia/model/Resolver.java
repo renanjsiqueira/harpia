@@ -29,7 +29,8 @@ public final class Resolver {
             Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards,
             Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments,
             Map<dev.harpia.diag.SourceRef, FlowCallModel> flowCalls,
-            Map<dev.harpia.diag.SourceRef, IntegrationCallModel> integrationCalls) {
+            Map<dev.harpia.diag.SourceRef, IntegrationCallModel> integrationCalls,
+            Map<dev.harpia.diag.SourceRef, OperationCallModel> operationCalls) {
         Objects.requireNonNull(syntax, "syntax");
         Objects.requireNonNull(bindings, "bindings");
         Objects.requireNonNull(logics, "logics");
@@ -38,6 +39,7 @@ public final class Resolver {
         Objects.requireNonNull(invariants, "invariants");
         Objects.requireNonNull(flowCalls, "flowCalls");
         Objects.requireNonNull(integrationCalls, "integrationCalls");
+        Objects.requireNonNull(operationCalls, "operationCalls");
         Map<String, List<String>> enums = new LinkedHashMap<>();
         Map<String, List<FieldModel>> values = new LinkedHashMap<>();
         for (ModuleAst module : syntax.modules()) {
@@ -137,7 +139,8 @@ public final class Resolver {
                                 guards,
                                 assignments,
                                 flowCalls,
-                                integrationCalls))
+                                integrationCalls,
+                                operationCalls))
                         .toList(),
                 logics,
                 scenarios);
@@ -196,7 +199,8 @@ public final class Resolver {
             Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards,
             Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments,
             Map<dev.harpia.diag.SourceRef, FlowCallModel> flowCalls,
-            Map<dev.harpia.diag.SourceRef, IntegrationCallModel> integrationCalls) {
+            Map<dev.harpia.diag.SourceRef, IntegrationCallModel> integrationCalls,
+            Map<dev.harpia.diag.SourceRef, OperationCallModel> operationCalls) {
         SpecAst.EntityDeclaration declaration = module.entity();
         List<FieldModel> fields = declaration.fields().stream()
                 .map(field -> field(field, declared))
@@ -212,7 +216,7 @@ public final class Resolver {
         List<UseCaseModel> useCases = operations.stream()
                 .map(useCase -> useCase(
                         useCase, fields, bindings, rules, declared, guards, assignments,
-                        flowCalls, integrationCalls))
+                        flowCalls, integrationCalls, operationCalls))
                 .toList();
         return new EntityModel(
                 declaration.name(),
@@ -289,7 +293,8 @@ public final class Resolver {
             Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards,
             Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments,
             Map<dev.harpia.diag.SourceRef, FlowCallModel> flowCalls,
-            Map<dev.harpia.diag.SourceRef, IntegrationCallModel> integrationCalls) {
+            Map<dev.harpia.diag.SourceRef, IntegrationCallModel> integrationCalls,
+            Map<dev.harpia.diag.SourceRef, OperationCallModel> operationCalls) {
         Map<String, FieldModel> fieldsByName = new LinkedHashMap<>();
         entityFields.forEach(field -> fieldsByName.putIfAbsent(field.name(), field));
 
@@ -312,7 +317,8 @@ public final class Resolver {
         LinkedHashMap<String, FlowModel.ValueType> variables = new LinkedHashMap<>();
         List<FlowStep> steps = useCase.flow().stream()
                 .map(statement -> flowStep(
-                        statement, variables, guards, assignments, flowCalls, integrationCalls))
+                        statement, variables, guards, assignments, flowCalls, integrationCalls,
+                        operationCalls))
                 .toList();
 
         OutputModel.Shape shape = new OutputModel.Shape(
@@ -371,7 +377,8 @@ public final class Resolver {
             Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> guards,
             Map<dev.harpia.diag.SourceRef, dev.harpia.logic.TypedExpression> assignments,
             Map<dev.harpia.diag.SourceRef, FlowCallModel> flowCalls,
-            Map<dev.harpia.diag.SourceRef, IntegrationCallModel> integrationCalls) {
+            Map<dev.harpia.diag.SourceRef, IntegrationCallModel> integrationCalls,
+            Map<dev.harpia.diag.SourceRef, OperationCallModel> operationCalls) {
         if (statement instanceof SpecAst.ValidateInput value) {
             return new FlowStep.ValidateInput(value.where());
         }
@@ -398,12 +405,12 @@ public final class Resolver {
                     value.whenTrue().stream()
                             .map(inner -> flowStep(
                                     inner, variables, guards, assignments, flowCalls,
-                                    integrationCalls))
+                                    integrationCalls, operationCalls))
                             .toList(),
                     value.whenFalse().stream()
                             .map(inner -> flowStep(
                                     inner, variables, guards, assignments, flowCalls,
-                                    integrationCalls))
+                                    integrationCalls, operationCalls))
                             .toList(),
                     value.where());
         }
@@ -487,6 +494,20 @@ public final class Resolver {
                     call.where());
         }
         if (statement instanceof SpecAst.Call value) {
+            OperationCallModel operation = operationCalls.get(value.where());
+            if (operation != null) {
+                operation.variable().ifPresent(variable -> variables.put(
+                        variable,
+                        new FlowModel.ValueType(FlowModel.Kind.VALUE, operation.entity())));
+                return new FlowStep.OperationCall(
+                        operation.variable(),
+                        operation.operation(),
+                        operation.entity(),
+                        operation.requiresId(),
+                        operation.arguments(),
+                        operation.resultKind(),
+                        operation.where());
+            }
             FlowCallModel call = flowCalls.get(value.where());
             variables.put(call.variable().orElseThrow(), new FlowModel.ValueType(
                     FlowModel.Kind.SCALAR, call.resultType().display()));
@@ -495,6 +516,7 @@ public final class Resolver {
                     call.logic(),
                     call.arguments(),
                     call.resultType(),
+                    call.customContract(),
                     call.where());
         }
         if (statement instanceof SpecAst.Return value) {

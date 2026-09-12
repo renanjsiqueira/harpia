@@ -412,7 +412,9 @@ public final class ApplicationModelBuilder {
                                             argument.value(),
                                             argument.parameterType()))
                                     .toList(),
-                            value.resultType())),
+                            value.resultType(),
+                            value.customContract())),
+                    Optional.empty(),
                     Optional.empty(),
                     java.util.List.of(),
                     java.util.List.of(),
@@ -439,6 +441,35 @@ public final class ApplicationModelBuilder {
                                                     argument.parameterType()))
                                     .toList(),
                             value.resultType())),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    value.where());
+        }
+        if (source instanceof FlowStep.OperationCall value) {
+            return new FlowInstruction(
+                    FlowCommand.CALL_OPERATION,
+                    value.variable(),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    false,
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(new FlowInstruction.OperationInvocation(
+                            value.operation(),
+                            value.entity(),
+                            value.requiresId(),
+                            value.arguments().stream()
+                                    .map(argument ->
+                                            new FlowInstruction.OperationInvocation.Argument(
+                                                    argument.name(),
+                                                    argument.value(),
+                                                    argument.parameterType(),
+                                                    argument.identifier()))
+                                    .toList(),
+                            ResultKind.valueOf(value.resultKind().name()))),
                     java.util.List.of(),
                     java.util.List.of(),
                     value.where());
@@ -489,6 +520,7 @@ public final class ApplicationModelBuilder {
                     false,
                     Optional.of(new FlowInstruction.TypedValue(
                             "if", value.text(), value.condition())),
+                    Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
                     value.whenTrue().stream()

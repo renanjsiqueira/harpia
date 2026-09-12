@@ -21,6 +21,7 @@ import dev.harpia.target.javaspring.model.JavaTypeRef;
 import dev.harpia.target.javaspring.model.JavaVisibility;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -55,6 +56,8 @@ public final class JavaSpringServiceTransformer {
         methods.add(toResponse(names, entity));
 
         List<String> usedIntegrations = usedIntegrations(entity);
+        List<String> usedCustomContracts = usedCustomContracts(entity);
+        List<String> usedOperationEntities = usedOperationEntities(entity);
         List<JavaFieldModel> fields = new ArrayList<>();
         fields.add(new JavaFieldModel(
                 REPOSITORY_FIELD,
@@ -68,6 +71,21 @@ public final class JavaSpringServiceTransformer {
         constructorParameters.add(new JavaParameterModel(REPOSITORY_FIELD, names.repositoryType()));
         List<String> assignments = new ArrayList<>();
         assignments.add("this." + REPOSITORY_FIELD + " = " + REPOSITORY_FIELD + ";");
+        for (String contract : usedCustomContracts) {
+            String fieldName = lowerFirst(contract);
+            JavaTypeRef contractType = JavaTypeRef.of(names.logicPackage() + "." + contract);
+            fields.add(dependencyField(fieldName, contractType, entity));
+            constructorParameters.add(new JavaParameterModel(fieldName, contractType));
+            assignments.add("this." + fieldName + " = " + fieldName + ";");
+        }
+        for (String owner : usedOperationEntities) {
+            String fieldName = lowerFirst(owner) + "Service";
+            JavaTypeRef serviceType = JavaTypeRef.of(names.servicePackage() + "."
+                    + JavaLayout.serviceTypeName(owner));
+            fields.add(dependencyField(fieldName, serviceType, entity));
+            constructorParameters.add(new JavaParameterModel(fieldName, serviceType));
+            assignments.add("this." + fieldName + " = " + fieldName + ";");
+        }
         for (String integration : usedIntegrations) {
             String fieldName = JavaSpringIntegrationClientTransformer.clientFieldName(integration);
             JavaTypeRef clientType = JavaTypeRef.of(names.integrationPackage() + "."
@@ -188,7 +206,8 @@ public final class JavaSpringServiceTransformer {
             ApplicationOperation operation,
             TreeSet<String> explicitImports) {
         List<String> statements = new ArrayList<>();
-        emit(names, entity, operation, operation.flow(), statements, explicitImports);
+        emit(names, entity, operation, operation.flow(), statements, explicitImports,
+                new LinkedHashSet<>());
         return statements;
     }
 
@@ -199,7 +218,8 @@ public final class JavaSpringServiceTransformer {
             ApplicationOperation operation,
             List<ApplicationOperation.FlowInstruction> flow,
             List<String> statements,
-            TreeSet<String> explicitImports) {
+            TreeSet<String> explicitImports,
+            Set<String> localValues) {
         String entityName = entity.typeName();
         for (ApplicationOperation.FlowInstruction instruction : flow) {
             switch (instruction.command()) {
@@ -209,12 +229,12 @@ public final class JavaSpringServiceTransformer {
                     JavaLogicWriter.Result written = JavaLogicWriter.condition(
                             condition.expression(),
                             operation.methodName(),
-                            field -> REQUEST_PARAMETER + "." + field + "()");
+                            field -> javaValue(field, localValues));
                     explicitImports.addAll(written.imports());
                     statements.add("if (" + written.body() + ") {");
                     List<String> branch = new ArrayList<>();
                     emit(names, entity, operation, instruction.whenTrue(), branch,
-                            explicitImports);
+                            explicitImports, new LinkedHashSet<>(localValues));
                     branch.forEach(line -> statements.add("    " + line));
                     if (instruction.whenFalse().isEmpty()) {
                         statements.add("}");
@@ -222,7 +242,7 @@ public final class JavaSpringServiceTransformer {
                         statements.add("} else {");
                         List<String> otherwise = new ArrayList<>();
                         emit(names, entity, operation, instruction.whenFalse(), otherwise,
-                                explicitImports);
+                                explicitImports, new LinkedHashSet<>(localValues));
                         otherwise.forEach(line -> statements.add("    " + line));
                         statements.add("}");
                     }
@@ -236,7 +256,7 @@ public final class JavaSpringServiceTransformer {
                         JavaLogicWriter.Result condition = JavaLogicWriter.condition(
                                 rule.condition(),
                                 operation.methodName(),
-                                name -> REQUEST_PARAMETER + "." + name + "()");
+                                name -> javaValue(name, localValues));
                         explicitImports.addAll(condition.imports());
                         statements.add("if (!(" + condition.body() + ")) {");
                         statements.add("    throw new RuleViolationException(\""
@@ -254,7 +274,7 @@ public final class JavaSpringServiceTransformer {
                     JavaLogicWriter.Result condition = JavaLogicWriter.condition(
                             raised.expression(),
                             operation.methodName(),
-                            field -> REQUEST_PARAMETER + "." + field + "()");
+                            field -> javaValue(field, localValues));
                     explicitImports.addAll(condition.imports());
                     String failureCondition = instruction.command()
                                     == ApplicationOperation.FlowCommand.REQUIRE
@@ -276,7 +296,7 @@ public final class JavaSpringServiceTransformer {
                                 argument.value(),
                                 argument.parameterType(),
                                 JavaSpringLogicTransformer.METHOD_NAME,
-                                field -> REQUEST_PARAMETER + "." + field + "()");
+                                field -> javaValue(field, localValues));
                         explicitImports.addAll(written.imports());
                         arguments.add(written.body());
                     }
@@ -286,12 +306,19 @@ public final class JavaSpringServiceTransformer {
                             && !resultType.canonicalName().startsWith("java.lang.")) {
                         explicitImports.add(resultType.canonicalName());
                     }
-                    explicitImports.add(names.logicPackage() + "." + invocation.target());
+                    String receiver;
+                    if (invocation.customContract().isPresent()) {
+                        receiver = lowerFirst(invocation.customContract().orElseThrow());
+                    } else {
+                        explicitImports.add(names.logicPackage() + "." + invocation.target());
+                        receiver = invocation.target();
+                    }
                     statements.add(resultType.simpleName() + " "
                             + instruction.variable().orElseThrow() + " = "
-                            + invocation.target() + "."
+                            + receiver + "."
                             + JavaSpringLogicTransformer.METHOD_NAME + "("
                             + String.join(", ", arguments) + ");");
+                    localValues.add(instruction.variable().orElseThrow());
                 }
                 case CALL_INTEGRATION -> {
                     ApplicationOperation.FlowInstruction.IntegrationInvocation invocation =
@@ -303,7 +330,7 @@ public final class JavaSpringServiceTransformer {
                                 argument.value(),
                                 argument.parameterType(),
                                 JavaSpringLogicTransformer.METHOD_NAME,
-                                field -> REQUEST_PARAMETER + "." + field + "()");
+                                field -> javaValue(field, localValues));
                         explicitImports.addAll(written.imports());
                         arguments.add(written.body());
                     }
@@ -318,6 +345,56 @@ public final class JavaSpringServiceTransformer {
                     } else {
                         JavaTypeRef resultType = JavaTypeMapper.map(
                                 invocation.resultType().orElseThrow(), names.domainPackage());
+                        resultType.flattened()
+                                .map(JavaTypeRef::canonicalName)
+                                .filter(name -> name.contains(".")
+                                        && !name.startsWith("java.lang."))
+                                .forEach(explicitImports::add);
+                        statements.add(resultType.sourceName() + " "
+                                + instruction.variable().orElseThrow() + " = " + call);
+                        localValues.add(instruction.variable().orElseThrow());
+                    }
+                }
+                case CALL_OPERATION -> {
+                    ApplicationOperation.FlowInstruction.OperationInvocation invocation =
+                            instruction.operationInvocation().orElseThrow();
+                    List<String> identifierArguments = new ArrayList<>();
+                    List<String> requestArguments = new ArrayList<>();
+                    for (ApplicationOperation.FlowInstruction.OperationInvocation.Argument argument
+                            : invocation.arguments()) {
+                        JavaLogicWriter.Result written = JavaLogicWriter.expression(
+                                argument.value(),
+                                argument.parameterType(),
+                                JavaSpringLogicTransformer.METHOD_NAME,
+                                field -> javaValue(field, localValues));
+                        explicitImports.addAll(written.imports());
+                        (argument.identifier() ? identifierArguments : requestArguments)
+                                .add(written.body());
+                    }
+                    List<String> arguments = new ArrayList<>(identifierArguments);
+                    if (!requestArguments.isEmpty()) {
+                        String requestType = invocation.operation() + "Request";
+                        explicitImports.add(names.dtoPackage() + "." + requestType);
+                        arguments.add("new " + requestType + "("
+                                + String.join(", ", requestArguments) + ")");
+                    }
+                    String receiver = invocation.entity().equals(entity.typeName())
+                            ? "this"
+                            : lowerFirst(invocation.entity()) + "Service";
+                    String call = receiver + "." + lowerFirst(invocation.operation())
+                            + "(" + String.join(", ", arguments) + ");";
+                    if (invocation.resultKind() == ApplicationOperation.ResultKind.NOTHING) {
+                        statements.add(call);
+                    } else {
+                        JavaTypeRef response = JavaTypeRef.of(names.dtoPackage() + "."
+                                + invocation.entity() + "Response");
+                        JavaTypeRef resultType = switch (invocation.resultKind()) {
+                            case ENTITY -> response;
+                            case LIST -> JavaTypeRef.parameterized("java.util.List", response);
+                            case PAGE -> JavaTypeRef.parameterized(
+                                    names.dtoPackage() + ".PageResponse", response);
+                            case NOTHING -> throw new IllegalStateException();
+                        };
                         resultType.flattened()
                                 .map(JavaTypeRef::canonicalName)
                                 .filter(name -> name.contains(".")
@@ -374,7 +451,7 @@ public final class JavaSpringServiceTransformer {
                     JavaLogicWriter.Result written = JavaLogicWriter.condition(
                             assigned.expression(),
                             operation.methodName(),
-                            field -> REQUEST_PARAMETER + "." + field + "()");
+                            field -> javaValue(field, localValues));
                     explicitImports.addAll(written.imports());
                     statements.add(variable + "."
                             + JavaLayout.accessor("set", assigned.name())
@@ -387,7 +464,7 @@ public final class JavaSpringServiceTransformer {
                     JavaLogicWriter.Result element = JavaLogicWriter.condition(
                             changed.expression(),
                             operation.methodName(),
-                            field -> REQUEST_PARAMETER + "." + field + "()");
+                            field -> javaValue(field, localValues));
                     explicitImports.addAll(element.imports());
                     statements.add(variable + "."
                             + JavaLayout.accessor("get", changed.name()) + "()."
@@ -459,6 +536,50 @@ public final class JavaSpringServiceTransformer {
                 .distinct()
                 .sorted()
                 .toList();
+    }
+
+    private static List<String> usedCustomContracts(ApplicationEntity entity) {
+        return entity.operations().stream()
+                .flatMap(operation -> operation.allInstructions().stream())
+                .filter(instruction -> instruction.command()
+                        == ApplicationOperation.FlowCommand.CALL_LOGIC)
+                .flatMap(instruction -> instruction.invocation().orElseThrow()
+                        .customContract().stream())
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    private static List<String> usedOperationEntities(ApplicationEntity entity) {
+        return entity.operations().stream()
+                .flatMap(operation -> operation.allInstructions().stream())
+                .filter(instruction -> instruction.command()
+                        == ApplicationOperation.FlowCommand.CALL_OPERATION)
+                .map(instruction -> instruction.operationInvocation().orElseThrow().entity())
+                .filter(owner -> !owner.equals(entity.typeName()))
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    private static JavaFieldModel dependencyField(
+            String name, JavaTypeRef type, ApplicationEntity entity) {
+        return new JavaFieldModel(
+                name,
+                type,
+                JavaVisibility.PRIVATE,
+                Set.of(JavaModifier.FINAL),
+                List.of(),
+                Optional.empty(),
+                Optional.of(entity.where()));
+    }
+
+    private static String javaValue(String name, Set<String> localValues) {
+        return localValues.contains(name) ? name : REQUEST_PARAMETER + "." + name + "()";
+    }
+
+    private static String lowerFirst(String value) {
+        return Character.toLowerCase(value.charAt(0)) + value.substring(1);
     }
 
     private static String listingType(ApplicationOperation operation, String entityName) {

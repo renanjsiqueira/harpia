@@ -81,6 +81,15 @@ public final class JavaSpringServiceTestTransformer {
         List<JavaFieldModel> fields = new ArrayList<>();
         fields.add(identifier(names, entity));
         fields.add(mock(names));
+        usedCustomContracts(entity).forEach(contract -> fields.add(dependencyMock(
+                Character.toLowerCase(contract.charAt(0)) + contract.substring(1),
+                JavaTypeRef.of(names.logicPackage() + "." + contract),
+                entity)));
+        usedOperationEntities(entity).forEach(owner -> fields.add(dependencyMock(
+                Character.toLowerCase(owner.charAt(0)) + owner.substring(1) + "Service",
+                JavaTypeRef.of(names.servicePackage() + "."
+                        + JavaLayout.serviceTypeName(owner)),
+                entity)));
         usedIntegrations(entity).forEach(integration -> fields.add(integrationMock(
                 names, integration, entity)));
         fields.add(underTest(names));
@@ -155,12 +164,46 @@ public final class JavaSpringServiceTestTransformer {
                 Optional.of(entity.where()));
     }
 
+    private static JavaFieldModel dependencyMock(
+            String fieldName, JavaTypeRef type, ApplicationEntity entity) {
+        return new JavaFieldModel(
+                fieldName,
+                type,
+                JavaVisibility.PRIVATE,
+                Set.of(),
+                List.of(JavaAnnotationModel.marker("org.mockito.Mock")),
+                Optional.empty(),
+                Optional.of(entity.where()));
+    }
+
     private static List<String> usedIntegrations(ApplicationEntity entity) {
         return entity.operations().stream()
                 .flatMap(operation -> operation.allInstructions().stream())
                 .filter(instruction -> instruction.command() == FlowCommand.CALL_INTEGRATION)
                 .map(instruction -> instruction.integrationInvocation()
                         .orElseThrow().integration())
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    private static List<String> usedCustomContracts(ApplicationEntity entity) {
+        return entity.operations().stream()
+                .flatMap(operation -> operation.allInstructions().stream())
+                .filter(instruction -> instruction.command() == FlowCommand.CALL_LOGIC)
+                .flatMap(instruction -> instruction.invocation().orElseThrow()
+                        .customContract().stream())
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    private static List<String> usedOperationEntities(ApplicationEntity entity) {
+        return entity.operations().stream()
+                .flatMap(operation -> operation.allInstructions().stream())
+                .filter(instruction -> instruction.command() == FlowCommand.CALL_OPERATION)
+                .map(instruction -> instruction.operationInvocation().orElseThrow().entity())
+                .filter(owner -> !owner.equals(entity.typeName()))
                 .distinct()
                 .sorted()
                 .toList();
@@ -498,6 +541,7 @@ public final class JavaSpringServiceTestTransformer {
             String dtoPackage,
             String errorPackage,
             String integrationPackage,
+            String logicPackage,
             JavaTypeRef entityType,
             JavaTypeRef serviceType,
             JavaTypeRef repositoryType) {
@@ -513,6 +557,7 @@ public final class JavaSpringServiceTestTransformer {
                     layout.packageName(JavaLayout.DTO),
                     layout.packageName(JavaLayout.ERROR),
                     layout.packageName(JavaLayout.INTEGRATION),
+                    layout.packageName(JavaLayout.LOGIC),
                     JavaTypeRef.of(
                             layout.packageName(JavaLayout.DOMAIN) + "." + entity.typeName()),
                     JavaTypeRef.of(layout.packageName(JavaLayout.SERVICE) + "." + serviceName),

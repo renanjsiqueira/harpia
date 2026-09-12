@@ -113,7 +113,20 @@ final class BusinessIrRenderer {
                                         + argument.parameterType().display())
                                 .reduce((left, right) -> left + ", " + right)
                                 .orElse(""))
-                        .append(')');
+                        .append(')')
+                        .append(call.customContract().map(contract -> " custom " + contract)
+                                .orElse(""));
+            } else if (step instanceof FlowStep.OperationCall call) {
+                call.variable().ifPresent(variable -> out.append(' ')
+                        .append(variable).append(" ="));
+                out.append(' ').append(call.operation()).append('(')
+                        .append(call.arguments().stream()
+                                .map(argument -> argument.name() + ": "
+                                        + argument.parameterType().display())
+                                .reduce((left, right) -> left + ", " + right)
+                                .orElse(""))
+                        .append(") -> ")
+                        .append(call.resultKind());
             } else if (step instanceof FlowStep.IntegrationCall call) {
                 call.variable().ifPresent(variable -> out.append(' ')
                         .append(variable).append(" ="));

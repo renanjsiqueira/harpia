@@ -20,6 +20,7 @@ public sealed interface FlowStep
                 FlowStep.Fail,
                 FlowStep.Require,
                 FlowStep.Call,
+                FlowStep.OperationCall,
                 FlowStep.IntegrationCall,
                 FlowStep.Return {
 
@@ -83,12 +84,33 @@ public sealed interface FlowStep
             String logic,
             java.util.List<FlowCallModel.Argument> arguments,
             dev.harpia.logic.LogicType resultType,
+            java.util.Optional<String> customContract,
             SourceRef where) implements FlowStep {
         public Call {
             Objects.requireNonNull(variable, "variable");
             Objects.requireNonNull(logic, "logic");
             arguments = java.util.List.copyOf(arguments);
             Objects.requireNonNull(resultType, "resultType");
+            Objects.requireNonNull(customContract, "customContract");
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
+    /** Invokes another Command declared in this project, through the contract its input gives it. */
+    record OperationCall(
+            java.util.Optional<String> variable,
+            String operation,
+            String entity,
+            boolean requiresId,
+            java.util.List<OperationCallModel.Argument> arguments,
+            OutputModel.Kind resultKind,
+            SourceRef where) implements FlowStep {
+        public OperationCall {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(operation, "operation");
+            Objects.requireNonNull(entity, "entity");
+            arguments = java.util.List.copyOf(arguments);
+            Objects.requireNonNull(resultKind, "resultKind");
             Objects.requireNonNull(where, "where");
         }
     }

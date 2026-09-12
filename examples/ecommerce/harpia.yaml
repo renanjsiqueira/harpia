@@ -1,0 +1,27 @@
+harpia:
+  schemaVersion: 1
+  languageVersion: 1
+
+project:
+  name: ecommerce-platform
+  group: com.example
+  artifact: ecommerce-platform
+  package: com.example.ecommerce
+
+target:
+  id: java-spring
+  language:
+    version: 21
+  options:
+    springBootVersion: "3.3.6"
+
+database:
+  vendor: postgres
+
+paths:
+  specs: specs
+  output: generated
+
+generation:
+  migrations: true
+  tests: true

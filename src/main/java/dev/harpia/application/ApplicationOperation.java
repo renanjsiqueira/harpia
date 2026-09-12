@@ -206,7 +206,8 @@ public record ApplicationOperation(
         public enum Kind {
             PUBLIC,
             AUTHENTICATED,
-            ROLE
+            ROLE,
+            SCOPE
         }
 
         public static final Access PUBLIC = new Access(Kind.PUBLIC, java.util.List.of());
@@ -216,13 +217,18 @@ public record ApplicationOperation(
         public Access {
             java.util.Objects.requireNonNull(kind, "kind");
             roles = java.util.List.copyOf(roles);
-            if (roles.isEmpty() == (kind == Kind.ROLE)) {
-                throw new IllegalArgumentException("ROLE names roles and nothing else does");
+            if (roles.isEmpty() != (kind == Kind.PUBLIC || kind == Kind.AUTHENTICATED)) {
+                throw new IllegalArgumentException(
+                        "ROLE and SCOPE name what they demand; nothing else does");
             }
         }
 
         public static Access role(java.util.List<String> roles) {
             return new Access(Kind.ROLE, roles);
+        }
+
+        public static Access scope(java.util.List<String> scopes) {
+            return new Access(Kind.SCOPE, scopes);
         }
 
         /** True when the request has to carry an identity at all, whatever is asked of it. */
@@ -238,7 +244,9 @@ public record ApplicationOperation(
          */
         @Override
         public String toString() {
-            return kind == Kind.ROLE ? "ROLE " + String.join(" or ", roles) : kind.name();
+            return roles.isEmpty()
+                    ? kind.name()
+                    : kind.name() + " " + String.join(" or ", roles);
         }
     }
 
@@ -252,6 +260,7 @@ public record ApplicationOperation(
             Optional<TypedValue> value,
             Optional<Invocation> invocation,
             Optional<IntegrationInvocation> integrationInvocation,
+            Optional<OperationInvocation> operationInvocation,
             List<FlowInstruction> whenTrue,
             List<FlowInstruction> whenFalse,
             SourceRef where) {
@@ -283,17 +292,46 @@ public record ApplicationOperation(
         public record Invocation(
                 String target,
                 List<Argument> arguments,
-                LogicType resultType) {
+                LogicType resultType,
+                Optional<String> customContract) {
             public Invocation {
                 Objects.requireNonNull(target, "target");
                 arguments = List.copyOf(arguments);
                 Objects.requireNonNull(resultType, "resultType");
+                Objects.requireNonNull(customContract, "customContract");
             }
 
             public record Argument(
                     String name,
                     TypedExpression value,
                     LogicType parameterType) {
+                public Argument {
+                    Objects.requireNonNull(name, "name");
+                    Objects.requireNonNull(value, "value");
+                    Objects.requireNonNull(parameterType, "parameterType");
+                }
+            }
+        }
+
+        /** A call to another declared application Command. */
+        public record OperationInvocation(
+                String operation,
+                String entity,
+                boolean requiresId,
+                List<Argument> arguments,
+                ResultKind resultKind) {
+            public OperationInvocation {
+                Objects.requireNonNull(operation, "operation");
+                Objects.requireNonNull(entity, "entity");
+                arguments = List.copyOf(arguments);
+                Objects.requireNonNull(resultKind, "resultKind");
+            }
+
+            public record Argument(
+                    String name,
+                    TypedExpression value,
+                    LogicType parameterType,
+                    boolean identifier) {
                 public Argument {
                     Objects.requireNonNull(name, "name");
                     Objects.requireNonNull(value, "value");
@@ -342,7 +380,7 @@ public record ApplicationOperation(
                 Optional<TypedValue> value,
                 SourceRef where) {
             this(command, variable, entity, fields, sort, paged, value, Optional.empty(),
-                    Optional.empty(), List.of(), List.of(), where);
+                    Optional.empty(), Optional.empty(), List.of(), List.of(), where);
         }
 
         /** An instruction that carries neither a typed expression nor conditional branches. */
@@ -352,7 +390,8 @@ public record ApplicationOperation(
                 Optional<String> entity,
                 SourceRef where) {
             this(command, variable, entity, List.of(), List.of(), false, Optional.empty(),
-                    Optional.empty(), Optional.empty(), List.of(), List.of(), where);
+                    Optional.empty(), Optional.empty(), Optional.empty(), List.of(), List.of(),
+                    where);
         }
 
         public FlowInstruction {
@@ -364,6 +403,7 @@ public record ApplicationOperation(
             Objects.requireNonNull(value, "value");
             Objects.requireNonNull(invocation, "invocation");
             Objects.requireNonNull(integrationInvocation, "integrationInvocation");
+            Objects.requireNonNull(operationInvocation, "operationInvocation");
             whenTrue = List.copyOf(whenTrue);
             whenFalse = List.copyOf(whenFalse);
             Objects.requireNonNull(where, "where");
@@ -390,6 +430,15 @@ public record ApplicationOperation(
                         && integrationInvocation.isPresent()
                         && (variable.isPresent()
                                 == integrationInvocation.orElseThrow().resultType().isPresent());
+                case CALL_OPERATION -> entity.isEmpty()
+                        && fields.isEmpty()
+                        && sort.isEmpty()
+                        && !paged
+                        && value.isEmpty()
+                        && operationInvocation.isPresent()
+                        && (variable.isPresent()
+                                == (operationInvocation.orElseThrow().resultKind()
+                                        != ResultKind.NOTHING));
                 case IF -> variable.isEmpty()
                         && entity.isEmpty()
                         && fields.isEmpty()
@@ -403,6 +452,7 @@ public record ApplicationOperation(
             };
             valid &= command == FlowCommand.CALL_LOGIC || invocation.isEmpty();
             valid &= command == FlowCommand.CALL_INTEGRATION || integrationInvocation.isEmpty();
+            valid &= command == FlowCommand.CALL_OPERATION || operationInvocation.isEmpty();
             valid &= command == FlowCommand.IF || whenTrue.isEmpty() && whenFalse.isEmpty();
             if (!valid) {
                 throw new IllegalArgumentException("invalid operands for flow command " + command);
@@ -416,6 +466,7 @@ public record ApplicationOperation(
         REQUIRE,
         CALL_LOGIC,
         CALL_INTEGRATION,
+        CALL_OPERATION,
         FIND_BY,
         LIST_BY,
         SET_FIELD,

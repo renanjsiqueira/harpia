@@ -128,7 +128,8 @@ public final class HarpiaCompiler {
                 computations.guards(),
                 computations.assignments(),
                 computations.flowCalls(),
-                computations.integrationCalls());
+                computations.integrationCalls(),
+                computations.operationCalls());
         TestCoverage.report(business, config.generation().tests(), diagnostics);
         stages = stages.withBusiness(business);
         CapabilityRequirementSet requirements = CapabilityAnalyzer.analyze(business);
