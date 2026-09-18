@@ -143,10 +143,16 @@ class CoreV1PlanningTest {
                     .diagnostics().stream()
                     .map(Diagnostic::code)
                     .toList();
-            assertThat(observed)
-                    .as("spike case '%s' produces what the report says it produces today",
-                            fixture.id())
-                    .contains(fixture.expected());
+            if (fixture.expected().equals("ok")) {
+                assertThat(observed)
+                        .as("spike case '%s' is recorded as accepted today", fixture.id())
+                        .isEmpty();
+            } else {
+                assertThat(observed)
+                        .as("spike case '%s' produces what the report says it produces today",
+                                fixture.id())
+                        .contains(fixture.expected());
+            }
             TableRow row = table.get(fixture.id());
             if (row == null) {
                 continue;
@@ -166,8 +172,9 @@ class CoreV1PlanningTest {
                                 fixture.id())
                         .isNotEqualTo(fixture.expected());
                 assertThat(row.state())
-                        .as("a closed gap names the slice that closed it and the new result")
-                        .matches(".*S[1-8].*HRP[1-7][0-9]{3}.*");
+                        .as("a closed gap names the slice that closed it and what replaced the "
+                                + "refusal")
+                        .matches(".*S[1-8].*(HRP[1-7][0-9]{3}|aceito).*");
                 assertThat(fixture.open())
                         .as("case '%s': the table and the fixture agree the gap is closed",
                                 fixture.id())

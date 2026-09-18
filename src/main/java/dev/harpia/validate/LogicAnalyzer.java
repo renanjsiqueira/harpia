@@ -106,14 +106,23 @@ public final class LogicAnalyzer {
                 .forEach(declaration -> customLogics.put(
                         declaration.name(), declaration.custom().orElseThrow().contract()));
         Map<String, OperationSignature> commandSignatures = commandSignatures(project, symbols);
+        Map<String, Set<String>> operationGraph = new LinkedHashMap<>();
+        Map<String, SourceRef> operationWhere = new LinkedHashMap<>();
+        List<QueryCall> queryCalls = new ArrayList<>();
         for (ModuleAst module : project.modules()) {
             for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
+                String name = Naming.useCaseBaseName(useCase.title());
+                operationGraph.putIfAbsent(name, new LinkedHashSet<>());
+                operationWhere.putIfAbsent(name, useCase.where());
                 LinkedHashMap<String, LogicModel.Parameter> scope = new LinkedHashMap<>();
                 scopeOfBoundaryValues(useCase.input(), symbols)
                         .forEach(parameter -> scope.put(parameter.name(), parameter));
                 resolveFlowCalls(
                         useCase.flow(),
-                        Naming.useCaseBaseName(useCase.title()),
+                        name,
+                        useCase.declaredKind() == dev.harpia.parse.DeclarationKind.QUERY,
+                        operationGraph.get(name),
+                        queryCalls,
                         scope,
                         new LinkedHashMap<>(),
                         symbols,
@@ -126,6 +135,8 @@ public final class LogicAnalyzer {
                         diagnostics);
             }
         }
+        reportCommandCycles(operationGraph, operationWhere, diagnostics);
+        reportQueryEffects(operationGraph, queryCalls, diagnostics);
         return new FlowCalls(
                 Map.copyOf(locals),
                 Map.copyOf(resolved),
@@ -142,9 +153,84 @@ public final class LogicAnalyzer {
      * means guards and assignments type their expressions against the same scope the call
      * arguments already used, instead of against a second, smaller idea of what a flow knows.
      */
+    /** One call an operation makes, kept so a Query can be judged by what it can reach. */
+    private record QueryCall(String query, String target, SourceRef where) {
+    }
+
+    /**
+     * A Command that can reach itself, however many operations it goes through.
+     *
+     * <p>A self-call is already refused where it is written. A cycle of two or more is only
+     * visible from above, and the generated services would call each other until the stack ends —
+     * a failure with nothing in it that names the specification that caused it.
+     */
+    private static void reportCommandCycles(
+            Map<String, Set<String>> graph,
+            Map<String, SourceRef> where,
+            DiagnosticCollector diagnostics) {
+        Set<String> reported = new LinkedHashSet<>();
+        for (String start : graph.keySet()) {
+            List<String> path = new ArrayList<>();
+            if (reachesItself(start, start, graph, path, new LinkedHashSet<>())
+                    && path.size() > 1
+                    && reported.add(start)
+                    && where.containsKey(start)) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_TARGET,
+                        "Command '" + start + "' calls itself through "
+                                + String.join(" -> ", path)
+                                + "; a cycle of Commands has no first write",
+                        where.get(start));
+            }
+        }
+    }
+
+    /**
+     * A Query that reaches a Command, directly or through another operation.
+     *
+     * <p>A Query promises to read. Refusing only the mutating step written inside it would leave
+     * the promise broken by one indirection, which is the easiest kind to write by accident and
+     * the hardest to see in review.
+     */
+    private static void reportQueryEffects(
+            Map<String, Set<String>> graph,
+            List<QueryCall> calls,
+            DiagnosticCollector diagnostics) {
+        for (QueryCall call : calls) {
+            List<String> path = new ArrayList<>();
+            path.add(call.target());
+            reach(call.target(), graph, path, new LinkedHashSet<>());
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_QUERY_MUTATES,
+                    "Query '" + call.query() + "' reaches Command "
+                            + String.join(" -> ", path)
+                            + "; a Query reads and a Command writes, so this one does both",
+                    call.where());
+        }
+    }
+
+    /** Walks the graph once, keeping the first path it finds, for the message to show. */
+    private static void reach(
+            String from, Map<String, Set<String>> graph, List<String> path, Set<String> seen) {
+        if (!seen.add(from)) {
+            return;
+        }
+        for (String next : graph.getOrDefault(from, Set.of())) {
+            if (path.contains(next)) {
+                return;
+            }
+            path.add(next);
+            reach(next, graph, path, seen);
+            return;
+        }
+    }
+
     private static void resolveFlowCalls(
             List<SpecAst.FlowStatement> flow,
             String caller,
+            boolean callerIsQuery,
+            Set<String> callsOfCaller,
+            List<QueryCall> queryCalls,
             LinkedHashMap<String, LogicModel.Parameter> scope,
             LinkedHashMap<String, LogicModel.Parameter> produced,
             SymbolTable symbols,
@@ -160,13 +246,13 @@ public final class LogicAnalyzer {
             locals.put(statement.where(), List.copyOf(produced.values()));
             if (statement instanceof SpecAst.Conditional conditional) {
                 resolveFlowCalls(
-                        conditional.whenTrue(), caller, new LinkedHashMap<>(scope),
-                        new LinkedHashMap<>(produced), symbols,
+                        conditional.whenTrue(), caller, callerIsQuery, callsOfCaller, queryCalls,
+                        new LinkedHashMap<>(scope), new LinkedHashMap<>(produced), symbols,
                         customLogics, commandSignatures, resolved, integrations, operations,
                         locals, diagnostics);
                 resolveFlowCalls(
-                        conditional.whenFalse(), caller, new LinkedHashMap<>(scope),
-                        new LinkedHashMap<>(produced), symbols,
+                        conditional.whenFalse(), caller, callerIsQuery, callsOfCaller, queryCalls,
+                        new LinkedHashMap<>(scope), new LinkedHashMap<>(produced), symbols,
                         customLogics, commandSignatures, resolved, integrations, operations,
                         locals, diagnostics);
                 continue;
@@ -242,6 +328,10 @@ public final class LogicAnalyzer {
                         "Command '" + call.target() + "' cannot call itself",
                         call.where());
                 continue;
+            }
+            callsOfCaller.add(call.target());
+            if (callerIsQuery) {
+                queryCalls.add(new QueryCall(caller, call.target(), call.where()));
             }
             resolveOperationCall(call, signature, visible, symbols, diagnostics)
                     .ifPresent(model -> {
@@ -746,7 +836,10 @@ public final class LogicAnalyzer {
                         continue;
                     }
                     analyzeExpression(
-                            "'" + text + "'",
+                            // The instruction, not the expression: an expression that names one
+                            // value would otherwise be reported as enclosing itself.
+                            (element ? "the element of " : "set ")
+                                    + variable + "." + fieldName,
                             visibleAt(input, locals, statement.where()),
                             LogicType.of(expected),
                             expression,
@@ -1002,6 +1095,7 @@ public final class LogicAnalyzer {
 
         Body body = new Body(
                 new Symbol.Computation(owner, "", scope, expected, where), symbols, diagnostics);
+        body.subject = "nothing by that name is in scope at " + owner;
         Map<String, Binding> bindings = new LinkedHashMap<>();
         for (LogicModel.Parameter parameter : scope) {
             // Values in scope are given, not introduced here, so an unused one is not a warning.
@@ -1071,6 +1165,14 @@ public final class LogicAnalyzer {
         private final Deque<Map<String, Binding>> scopes = new ArrayDeque<>();
         private final Set<String> calls = new LinkedHashSet<>();
         private boolean valid = true;
+        /**
+         * How a diagnostic refers to what encloses the expression.
+         *
+         * <p>A Logic body is enclosed by a Logic; an expression written in a Flow is enclosed by
+         * the instruction that wrote it, and telling its author that a name "is not a parameter of
+         * Logic 'discount'" names a Logic nobody wrote.
+         */
+        private String subject;
 
         private Body(
                 Symbol.Computation signature,
@@ -1079,6 +1181,8 @@ public final class LogicAnalyzer {
             this.signature = signature;
             this.symbols = symbols;
             this.diagnostics = diagnostics;
+            this.subject = "it is not a parameter of Logic " + signature.name()
+                    + " and was not assigned before this line";
         }
 
         private Optional<LogicModel> analyze(LogicAst.Declaration declaration) {
@@ -1288,8 +1392,7 @@ public final class LogicAnalyzer {
             if (binding.isEmpty()) {
                 error(
                         ErrorCodes.SEMANTIC_LOGIC_UNKNOWN_NAME,
-                        "unknown value '" + reference.name() + "'; it is not a parameter of Logic "
-                                + signature.name() + " and was not assigned before this line",
+                        "unknown value '" + reference.name() + "'; " + subject,
                         reference.where());
                 return Optional.empty();
             }

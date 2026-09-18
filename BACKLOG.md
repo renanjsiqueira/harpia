@@ -859,6 +859,11 @@ Em ordem de dependência e valor para a Reference Application:
 
 ## Core Technical Debt
 
+- Flow V1 sem gate de versão: sob `languageVersion: 0` o parser ainda aceita `set`, `add`, `remove`
+  e `find`, que não estão entre os oito comandos da V0. `call`, `require`, `fail` e `if` são
+  recusados com `HRP1107`. Fechar a lacuna muda o significado de specs V0 já escritas, então é
+  decisão explícita do usuário e não correção silenciosa — encontrado em S1 de `mvp-core-v1`
+  (2026-09-17) pelo check C15.
 - `JAVA-004` ainda traduz Command/Query apenas pelas formas CRUD conhecidas.
 - `CUSTOM-003` precisa de layout que compile offline sem tornar o código do usuário descartável.
 - O source map está no resultado em memória; o contrato externo depende de `HARNESS-001/002`.

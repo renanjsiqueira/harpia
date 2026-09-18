@@ -103,13 +103,15 @@ final class FlowBlockParser {
             failed = true;
             return Optional.empty();
         }
-        if (!v1Flow && line.text().startsWith("require ")) {
-            diagnostics.error(
-                    ErrorCodes.SYNTAX_DECLARATION_TOO_NEW,
-                    "'require' in a flow needs harpia.languageVersion 1",
-                    line.contentWhere());
-            failed = true;
-            return Optional.empty();
+        for (String guard : List.of("require", "fail")) {
+            if (!v1Flow && line.text().startsWith(guard + " ")) {
+                diagnostics.error(
+                        ErrorCodes.SYNTAX_DECLARATION_TOO_NEW,
+                        "'" + guard + "' in a flow needs harpia.languageVersion 1",
+                        line.contentWhere());
+                failed = true;
+                return Optional.empty();
+            }
         }
         if (!line.text().startsWith("if ")) {
             if (isCall(line) && !line.text().endsWith(")")) {

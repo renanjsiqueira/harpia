@@ -25,7 +25,7 @@ nenhum, porque a próxima slice constrói em cima dele.
 
 | Caso | O que a spec pede | Observado em S0 | Estado hoje | Lacuna | Slice |
 | --- | --- | --- | --- | --- | --- |
-| `input` — input de Command | um campo de input que não existe na entidade (`couponCode`) | `HRP2011` — *input field 'couponCode' must name one non-generated entity field exactly once* | aberto | input de Command é hoje uma projeção obrigatória da entidade; um input composto ou transitório não tem forma | S1 (C14) |
+| `input` — input de Command | um campo de input que não existe na entidade (`couponCode`) | `HRP2011` — *input field 'couponCode' must name one non-generated entity field exactly once* | fechado em S1 → aceito | o input passou a ser o contrato próprio da operação: um campo sem coluna atrás é valor do flow. Nomear campo gerado ou repetir um nome continua recusado | S1 (C14) |
 | `member-access` — acesso a campo | ler `order.total` numa expressão de Flow | `HRP2114` — *member access '.total' requires a nominal type; Logic parameters are scalar* | aberto | a expressão tipada só conhece escalares; variável de Flow não tem tipo nominal | S2 (C18) |
 | `command-result` — resultado de Command | consumir em `set` o valor devolvido por `call RecordAudit(...)` | `HRP2102` — *unknown value 'audited'; it is not a parameter of Logic 'audited' and was not assigned before this line* | fechado em S1 → `HRP2103` | o nome agora resolve e carrega o tipo da entidade que o Command devolve; pedir um Decimal dele é erro de tipo, e vira acesso a membro quando S2 der membros aos valores | S1 (C7–C10) |
 | `owned` — associação owned | criar o `OrderItem` dentro do Command do `Order` | `HRP2010` — *operation 'CreateOrder' works on more than one entity: [SalesOrder, OrderItem]* | aberto | a operação pertence a uma entidade; escrever o filho owned no mesmo Command é recusado antes da geração | S2 (C16–C22), S3 (C24) |
@@ -37,7 +37,10 @@ em S1 e não numa entrega nova, e por isso ela foi a primeira a fechar.
 
 ### `input` — campo de input fora da entidade
 
-````harpia case=input expect=HRP2011 state=open
+*Fechado em S1.* A fixture é a mesma e agora compila: `couponCode` é um valor da operação, chega ao
+request gerado e não vira coluna.
+
+````harpia case=input expect=ok state=closed
 # SalesOrder
 
 ## Data

@@ -198,6 +198,15 @@ public final class JavaSpringServiceTestTransformer {
                 .toList();
     }
 
+    /** The input fields the entity actually keeps, in the order the operation declared them. */
+    private static List<ApplicationField> stored(
+            ApplicationEntity entity, List<ApplicationField> input) {
+        java.util.Set<String> columns = entity.fields().stream()
+                .map(ApplicationField::name)
+                .collect(java.util.stream.Collectors.toSet());
+        return input.stream().filter(field -> columns.contains(field.name())).toList();
+    }
+
     private static List<String> usedOperationEntities(ApplicationEntity entity) {
         return entity.operations().stream()
                 .flatMap(operation -> operation.allInstructions().stream())
@@ -360,7 +369,9 @@ public final class JavaSpringServiceTestTransformer {
             statements.add(CAPTOR + "<" + entityName + "> saved = " + CAPTOR + ".forClass("
                     + entityName + ".class);");
             statements.add(MOCKITO + ".verify(repository).save(saved.capture());");
-            for (ApplicationField field : operation.input()) {
+            // Only what the entity stores: an input the operation uses without keeping has no
+            // getter to read it back from, and claiming it was persisted would be false anyway.
+            for (ApplicationField field : stored(entity, operation.input())) {
                 statements.add(ASSERTIONS + ".assertThat(saved.getValue()."
                         + JavaLayout.accessor("get", field.name()) + "())"
                         + ".isEqualTo(request." + field.name() + "());");
@@ -368,13 +379,14 @@ public final class JavaSpringServiceTestTransformer {
             // An operation that answers with nothing has no response to read the field back
             // from; what it persisted is already captured above, and that is the whole claim.
             if (operation.result().kind() != ApplicationOperation.ResultKind.NOTHING) {
-                operation.input().stream().findFirst().ifPresent(field -> statements.add(
-                        ASSERTIONS + ".assertThat(response." + field.name() + "())"
-                                + ".isEqualTo(request." + field.name() + "());"));
+                    stored(entity, operation.input()).stream().findFirst().ifPresent(
+                        field -> statements.add(
+                                ASSERTIONS + ".assertThat(response." + field.name() + "())"
+                                        + ".isEqualTo(request." + field.name() + "());"));
             }
         }
         if (updates) {
-            for (ApplicationField field : operation.input()) {
+            for (ApplicationField field : stored(entity, operation.input())) {
                 statements.add(ASSERTIONS + ".assertThat(entity."
                         + JavaLayout.accessor("get", field.name()) + "())"
                         + ".isEqualTo(request." + field.name() + "());");

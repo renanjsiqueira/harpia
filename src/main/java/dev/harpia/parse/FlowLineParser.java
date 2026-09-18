@@ -66,15 +66,28 @@ public final class FlowLineParser {
     private FlowLineParser() {
     }
 
+    /**
+     * Where an expression written inside a flow line begins.
+     *
+     * <p>The tokens of an expression carry their position, and a diagnostic about a name points at
+     * the token. Handing the lexer the line's own position would make every name in the line
+     * report at its first column, so a reader is told the line and then has to find the word.
+     */
+    private static SourceRef fragment(SourceRef where, String line, int offset) {
+        return LineSyntax.at(where, line, offset);
+    }
+
     private static Optional<FlowStatement> collectionChange(
             SpecAst.CollectionChange change,
             Matcher matcher,
+            String line,
             SourceRef where,
             DiagnosticCollector diagnostics) {
         String text = matcher.group(1).strip();
         String variable = matcher.group(2);
         String field = matcher.group(3);
-        return LogicLexer.tokenize(text, where, diagnostics)
+        SourceRef at = fragment(where, line, matcher.start(1));
+        return LogicLexer.tokenize(text, at, diagnostics)
                 .flatMap(tokens -> LogicExpressionParser.parse(tokens, diagnostics))
                 .map(element -> new SpecAst.ChangeCollection(
                         change, variable, field, text, element, where));
@@ -107,7 +120,10 @@ public final class FlowLineParser {
             String name = matcher.group(2);
             Optional<String> qualifier = Optional.ofNullable(matcher.group(3));
             Optional<List<LogicAst.NamedArgument>> arguments = callArguments(
-                    matcher.group(4), where, diagnostics);
+                    matcher.group(4),
+                    fragment(where, line, matcher.start(4)),
+                    where,
+                    diagnostics);
             return arguments.map(values -> new Call(target, name, qualifier, values, where));
         }
         matcher = CREATE.matcher(line);
@@ -141,17 +157,20 @@ public final class FlowLineParser {
             String variable = matcher.group(1);
             String field = matcher.group(2);
             String text = matcher.group(3).strip();
-            return LogicLexer.tokenize(text, where, diagnostics)
+            SourceRef at = fragment(where, line, matcher.start(3));
+            return LogicLexer.tokenize(text, at, diagnostics)
                     .flatMap(tokens -> LogicExpressionParser.parse(tokens, diagnostics))
                     .map(value -> new SetField(variable, field, text, value, where));
         }
         matcher = ADD.matcher(line);
         if (matcher.matches()) {
-            return collectionChange(SpecAst.CollectionChange.ADD, matcher, where, diagnostics);
+            return collectionChange(
+                    SpecAst.CollectionChange.ADD, matcher, line, where, diagnostics);
         }
         matcher = REMOVE.matcher(line);
         if (matcher.matches()) {
-            return collectionChange(SpecAst.CollectionChange.REMOVE, matcher, where, diagnostics);
+            return collectionChange(
+                    SpecAst.CollectionChange.REMOVE, matcher, line, where, diagnostics);
         }
         matcher = LIST_BY.matcher(line);
         if (matcher.matches()) {
@@ -175,8 +194,9 @@ public final class FlowLineParser {
         if (matcher.matches()) {
             String error = matcher.group(1);
             String condition = matcher.group(2).strip();
+            SourceRef at = fragment(where, line, matcher.start(2));
             Optional<LogicAst.Expression> parsed =
-                    LogicLexer.tokenize(condition, where, diagnostics)
+                    LogicLexer.tokenize(condition, at, diagnostics)
                             .flatMap(tokens -> LogicExpressionParser.parse(tokens, diagnostics));
             return parsed.map(expression -> new Fail(error, condition, expression, where));
         }
@@ -184,8 +204,9 @@ public final class FlowLineParser {
         if (matcher.matches()) {
             String condition = matcher.group(1).strip();
             String error = matcher.group(2);
+            SourceRef at = fragment(where, line, matcher.start(1));
             Optional<LogicAst.Expression> parsed =
-                    LogicLexer.tokenize(condition, where, diagnostics)
+                    LogicLexer.tokenize(condition, at, diagnostics)
                             .flatMap(tokens -> LogicExpressionParser.parse(tokens, diagnostics));
             return parsed.map(expression -> new Require(condition, expression, error, where));
         }
@@ -208,29 +229,36 @@ public final class FlowLineParser {
     }
 
     private static Optional<List<LogicAst.NamedArgument>> callArguments(
-            String source, SourceRef where, DiagnosticCollector diagnostics) {
+            String source, SourceRef start, SourceRef where, DiagnosticCollector diagnostics) {
         if (source.isBlank()) {
             return Optional.of(List.of());
         }
         List<LogicAst.NamedArgument> arguments = new ArrayList<>();
+        int offset = 0;
         for (String raw : splitArguments(source)) {
-            Matcher matcher = CALL_ARGUMENT.matcher(raw.strip());
+            int leading = raw.length() - raw.stripLeading().length();
+            String argument = raw.strip();
+            Matcher matcher = CALL_ARGUMENT.matcher(argument);
             if (!matcher.matches()) {
                 diagnostics.error(
                         ErrorCodes.SYNTAX_FLOW_COMMAND,
                         "call arguments must be named as '<name> = <expression>'",
-                        where);
+                        LineSyntax.at(start, source, offset + leading));
                 return Optional.empty();
             }
             String expression = matcher.group(2).strip();
+            SourceRef at = LineSyntax.at(
+                    start, source, offset + leading + matcher.start(2));
             Optional<LogicAst.Expression> value = LogicLexer.tokenize(
-                            expression, where, diagnostics)
+                            expression, at, diagnostics)
                     .flatMap(tokens -> LogicExpressionParser.parse(tokens, diagnostics));
             if (value.isEmpty()) {
                 return Optional.empty();
             }
             arguments.add(new LogicAst.NamedArgument(
-                    matcher.group(1), value.orElseThrow(), where));
+                    matcher.group(1), value.orElseThrow(), at));
+            // The separating comma is not part of either argument.
+            offset += raw.length() + 1;
         }
         return Optional.of(List.copyOf(arguments));
     }

@@ -539,7 +539,7 @@ public final class SemanticValidator {
                     languageVersion, field.type(), field.where(), symbols, diagnostics);
             validateOptionality(field.type(), field.required(), field.where(), diagnostics);
         }
-        validateInput(useCase, target.orElseThrow().fields(), diagnostics);
+        validateInput(languageVersion, useCase, target.orElseThrow().fields(), diagnostics);
         validateRules(useCase, diagnostics);
         validateFailures(useCase, diagnostics);
         validateFinds(useCase, target.orElseThrow(), diagnostics);
@@ -970,11 +970,12 @@ public final class SemanticValidator {
     }
 
     private static void validateInput(
+            LanguageVersion languageVersion,
             SpecAst.UseCaseDeclaration useCase,
             Map<String, SpecAst.FieldDeclaration> fields,
             DiagnosticCollector diagnostics) {
         // `page` and `size` describe the request, not the entity, so they are the one input a
-        // paged listing may name without a field behind it.
+        // paged listing may name without a field behind it in V0.
         Set<String> pagination = useCase.flow().stream().anyMatch(SemanticValidator::paged)
                 ? Set.of("page", "size")
                 : Set.of();
@@ -985,12 +986,28 @@ public final class SemanticValidator {
                 continue;
             }
             SpecAst.FieldDeclaration field = fields.get(input.name());
-            if (field == null || field.generated() || !seen.add(input.name())) {
+            boolean unstored = field == null;
+            // In V1 the input is the operation's own contract: a field with no column behind it is
+            // a value the flow may use, not a mistake. `page` and `size` were the first case of
+            // this, carved out by name; what changes here is that the carve-out stops being a
+            // list. What stays refused is naming a generated field, which the database decides,
+            // and naming the same field twice, which leaves one of the two silently unread.
+            boolean allowed = unstored && languageVersion != LanguageVersion.V0;
+            if (!allowed && (unstored || field.generated() || !seen.add(input.name()))) {
                 diagnostics.error(
                         ErrorCodes.SEMANTIC_INPUT_FIELD_UNKNOWN,
                         "input field '" + input.name()
                                 + "' must name one non-generated entity field exactly once",
                         input.where());
+                continue;
+            }
+            if (unstored) {
+                if (!seen.add(input.name())) {
+                    diagnostics.error(
+                            ErrorCodes.SEMANTIC_INPUT_FIELD_UNKNOWN,
+                            "input field '" + input.name() + "' is declared more than once",
+                            input.where());
+                }
                 continue;
             }
             if (!field.type().equals(input.type())) {

@@ -407,7 +407,7 @@ public final class JavaSpringServiceTransformer {
                 case CREATE_FROM -> {
                     String variable = instruction.variable().orElseThrow();
                     statements.add(entityName + " " + variable + " = new " + entityName + "();");
-                    copyInput(statements, variable, operation, false);
+                    copyInput(statements, variable, entity, operation, false);
                 }
                 case LOAD_BY_ID -> {
                     explicitImports.add(names.notFoundException());
@@ -474,8 +474,8 @@ public final class JavaSpringServiceTransformer {
                             + "(" + element.body() + ");");
                 }
                 case UPDATE_FROM ->
-                        copyInput(statements, instruction.variable().orElseThrow(), operation,
-                                operation.partialUpdate());
+                        copyInput(statements, instruction.variable().orElseThrow(), entity,
+                                operation, operation.partialUpdate());
                 case LIST_ALL -> {
                     explicitImports.add("org.springframework.data.domain.Sort");
                     if (instruction.paged()) {
@@ -667,12 +667,26 @@ public final class JavaSpringServiceTransformer {
      * so the stored value has to survive the copy. A full update copies everything, because there
      * the omission is itself the statement that the field holds nothing.
      */
+    /**
+     * Copies the input onto the entity, field by field.
+     *
+     * <p>Only the fields the entity has. An operation's input is its own contract and may carry a
+     * value the entity never stores — a coupon code, the page of a listing — and writing a setter
+     * for it would be generating Java for a field nobody declared.
+     */
     private static void copyInput(
             List<String> statements,
             String variable,
+            ApplicationEntity entity,
             ApplicationOperation operation,
             boolean partial) {
+        Set<String> stored = entity.fields().stream()
+                .map(ApplicationField::name)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         for (ApplicationField field : operation.input()) {
+            if (!stored.contains(field.name())) {
+                continue;
+            }
             String assignment = variable + "." + JavaLayout.accessor("set", field.name())
                     + "(" + REQUEST_PARAMETER + "." + field.name() + "());";
             if (partial) {

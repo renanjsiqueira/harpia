@@ -37,6 +37,8 @@ O comando real é Maven/Surefire do [pom.xml](../../../pom.xml): `mvn -o '-Dtest
 
 Os checks C1–C4 têm provas a criar para verificar os artefatos e executar as fixtures do spike. Essas provas verificam dados e resultados observados; a revisão do RFC continua necessária para julgar a escolha de arquitetura. Sua existência não encerra uma questão de produto por conta própria.
 
+Onde estes checks dizem `Order` — C51 entre as 15 declarações, e a representação de C52/C55 — a entidade é a declarada como **`SalesOrder`**, por AD-005: `order` é palavra reservada do PostgreSQL e `HRP2016` a recusa antes da geração. As rotas de Surface continuam `/orders` e nenhum resultado observável destes checks muda; o que muda é o identificador da declaração e o nome dos tipos gerados a partir dele.
+
 Os nomes `Unavailable`, `TimedOut` e `InvalidResponse` são variantes das fixtures de aceite. A sintaxe para declará-las/mapear gatilhos e sua representação Java serão registradas em S0; os checks não escolhem entre subclasses e outro modelo tipado.
 
 ## Checks
