@@ -365,9 +365,13 @@ public final class JavaSpringServiceTestTransformer {
                         + JavaLayout.accessor("get", field.name()) + "())"
                         + ".isEqualTo(request." + field.name() + "());");
             }
-            operation.input().stream().findFirst().ifPresent(field -> statements.add(
-                    ASSERTIONS + ".assertThat(response." + field.name() + "())"
-                            + ".isEqualTo(request." + field.name() + "());"));
+            // An operation that answers with nothing has no response to read the field back
+            // from; what it persisted is already captured above, and that is the whole claim.
+            if (operation.result().kind() != ApplicationOperation.ResultKind.NOTHING) {
+                operation.input().stream().findFirst().ifPresent(field -> statements.add(
+                        ASSERTIONS + ".assertThat(response." + field.name() + "())"
+                                + ".isEqualTo(request." + field.name() + "());"));
+            }
         }
         if (updates) {
             for (ApplicationField field : operation.input()) {

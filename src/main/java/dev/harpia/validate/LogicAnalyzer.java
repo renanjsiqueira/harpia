@@ -78,13 +78,15 @@ public final class LogicAnalyzer {
 
         reportCycles(callGraph, symbols, diagnostics);
         FlowCalls flowCalls = flowCalls(project, symbols, diagnostics);
+        // Guards and assignments are typed after the calls, because what a guard may name now
+        // includes what a call produced above it.
         return new Result(
                 List.copyOf(models),
                 ScenarioAnalyzer.analyze(project, symbols, diagnostics),
                 rules(project, symbols, diagnostics),
                 invariants(project, symbols, diagnostics),
-                guards(project, symbols, diagnostics),
-                assignments(project, symbols, diagnostics),
+                guards(project, symbols, flowCalls.locals(), diagnostics),
+                assignments(project, symbols, flowCalls.locals(), diagnostics),
                 flowCalls.logics(),
                 flowCalls.integrations(),
                 flowCalls.operations());
@@ -96,6 +98,7 @@ public final class LogicAnalyzer {
         Map<SourceRef, FlowCallModel> resolved = new LinkedHashMap<>();
         Map<SourceRef, IntegrationCallModel> integrations = new LinkedHashMap<>();
         Map<SourceRef, OperationCallModel> operations = new LinkedHashMap<>();
+        Map<SourceRef, List<LogicModel.Parameter>> locals = new LinkedHashMap<>();
         Map<String, String> customLogics = new LinkedHashMap<>();
         project.modules().stream()
                 .flatMap(module -> module.logics().stream())
@@ -112,40 +115,60 @@ public final class LogicAnalyzer {
                         useCase.flow(),
                         Naming.useCaseBaseName(useCase.title()),
                         scope,
+                        new LinkedHashMap<>(),
                         symbols,
                         customLogics,
                         commandSignatures,
                         resolved,
                         integrations,
                         operations,
+                        locals,
                         diagnostics);
             }
         }
         return new FlowCalls(
-                Map.copyOf(resolved), Map.copyOf(integrations), Map.copyOf(operations));
+                Map.copyOf(locals),
+                Map.copyOf(resolved),
+                Map.copyOf(integrations),
+                Map.copyOf(operations));
     }
 
+    /**
+     * Walks a flow in source order, resolving each call and recording what is visible where.
+     *
+     * <p>{@code locals} is the second half of the walk and the reason it exists: a value a call
+     * produced is visible to every instruction below it, and a branch keeps its own copy, so the
+     * set of names in scope is a property of a position and not of an operation. Recording it here
+     * means guards and assignments type their expressions against the same scope the call
+     * arguments already used, instead of against a second, smaller idea of what a flow knows.
+     */
     private static void resolveFlowCalls(
             List<SpecAst.FlowStatement> flow,
             String caller,
             LinkedHashMap<String, LogicModel.Parameter> scope,
+            LinkedHashMap<String, LogicModel.Parameter> produced,
             SymbolTable symbols,
             Map<String, String> customLogics,
             Map<String, OperationSignature> commandSignatures,
             Map<SourceRef, FlowCallModel> resolved,
             Map<SourceRef, IntegrationCallModel> integrations,
             Map<SourceRef, OperationCallModel> operations,
+            Map<SourceRef, List<LogicModel.Parameter>> locals,
             DiagnosticCollector diagnostics) {
         for (SpecAst.FlowStatement statement : flow) {
+            // Before the statement runs, so a value cannot name itself.
+            locals.put(statement.where(), List.copyOf(produced.values()));
             if (statement instanceof SpecAst.Conditional conditional) {
                 resolveFlowCalls(
-                        conditional.whenTrue(), caller, new LinkedHashMap<>(scope), symbols,
+                        conditional.whenTrue(), caller, new LinkedHashMap<>(scope),
+                        new LinkedHashMap<>(produced), symbols,
                         customLogics, commandSignatures, resolved, integrations, operations,
-                        diagnostics);
+                        locals, diagnostics);
                 resolveFlowCalls(
-                        conditional.whenFalse(), caller, new LinkedHashMap<>(scope), symbols,
+                        conditional.whenFalse(), caller, new LinkedHashMap<>(scope),
+                        new LinkedHashMap<>(produced), symbols,
                         customLogics, commandSignatures, resolved, integrations, operations,
-                        diagnostics);
+                        locals, diagnostics);
                 continue;
             }
             if (!(statement instanceof SpecAst.Call call)) {
@@ -155,9 +178,12 @@ public final class LogicAnalyzer {
             if (call.operation().isPresent()) {
                 resolveIntegrationCall(call, visible, symbols, diagnostics).ifPresent(model -> {
                     integrations.put(call.where(), model);
-                    model.variable().ifPresent(variable -> scope.put(variable,
-                            new LogicModel.Parameter(
-                                    variable, model.resultType().orElseThrow(), call.where())));
+                    model.variable().ifPresent(variable -> {
+                        LogicModel.Parameter value = new LogicModel.Parameter(
+                                variable, model.resultType().orElseThrow(), call.where());
+                        scope.put(variable, value);
+                        produced.put(variable, value);
+                    });
                 });
                 continue;
             }
@@ -192,8 +218,10 @@ public final class LogicAnalyzer {
                         .ifPresent(model -> {
                             resolved.put(call.where(), model);
                             String variable = model.variable().orElseThrow();
-                            scope.put(variable, new LogicModel.Parameter(
-                                    variable, model.resultType(), call.where()));
+                            LogicModel.Parameter value = new LogicModel.Parameter(
+                                    variable, model.resultType(), call.where());
+                            scope.put(variable, value);
+                            produced.put(variable, value);
                         });
                 continue;
             }
@@ -216,7 +244,19 @@ public final class LogicAnalyzer {
                 continue;
             }
             resolveOperationCall(call, signature, visible, symbols, diagnostics)
-                    .ifPresent(model -> operations.put(call.where(), model));
+                    .ifPresent(model -> {
+                        operations.put(call.where(), model);
+                        // The name a Command result is bound to exists from here on. Its type is
+                        // the entity the Command answers with, so asking for a scalar from it is
+                        // a type error and not an unknown name — which is the truthful refusal,
+                        // and the one that turns into a member access once values have members.
+                        model.variable().ifPresent(variable -> produced.put(
+                                variable,
+                                new LogicModel.Parameter(
+                                        variable,
+                                        new LogicType.Nominal(model.entity()),
+                                        call.where())));
+                    });
         }
     }
 
@@ -526,6 +566,7 @@ public final class LogicAnalyzer {
     }
 
     private record FlowCalls(
+            Map<SourceRef, List<LogicModel.Parameter>> locals,
             Map<SourceRef, FlowCallModel> logics,
             Map<SourceRef, IntegrationCallModel> integrations,
             Map<SourceRef, OperationCallModel> operations) {
@@ -632,7 +673,10 @@ public final class LogicAnalyzer {
      * it against that type is what turns "assign something" into "assign this".
      */
     public static Map<SourceRef, TypedExpression> assignments(
-            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+            ProjectAst project,
+            SymbolTable symbols,
+            Map<SourceRef, List<LogicModel.Parameter>> locals,
+            DiagnosticCollector diagnostics) {
         Map<String, Map<String, SpecAst.FieldDeclaration>> entities = new LinkedHashMap<>();
         for (ModuleAst module : project.modules()) {
             if (!module.declaresEntity()) {
@@ -663,7 +707,7 @@ public final class LogicAnalyzer {
                         variables.put(find.variable(), find.entity());
                     }
                 }
-                List<LogicModel.Parameter> scope = scopeOf(useCase.input());
+                List<LogicModel.Parameter> input = scopeOf(useCase.input());
                 for (SpecAst.FlowStatement statement : statements) {
                     String variable;
                     String fieldName;
@@ -703,7 +747,7 @@ public final class LogicAnalyzer {
                     }
                     analyzeExpression(
                             "'" + text + "'",
-                            scope,
+                            visibleAt(input, locals, statement.where()),
                             LogicType.of(expected),
                             expression,
                             symbols,
@@ -735,15 +779,39 @@ public final class LogicAnalyzer {
      * is. Typing it through the same analysis keeps one definition of what an expression means.
      */
     public static Map<SourceRef, TypedExpression> guards(
-            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+            ProjectAst project,
+            SymbolTable symbols,
+            Map<SourceRef, List<LogicModel.Parameter>> locals,
+            DiagnosticCollector diagnostics) {
         Map<SourceRef, TypedExpression> typed = new LinkedHashMap<>();
         for (ModuleAst module : project.modules()) {
             for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
                 List<LogicModel.Parameter> scope = scopeOf(useCase.input());
-                conditions(useCase.flow(), scope, symbols, typed, diagnostics);
+                conditions(useCase.flow(), scope, locals, symbols, typed, diagnostics);
             }
         }
         return Map.copyOf(typed);
+    }
+
+    /**
+     * The names an expression at {@code where} may use: the operation's input, plus whatever the
+     * flow produced above that point.
+     *
+     * <p>A local shadows an input of the same name, because the local is the nearer declaration
+     * and reading the input there would be reading a value the flow already replaced.
+     */
+    private static List<LogicModel.Parameter> visibleAt(
+            List<LogicModel.Parameter> input,
+            Map<SourceRef, List<LogicModel.Parameter>> locals,
+            SourceRef where) {
+        List<LogicModel.Parameter> produced = locals.getOrDefault(where, List.of());
+        if (produced.isEmpty()) {
+            return input;
+        }
+        Map<String, LogicModel.Parameter> visible = new LinkedHashMap<>();
+        input.forEach(parameter -> visible.put(parameter.name(), parameter));
+        produced.forEach(parameter -> visible.put(parameter.name(), parameter));
+        return List.copyOf(visible.values());
     }
 
     /**
@@ -769,11 +837,13 @@ public final class LogicAnalyzer {
     /** Every boolean condition a flow states, at any nesting depth. */
     private static void conditions(
             List<SpecAst.FlowStatement> flow,
-            List<LogicModel.Parameter> scope,
+            List<LogicModel.Parameter> input,
+            Map<SourceRef, List<LogicModel.Parameter>> locals,
             SymbolTable symbols,
             Map<SourceRef, TypedExpression> typed,
             DiagnosticCollector diagnostics) {
         for (SpecAst.FlowStatement statement : flow) {
+            List<LogicModel.Parameter> scope = visibleAt(input, locals, statement.where());
             if (statement instanceof SpecAst.Fail fail) {
                 analyzeExpression(
                         "guard '" + fail.text() + "'",
@@ -804,8 +874,8 @@ public final class LogicAnalyzer {
                         conditional.where(),
                         diagnostics)
                         .ifPresent(expression -> typed.put(conditional.where(), expression));
-                conditions(conditional.whenTrue(), scope, symbols, typed, diagnostics);
-                conditions(conditional.whenFalse(), scope, symbols, typed, diagnostics);
+                conditions(conditional.whenTrue(), input, locals, symbols, typed, diagnostics);
+                conditions(conditional.whenFalse(), input, locals, symbols, typed, diagnostics);
             }
         }
     }

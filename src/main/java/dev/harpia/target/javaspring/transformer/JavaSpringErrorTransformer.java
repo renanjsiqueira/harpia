@@ -514,6 +514,19 @@ public final class JavaSpringErrorTransformer {
                     where = entity.where();
                 }
                 for (ApplicationOperation operation : entity.operations()) {
+                    // A domain error belongs to the operation that raises it, not to a route. An
+                    // operation without an endpoint still throws the type its flow names, so
+                    // skipping it here leaves the service importing a class nobody wrote.
+                    for (ApplicationOperation.Failure failure : operation.failures()) {
+                        if (failure.condition() != ApplicationOperation.FailureCondition.DOMAIN) {
+                            continue;
+                        }
+                        String condition = failure.name().orElseThrow();
+                        domains.putIfAbsent(
+                                dev.harpia.model.Naming.errorSymbol(condition) + "Exception",
+                                new DomainError(condition, failure.status(), failure.where()));
+                        where = entity.where();
+                    }
                     if (operation.endpoint().isEmpty()) {
                         continue;
                     }

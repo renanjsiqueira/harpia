@@ -18,21 +18,26 @@ O spike encerra TG-01 no que ele perguntava: a extensão mínima é **input não
 
 ## Casos exigidos por TG-01
 
-| Caso | O que a spec pede | Resultado observado | Lacuna | Slice |
-| --- | --- | --- | --- | --- |
-| `input` — input de Command | um campo de input que não existe na entidade (`couponCode`) | `HRP2011` — *input field 'couponCode' must name one non-generated entity field exactly once* | input de Command é hoje uma projeção obrigatória da entidade; um input composto ou transitório não tem forma | S1 (C14) |
-| `member-access` — acesso a campo | ler `order.total` numa expressão de Flow | `HRP2114` — *member access '.total' requires a nominal type; Logic parameters are scalar* | a expressão tipada só conhece escalares; variável de Flow não tem tipo nominal | S1 (C7–C10), S2 (C18) |
-| `command-result` — resultado de Command | consumir em `set` o valor devolvido por `call RecordAudit(...)` | `HRP2102` — *unknown value 'audited'; it is not a parameter of Logic 'audited' and was not assigned before this line* | o resultado existe como local Java e alcança o argumento de outro `call`, mas não entra no escopo de `set`/`require`/`fail`/`if` | S1 (C7–C10) |
-| `owned` — associação owned | criar o `OrderItem` dentro do Command do `Order` | `HRP2010` — *operation 'CreateOrder' works on more than one entity: [SalesOrder, OrderItem]* | a operação pertence a uma entidade; escrever o filho owned no mesmo Command é recusado antes da geração | S2 (C16–C22), S3 (C24) |
+A coluna **Estado hoje** é mantida viva pela prova: enquanto a lacuna estiver aberta, a recusa
+registrada tem de continuar acontecendo; quando uma slice a fecha, a linha diz qual slice foi e o
+que o compiler passou a responder. Um relatório de spike que envelhece em silêncio é pior que
+nenhum, porque a próxima slice constrói em cima dele.
 
-O caso `resultado de Command` é o único em que **parte** do caminho já existe: a chamada resolve,
-atravessa os IRs e gera `AuditEntryResponse audited = auditEntryService.recordAudit(...)` no
-serviço. O que falta é o valor ser visível para a instrução seguinte, e é por isso que a linha
-está em S1 e não numa entrega nova.
+| Caso | O que a spec pede | Observado em S0 | Estado hoje | Lacuna | Slice |
+| --- | --- | --- | --- | --- | --- |
+| `input` — input de Command | um campo de input que não existe na entidade (`couponCode`) | `HRP2011` — *input field 'couponCode' must name one non-generated entity field exactly once* | aberto | input de Command é hoje uma projeção obrigatória da entidade; um input composto ou transitório não tem forma | S1 (C14) |
+| `member-access` — acesso a campo | ler `order.total` numa expressão de Flow | `HRP2114` — *member access '.total' requires a nominal type; Logic parameters are scalar* | aberto | a expressão tipada só conhece escalares; variável de Flow não tem tipo nominal | S2 (C18) |
+| `command-result` — resultado de Command | consumir em `set` o valor devolvido por `call RecordAudit(...)` | `HRP2102` — *unknown value 'audited'; it is not a parameter of Logic 'audited' and was not assigned before this line* | fechado em S1 → `HRP2103` | o nome agora resolve e carrega o tipo da entidade que o Command devolve; pedir um Decimal dele é erro de tipo, e vira acesso a membro quando S2 der membros aos valores | S1 (C7–C10) |
+| `owned` — associação owned | criar o `OrderItem` dentro do Command do `Order` | `HRP2010` — *operation 'CreateOrder' works on more than one entity: [SalesOrder, OrderItem]* | aberto | a operação pertence a uma entidade; escrever o filho owned no mesmo Command é recusado antes da geração | S2 (C16–C22), S3 (C24) |
+
+O caso `command-result` era o único em que **parte** do caminho já existia: a chamada resolvia,
+atravessava os IRs e gerava `AuditEntryResponse audited = auditEntryService.recordAudit(...)` no
+serviço. O que faltava era o valor ser visível para a instrução seguinte — por isso a linha estava
+em S1 e não numa entrega nova, e por isso ela foi a primeira a fechar.
 
 ### `input` — campo de input fora da entidade
 
-````harpia case=input expect=HRP2011
+````harpia case=input expect=HRP2011 state=open
 # SalesOrder
 
 ## Data
@@ -64,7 +69,7 @@ return order
 
 ### `member access` — ler um campo de uma variável de Flow
 
-````harpia case=member-access expect=HRP2114
+````harpia case=member-access expect=HRP2114 state=open
 # SalesOrder
 
 ## Data
@@ -94,9 +99,13 @@ return order
 201 SalesOrder
 ````
 
-### `resultado de Command` — consumir o valor devolvido
+### `command-result` — consumir o valor devolvido
 
-````harpia case=command-result expect=HRP2102
+*Fechado em S1.* A fixture abaixo é a mesma; o que mudou foi o compiler. `audited` agora está em
+escopo com o tipo `AuditEntry`, e a recusa passou a ser `HRP2103` — *'audited' must be Decimal but
+is AuditEntry* — que é a verdade sobre esta spec: o valor existe e não é um Decimal.
+
+````harpia case=command-result expect=HRP2103 state=closed
 # SalesOrder
 
 ## Data
@@ -159,7 +168,7 @@ return entry
 
 ### `owned` — escrever o filho owned no Command do dono
 
-````harpia case=owned expect=HRP2010
+````harpia case=owned expect=HRP2010 state=open
 # SalesOrder
 
 ## Data
@@ -231,7 +240,7 @@ um defeito: hoje a linha nem chega ao analisador.
 | `for each item in items` | `HRP1007` — *unknown flow command* | S2 |
 | `emit OrderCreated(orderId = order.id)` | `HRP1007` — *unknown flow command* | S5 |
 
-````harpia case=for-each expect=HRP1007
+````harpia case=for-each expect=HRP1007 state=open
 # SalesOrder
 
 ## Data
@@ -261,7 +270,7 @@ return order
 201 SalesOrder
 ````
 
-````harpia case=emit expect=HRP1007
+````harpia case=emit expect=HRP1007 state=open
 # SalesOrder
 
 ## Data
@@ -295,7 +304,7 @@ return order
 
 O plano e os checks nomeiam a entidade `Order`. Sobre `database.vendor: postgres` o compiler recusa:
 
-````harpia case=reserved-name expect=HRP2016
+````harpia case=reserved-name expect=HRP2016 state=open
 # Order
 
 ## Data

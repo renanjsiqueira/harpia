@@ -144,12 +144,34 @@ class CoreV1PlanningTest {
                     .map(Diagnostic::code)
                     .toList();
             assertThat(observed)
-                    .as("spike case '%s' still produces the result the report recorded", fixture.id())
+                    .as("spike case '%s' produces what the report says it produces today",
+                            fixture.id())
                     .contains(fixture.expected());
-            if (table.containsKey(fixture.id())) {
-                assertThat(table.get(fixture.id()).observed())
-                        .as("case '%s': the table and the fixture agree on the code", fixture.id())
+            TableRow row = table.get(fixture.id());
+            if (row == null) {
+                continue;
+            }
+            if (row.open()) {
+                assertThat(row.observed())
+                        .as("case '%s' is recorded as open, so the S0 refusal still happens",
+                                fixture.id())
                         .isEqualTo(fixture.expected());
+                assertThat(fixture.open())
+                        .as("case '%s': the table and the fixture agree the gap is open",
+                                fixture.id())
+                        .isTrue();
+            } else {
+                assertThat(row.observed())
+                        .as("case '%s' was closed, so what it produces now differs from S0",
+                                fixture.id())
+                        .isNotEqualTo(fixture.expected());
+                assertThat(row.state())
+                        .as("a closed gap names the slice that closed it and the new result")
+                        .matches(".*S[1-8].*HRP[1-7][0-9]{3}.*");
+                assertThat(fixture.open())
+                        .as("case '%s': the table and the fixture agree the gap is closed",
+                                fixture.id())
+                        .isFalse();
             }
         }
     }
@@ -343,12 +365,16 @@ class CoreV1PlanningTest {
 
     // --- spike -------------------------------------------------------------------------------
 
-    /** One executable case of the spike: its id, its whole project, and the code it must produce. */
-    private record Case(String id, String spec, String expected) {
+    /** One executable case: its id, its whole project, what it produces now, and whether the gap is open. */
+    private record Case(String id, String spec, String expected, boolean open) {
     }
 
     /** The row of the report's table for one case, which has to agree with the fixture. */
-    private record TableRow(String observed, String slice) {
+    private record TableRow(String observed, String state, String slice) {
+
+        boolean open() {
+            return state.startsWith("aberto");
+        }
     }
 
     private static List<Case> spikeCases() {
@@ -356,17 +382,19 @@ class CoreV1PlanningTest {
         List<String> spec = null;
         String id = "";
         String expected = "";
+        boolean open = true;
         for (String line : read(SPIKE).split("\n", -1)) {
             if (spec == null) {
                 if (line.startsWith("````harpia")) {
                     id = attribute(line, "case");
                     expected = attribute(line, "expect");
+                    open = !attribute(line, "state").equals("closed");
                     spec = new ArrayList<>();
                 }
                 continue;
             }
             if (line.startsWith("````")) {
-                cases.add(new Case(id, String.join("\n", spec) + "\n", expected));
+                cases.add(new Case(id, String.join("\n", spec) + "\n", expected, open));
                 spec = null;
                 continue;
             }
@@ -400,7 +428,12 @@ class CoreV1PlanningTest {
             if (!id.find()) {
                 continue;
             }
-            rows.put(id.group(1), new TableRow(code.find() ? code.group() : "", columns[5].strip()));
+            rows.put(
+                    id.group(1),
+                    new TableRow(
+                            code.find() ? code.group() : "",
+                            columns[4].strip(),
+                            columns[6].strip()));
         }
         return rows;
     }
