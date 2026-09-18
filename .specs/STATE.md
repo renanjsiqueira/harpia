@@ -13,13 +13,13 @@
 ## Handoff
 
 **Feature**: `mvp-core-v1`.
-**Where**: S0 fechado. Checks **C1–C4 verdes**; C5–C87 continuam Pending. Artefatos em [`.design/mvp-core-v1-inventory.md`](../.design/mvp-core-v1-inventory.md), [`mvp-core-v1-spike.md`](../.design/mvp-core-v1-spike.md) e [`mvp-core-v1-contracts.md`](../.design/mvp-core-v1-contracts.md); prova em `src/test/java/dev/harpia/CoreV1PlanningTest.java`.
-**In progress**: nada. S1 é a próxima slice e nenhum código dela foi escrito.
-**Next step**: S1 pelos checks C5–C15, sobre o contrato 1 do RFC — escopo empilhado no `LogicAnalyzer`, tipo nominal em `TypedExpression` e input que deixa de ser projeção obrigatória da entidade.
-**Blockers**: TG-03 e TG-04 continuam abertos e são provados em execução por S7. O nome da entidade foi resolvido por AD-005: a fixture declara `SalesOrder` e conserva as rotas `/orders`.
-**Settled nesta fase**: os quatro contratos (AD-003); a correção de escopo das duas dependências herdadas (AD-004); os códigos `HRP2145`–`HRP2149` reservados pelo RFC e ainda não declarados em `ErrorCodes`.
-**Abandonado**: nada foi tentado e descartado nesta slice; as recusas observadas pelo spike são o estado do compiler, não caminhos abandonados.
-**Baseline**: `3c62a18`; `mvn -o test` em 2026-09-17 após S0: **617 testes, 0 failures, 0 errors, 0 skipped** (613 anteriores + 4 de `CoreV1PlanningTest`).
-**Plan validation**: `validate_plan.py mvp-core-v1` terminou com exit code 0, zero erros e um aviso pelas questões técnicas abertas; TG-01 e TG-02 agora estão resolvidos em `checks.md` e o aviso permanece por TG-03/TG-04.
+**Where**: S0 e S1 fechados. **C1–C15 verdes**, com C13 e C15 parciais por construções que ainda não existem (`emit`, `for each`, política transacional, failure mapping); C16–C87 Pending. Commits `be46222` (S0), `c5d1234` e `1e3347b` (S1).
+**In progress**: nada. S2 é a próxima slice e nenhum código dela foi escrito.
+**Next step**: S2 pelos checks C16–C22 — `for each` de um nível, member access tipado sobre o item, escopo do corpo e as seis formas recusadas do recorte. A porta 5 do plano já fixa a forma literal.
+**Blockers**: TG-03 e TG-04 continuam abertos e são provados em execução por S7.
+**Settled nesta fase**: AD-003 (contratos), AD-004 (dependências), AD-005 (`SalesOrder`). Dois defeitos de geração corrigidos porque a fixture da slice os expôs: exceção de erro declarado não gerada para operação sem endpoint, e teste gerado afirmando sobre `response` num Command que responde `nothing`. Um terceiro ficou registrado no backlog em vez de corrigido: sob V0 o parser ainda aceita `set`, `add`, `remove` e `find`, e fechar isso muda o sentido de specs já escritas.
+**Abandonado**: nada. As recusas do spike são estado do compiler, não caminhos tentados e descartados.
+**Baseline**: `3c62a18`; `mvn -o test` em 2026-09-17 após S1: **635 testes, 0 failures, 0 errors, 0 skipped** (613 na baseline, 617 após S0).
+**Verificação**: a skill exige um Verifier independente sobre `<base>..HEAD` depois da última slice. Ele ainda **não** foi despachado; S0 e S1 têm injeção de falha por superfície de asserção, que é o piso do perfil standard, não o relatório final.
 **Uncommitted**: verificar antes de seguir; já existiam alterações em `.gitignore` e diretórios não rastreados `.agents/`, `.claude/`, `.cursor/`, `.windsurf/` e `tools/`.
 **Branch**: `codex/harness-2521fbd0-624e7b04-d42f09e2`.

@@ -11,7 +11,7 @@ O pedido de fixar os critérios autoriza este desdobramento do plano. O usuário
 
 ## Status
 
-**C1–C4 estão fechados por S0**; os 83 restantes continuam **Pending**. Nenhum resultado do Commerce foi executado. Os 613 testes verdes da baseline são evidência anterior do repositório; não encerram os checks novos.
+**C1–C4 fechados por S0 e C5–C15 por S1**, com C13 e C15 incompletos por construções que ainda não existem; os 72 restantes continuam **Pending**. Nenhum resultado do Commerce foi executado. Os 613 testes verdes da baseline são evidência anterior do repositório; não encerram os checks novos.
 
 | Check | Seletor executado | Relatório | Asserção localizada |
 | --- | --- | --- | --- |
@@ -20,13 +20,25 @@ O pedido de fixar os critérios autoriza este desdobramento do plano. O usuário
 | C3 | `mvn -o '-Dtest=CoreV1PlanningTest#everyNewContractHasLiteralExamplesAndMechanism' test` | 1 caso, 0 failures, 0 errors, 0 skipped | os 4 contratos de [`mvp-core-v1-contracts.md`](../../../.design/mvp-core-v1-contracts.md) com as 5 partes cada; códigos reutilizados existem em `ErrorCodes` e os 5 reservados estão livres |
 | C4 | `mvn -o '-Dtest=CoreV1PlanningTest#localEventsDoNotPromoteUpstreamDependencies' test` | 1 caso, 0 failures, 0 errors, 0 skipped | `EVENT-005` e `GREEN-003` lidos do `BACKLOG.md` após a correção de escopo; `DOM-015`, `DOM-016`, `EVENT-004` e `MSG-001` declarados depois do horizonte Next |
 
-A execução completa em 2026-09-17 sobre esta árvore: `mvn -o test` — **617 testes, 0 failures, 0 errors, 0 skipped**. Injeção de falha exercitada nas seis superfícies de asserção de C1–C4 (código esperado, status canônico, seletor citado, parte do contrato, código reservado e dependência revertida); cada uma falhou como devia antes de ser restaurada.
+| C5 | `FlowCallTest#aPriorScalarResultCanFeedTheNextCall`, `FlowCompositionRuntimeTest#secondCallConsumesTheFirstResult` | 2 casos, 0 failures | input 100.00 → primeira Logic 10.00 → segunda recebe 10.00 e devolve 1.00; a asserção recusa também 10.00, que seria reler o input |
+| C6 | `FlowCallTest#aCommandCanBeCalledWithNamedTypedArguments`, `FlowCompositionRuntimeTest#namedCommandArgumentsReachTheCallee` | 2 casos, 0 failures | o Command chamado grava `orderNumber="A-1"` e `amount=100.00` nas duas ordens de escrita dos argumentos |
+| C7 | `FlowCompositionRuntimeTest#setConsumesTheVisibleLocalResult` | 1 caso, 0 failures | `total` observado 10.00 e não 100.00 |
+| C8 | `FlowCompositionRuntimeTest#requireUsesTheLocalBoolean` | 1 caso, 0 failures | true → marcador 1.00; false → `RejectedOrderException` e zero gravações |
+| C9 | `FlowCompositionRuntimeTest#failUsesTheLocalBoolean` | 1 caso, 0 failures | true → erro e zero gravações; false → marcador 1.00 |
+| C10 | `FlowCompositionRuntimeTest#ifUsesTheLocalBoolean` | 1 caso, 0 failures | marcador 1.00 no ramo verdadeiro e 2.00 no falso |
+| C11 | `FlowScopeTest#invalidReferencesPointToTheirExactSourceRange` | 1 caso, 0 failures | `HRP2102` na linha e **coluna** exatas do nome, nos dois usos: antes da declaração e fora do bloco |
+| C12 | `CommandCallGraphTest#cyclesAreRejectedAndAnAcyclicChainIsAccepted` | 1 caso, 0 failures | A→B→C aceito; A→B→C→A recusado com o caminho na mensagem; A→A recusado onde foi escrito |
+| C13 | `OperationNatureTest#queriesRejectTransitiveCommandEffectsAndEmit` | 1 caso, 0 failures | **parcial**: `call` direto e transitivo provados (`HRP2120` nomeando `RecordVisit -> ArchiveVisit`); o membro `emit` fecha em S5, quando a instrução existir |
+| C14 | `ComposedCommandTest#transientInputAndResultDoNotRequireFakeEntityFields` | 1 caso, 0 failures | `discountRate` atravessa Business IR e Application IR, chega ao request e ao call; ausente da entidade e da migration; árvore compilada por javac |
+| C15 | `JavaSpringGoldenTest#customerProjectMatchesTheVersionedTargetGolden`, `FlowCallTest#versionZeroDoesNotSilentlyAcquireCalls`, `CoreV1CompatibilityTest#v0RejectsCoreV1OnlyConstructs` | 10 casos, 0 failures | **parcial**: 8 construções aceitas sob V1 e recusadas sob V0 pela mesma fixture; `for each`, `emit`, política transacional e failure mapping entram nas slices que as criam |
+
+A execução completa em 2026-09-17 sobre esta árvore: `mvn -o test` — **635 testes, 0 failures, 0 errors, 0 skipped** (613 na baseline). Injeção de falha exercitada nas seis superfícies de asserção de C1–C4 (código esperado, status canônico, seletor citado, parte do contrato, código reservado e dependência revertida) e nas seis de S1 (visibilidade dos locais, coluna da referência, detecção de ciclo, efeito de Query, cópia do input e gate da V0); cada uma falhou como devia antes de ser restaurada.
 
 Há **23 seletores existentes** e **94 seletores a criar**, todos identificados nas linhas Proof. Um seletor a criar é a assinatura prevista do teste que será escrito a partir do check; não é uma alegação de que o teste existe ou passou. A fase de implementação deve criar a prova antes do código que satisfaz o comportamento.
 
 O comando real é Maven/Surefire do [pom.xml](../../../pom.xml): `mvn -o '-Dtest=Classe#metodo' test`, a partir da raiz do repositório. Não há workflow de CI configurado em `.github/` nesta baseline. Não usar `-DskipTests`, `-DfailIfNoTests=false` ou `-Dsurefire.failIfNoSpecifiedTests=false`. Cada seletor deve existir, executar pelo menos um caso e terminar sem failure, error ou skipped. Os testes que geram aplicações executam o Maven do projeto gerado por dentro da prova específica, como o precedente GeneratedMavenProjectTest.
 
-**O que pode começar:** S1, sobre o contrato 1 do RFC. **O que continua aberto:** TG-03 e TG-04, provados em execução por S7, e a pendência do nome da entidade `Order` registrada no spike. O documento congela o resultado exigido; não inventa uma gramática, um mecanismo transacional ou um provider já decidido.
+**O que pode começar:** S2, sobre a parte de iteração do contrato 1 do RFC. **O que continua aberto:** TG-03 e TG-04, provados em execução por S7, e a pendência do nome da entidade `Order` registrada no spike. O documento congela o resultado exigido; não inventa uma gramática, um mecanismo transacional ou um provider já decidido.
 
 | Gate | Kind | Obrigação / condição de saída |
 | --- | --- | --- |
@@ -60,42 +72,42 @@ Proof: `mvn -o '-Dtest=CoreV1PlanningTest#localEventsDoNotPromoteUpstreamDepende
 
 ### S1 — Composição de operações e valores locais
 
-**C5** - Uma primeira Logic retorna 10.00 e a segunda recebe 10.00, embora o input original seja 100.00; a saída observada da segunda é a calculada com 10.00. (FLOW-014; AC 5)
+**C5** — *fechado por S1.* Uma primeira Logic retorna 10.00 e a segunda recebe 10.00, embora o input original seja 100.00; a saída observada da segunda é a calculada com 10.00. (FLOW-014; AC 5)
 Proof: `mvn -o '-Dtest=FlowCallTest#aPriorScalarResultCanFeedTheNextCall' test` — **existente**.
-Proof: `mvn -o '-Dtest=FlowCompositionRuntimeTest#secondCallConsumesTheFirstResult' test` — **a criar**.
+Proof: `mvn -o '-Dtest=FlowCompositionRuntimeTest#secondCallConsumesTheFirstResult' test` — **verde**.
 
-**C6** - Um Command interno recebe os argumentos pelos nomes declarados; inverter sua ordem escrita mantém os valores observados pelo Command chamado. (FLOW-014, JAVA-004; AC 6)
+**C6** — *fechado por S1.* Um Command interno recebe os argumentos pelos nomes declarados; inverter sua ordem escrita mantém os valores observados pelo Command chamado. (FLOW-014, JAVA-004; AC 6)
 Proof: `mvn -o '-Dtest=FlowCallTest#aCommandCanBeCalledWithNamedTypedArguments' test` — **existente**.
-Proof: `mvn -o '-Dtest=FlowCompositionRuntimeTest#namedCommandArgumentsReachTheCallee' test` — **a criar**.
+Proof: `mvn -o '-Dtest=FlowCompositionRuntimeTest#namedCommandArgumentsReachTheCallee' test` — **verde**.
 
-**C7** - Depois de uma chamada produzir 10.00, set grava 10.00 no campo total da entidade; o input original 100.00 não é usado nessa atribuição. (CORE-010, FLOW-014; AC 7)
-Proof: `mvn -o '-Dtest=FlowCompositionRuntimeTest#setConsumesTheVisibleLocalResult' test` — **a criar**.
+**C7** — *fechado por S1.* Depois de uma chamada produzir 10.00, set grava 10.00 no campo total da entidade; o input original 100.00 não é usado nessa atribuição. (CORE-010, FLOW-014; AC 7)
+Proof: `mvn -o '-Dtest=FlowCompositionRuntimeTest#setConsumesTheVisibleLocalResult' test` — **verde**.
 
-**C8** - require avalia o Boolean local: true continua até o marcador seguinte; false levanta o erro declarado e o marcador seguinte permanece não executado. (CORE-010, FLOW-014; AC 7)
-Proof: `mvn -o '-Dtest=FlowCompositionRuntimeTest#requireUsesTheLocalBoolean' test` — **a criar**.
+**C8** — *fechado por S1.* require avalia o Boolean local: true continua até o marcador seguinte; false levanta o erro declarado e o marcador seguinte permanece não executado. (CORE-010, FLOW-014; AC 7)
+Proof: `mvn -o '-Dtest=FlowCompositionRuntimeTest#requireUsesTheLocalBoolean' test` — **verde**.
 
-**C9** - fail avalia o Boolean local: true levanta o erro declarado; false alcança o marcador seguinte. (CORE-010, FLOW-014; AC 7)
-Proof: `mvn -o '-Dtest=FlowCompositionRuntimeTest#failUsesTheLocalBoolean' test` — **a criar**.
+**C9** — *fechado por S1.* fail avalia o Boolean local: true levanta o erro declarado; false alcança o marcador seguinte. (CORE-010, FLOW-014; AC 7)
+Proof: `mvn -o '-Dtest=FlowCompositionRuntimeTest#failUsesTheLocalBoolean' test` — **verde**.
 
-**C10** - if avalia o Boolean local: true produz apenas o marcador do ramo verdadeiro e false apenas o do ramo falso. (CORE-010, FLOW-014; AC 7)
-Proof: `mvn -o '-Dtest=FlowCompositionRuntimeTest#ifUsesTheLocalBoolean' test` — **a criar**.
+**C10** — *fechado por S1.* if avalia o Boolean local: true produz apenas o marcador do ramo verdadeiro e false apenas o do ramo falso. (CORE-010, FLOW-014; AC 7)
+Proof: `mvn -o '-Dtest=FlowCompositionRuntimeTest#ifUsesTheLocalBoolean' test` — **verde**.
 
-**C11** - Nome usado antes da declaração e nome usado fora do seu bloco são recusados com código do livro-razão e range exato da referência; nenhum dos dois chega à geração Java. (CORE-010, FLOW-014; AC 8)
-Proof: `mvn -o '-Dtest=FlowScopeTest#invalidReferencesPointToTheirExactSourceRange' test` — **a criar**.
+**C11** — *fechado por S1.* Nome usado antes da declaração e nome usado fora do seu bloco são recusados com código do livro-razão e range exato da referência; nenhum dos dois chega à geração Java. (CORE-010, FLOW-014; AC 8)
+Proof: `mvn -o '-Dtest=FlowScopeTest#invalidReferencesPointToTheirExactSourceRange' test` — **verde**.
 
-**C12** - Os ciclos de Commands A→A e A→B→A são recusados; a cadeia A→B sem retorno a A é aceita. (FLOW-014; AC 9)
-Proof: `mvn -o '-Dtest=CommandCallGraphTest#cyclesAreRejectedAndAnAcyclicChainIsAccepted' test` — **a criar**.
+**C12** — *fechado por S1.* Os ciclos de Commands A→A e A→B→A são recusados; a cadeia A→B sem retorno a A é aceita. (FLOW-014; AC 9)
+Proof: `mvn -o '-Dtest=CommandCallGraphTest#cyclesAreRejectedAndAnAcyclicChainIsAccepted' test` — **verde**.
 
-**C13** - Query que chama Command, diretamente ou por chamada intermediária, e Query que executa emit são recusadas por efeito de mutação. (JAVA-004; AC 10)
-Proof: `mvn -o '-Dtest=OperationNatureTest#queriesRejectTransitiveCommandEffectsAndEmit' test` — **a criar**.
+**C13** — *parcial em S1; fecha em S5.* Query que chama Command, diretamente ou por chamada intermediária, e Query que executa emit são recusadas por efeito de mutação. (JAVA-004; AC 10)
+Proof: `mvn -o '-Dtest=OperationNatureTest#queriesRejectTransitiveCommandEffectsAndEmit' test` — **verde para `call` direto e transitivo; o membro `emit` fecha em S5**.
 
-**C14** - O input transitório e o resultado composto da fixture aprovada em S0 atravessam os IRs e geram Java compilável sem acrescentar um campo persistido fictício. (JAVA-004; AC 11)
-Proof: `mvn -o '-Dtest=ComposedCommandTest#transientInputAndResultDoNotRequireFakeEntityFields' test` — **a criar**.
+**C14** — *fechado por S1.* O input transitório e o resultado composto da fixture aprovada em S0 atravessam os IRs e geram Java compilável sem acrescentar um campo persistido fictício. (JAVA-004; AC 11)
+Proof: `mvn -o '-Dtest=ComposedCommandTest#transientInputAndResultDoNotRequireFakeEntityFields' test` — **verde**.
 
-**C15** - As fixtures V0 preservam seus goldens e continuam recusando cada extensão V1 exercitada pelo Core; rejeição antiga não é apagada para acomodar a nova semântica. (JAVA-004; AC 12)
+**C15** — *parcial em S1; fecha em S5.* As fixtures V0 preservam seus goldens e continuam recusando cada extensão V1 exercitada pelo Core; rejeição antiga não é apagada para acomodar a nova semântica. (JAVA-004; AC 12)
 Proof: `mvn -o '-Dtest=JavaSpringGoldenTest#customerProjectMatchesTheVersionedTargetGolden' test` — **existente**.
 Proof: `mvn -o '-Dtest=FlowCallTest#versionZeroDoesNotSilentlyAcquireCalls' test` — **existente**.
-Proof: `mvn -o '-Dtest=CoreV1CompatibilityTest#v0RejectsCoreV1OnlyConstructs' test` — **a criar**.
+Proof: `mvn -o '-Dtest=CoreV1CompatibilityTest#v0RejectsCoreV1OnlyConstructs' test` — **verde para as 8 construções que existem; `for each`, `emit`, política transacional e failure mapping entram em S2–S5**.
 
 
 ### S2 — Iteração tipada
