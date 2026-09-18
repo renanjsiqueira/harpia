@@ -160,6 +160,12 @@ public final class ErrorCodes {
     public static final String SEMANTIC_FLOW_CALL_ARGUMENT = "HRP2143";
     /** A Flow call discards a result or assigns an operation that returns nothing. */
     public static final String SEMANTIC_FLOW_CALL_RESULT = "HRP2144";
+
+    /** A form of iteration outside the Core V1 slice: nesting, break, continue, async, mutation. */
+    public static final String SEMANTIC_ITERATION = "HRP2146";
+
+    /** A member that the type of a Flow value does not declare, or declares with another type. */
+    public static final String SEMANTIC_FLOW_MEMBER = "HRP2149";
     /** A path parameter names nothing the operation can fill it with. */
     public static final String SEMANTIC_PATH_PARAM_INPUT = "HRP2135";
     /** A partial update demands an input the client is free to omit. */

@@ -225,15 +225,25 @@ class CoreV1PlanningTest {
         }
 
         Set<String> declared = declaredCodes();
-        Set<String> reserved = reservedCodes(document);
-        assertThat(reserved)
-                .as("the RFC reserves the codes its refusals need")
+        Map<String, String> register = reservedCodes(document);
+        Set<String> waiting = register.entrySet().stream()
+                .filter(entry -> entry.getValue().startsWith("reservado"))
+                .map(Map.Entry::getKey)
+                .collect(java.util.stream.Collectors.toCollection(TreeSet::new));
+        Set<String> inUse = new TreeSet<>(register.keySet());
+        inUse.removeAll(waiting);
+
+        assertThat(register)
+                .as("the RFC registers the codes its refusals need")
                 .isNotEmpty();
         assertThat(declared)
                 .as("a reserved code is a free number; reserving a taken one redefines a refusal")
-                .doesNotContainAnyElementsOf(reserved);
+                .doesNotContainAnyElementsOf(waiting);
+        assertThat(declared)
+                .as("a code the register says is in use has to be declared")
+                .containsAll(inUse);
         for (String code : codesIn(document)) {
-            if (reserved.contains(code)) {
+            if (register.containsKey(code)) {
                 continue;
             }
             assertThat(declared)
@@ -527,13 +537,15 @@ class CoreV1PlanningTest {
         return codes;
     }
 
-    /** The codes the RFC reserves, read from its reservation table rather than from prose. */
-    private static Set<String> reservedCodes(String document) {
-        Set<String> codes = new TreeSet<>();
-        Matcher matcher = Pattern.compile("^\\| `(HRP[1-7][0-9]{3})` \\| `([A-Z_]+)` \\|",
-                Pattern.MULTILINE).matcher(document);
+    /** The codes the RFC registers, and what it says each one's state is. */
+    private static Map<String, String> reservedCodes(String document) {
+        Map<String, String> codes = new LinkedHashMap<>();
+        Matcher matcher = Pattern.compile(
+                        "^\\| `(HRP[1-7][0-9]{3})` \\| `([A-Z_]+)` \\|([^|]*)\\|([^|]*)\\|",
+                        Pattern.MULTILINE)
+                .matcher(document);
         while (matcher.find()) {
-            codes.add(matcher.group(1));
+            codes.put(matcher.group(1), matcher.group(4).strip());
         }
         return codes;
     }

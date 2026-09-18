@@ -81,7 +81,10 @@ public record ApplicationOperation(
     private static void append(List<FlowInstruction> source, List<FlowInstruction> target) {
         for (FlowInstruction instruction : source) {
             target.add(instruction);
-            if (instruction.command() == FlowCommand.IF) {
+            // Both nested blocks: a call written inside a loop is still a call the operation
+            // makes, and whoever asks what this operation depends on has to be told about it.
+            if (instruction.command() == FlowCommand.IF
+                    || instruction.command() == FlowCommand.FOR_EACH) {
                 append(instruction.whenTrue(), target);
                 append(instruction.whenFalse(), target);
             }
@@ -410,6 +413,14 @@ public record ApplicationOperation(
             boolean valid = switch (command) {
                 case VALIDATE_INPUT -> variable.isEmpty() && entity.isEmpty();
                 case FAIL, REQUIRE -> value.isPresent() && variable.isEmpty() && entity.isEmpty();
+                // The item is the variable, the collection is the value, and the body is the one
+                // nested block a loop has.
+                case FOR_EACH -> variable.isPresent()
+                        && value.isPresent()
+                        && entity.isEmpty()
+                        && fields.isEmpty()
+                        && !whenTrue.isEmpty()
+                        && whenFalse.isEmpty();
                 case FIND_BY, LIST_BY ->
                         variable.isPresent() && entity.isPresent() && !fields.isEmpty();
                 // The assigned field is the value's own name, so it is not repeated in `fields`.
@@ -453,7 +464,10 @@ public record ApplicationOperation(
             valid &= command == FlowCommand.CALL_LOGIC || invocation.isEmpty();
             valid &= command == FlowCommand.CALL_INTEGRATION || integrationInvocation.isEmpty();
             valid &= command == FlowCommand.CALL_OPERATION || operationInvocation.isEmpty();
-            valid &= command == FlowCommand.IF || whenTrue.isEmpty() && whenFalse.isEmpty();
+            // Two commands hold a nested block; everything else holds none.
+            valid &= command == FlowCommand.IF
+                    || command == FlowCommand.FOR_EACH
+                    || whenTrue.isEmpty() && whenFalse.isEmpty();
             if (!valid) {
                 throw new IllegalArgumentException("invalid operands for flow command " + command);
             }
@@ -473,6 +487,7 @@ public record ApplicationOperation(
         ADD_TO,
         REMOVE_FROM,
         IF,
+        FOR_EACH,
         CREATE_FROM,
         LOAD_BY_ID,
         UPDATE_FROM,

@@ -74,6 +74,8 @@ final class FlowBlockParser {
         return Optional.of(flow);
     }
 
+    private int loops;
+
     private List<FlowStatement> block(int level, int depth) {
         List<FlowStatement> statements = new ArrayList<>();
         while (cursor < lines.size() && !failed) {
@@ -94,7 +96,87 @@ final class FlowBlockParser {
         return statements;
     }
 
+    private static final java.util.regex.Pattern FOR_EACH = java.util.regex.Pattern.compile(
+            "^for each +([a-z][A-Za-z0-9]*) +in +(\\S.*)$");
+
+    /**
+     * {@code for each <item> in <collection>} and its body.
+     *
+     * <p>One level, and the refusals say so rather than reporting an unknown command: nesting,
+     * {@code break}, {@code continue} and an asynchronous form are all things someone will write,
+     * and each of them has a reason to be outside this slice that is worth reading.
+     */
+    private Optional<FlowStatement> forEach(IndentedLines.Line line, int level, int depth) {
+        if (!v1Flow) {
+            diagnostics.error(
+                    ErrorCodes.SYNTAX_DECLARATION_TOO_NEW,
+                    "'for each' in a flow needs harpia.languageVersion 1",
+                    line.contentWhere());
+            failed = true;
+            return Optional.empty();
+        }
+        if (loops > 0) {
+            iterationRefused(
+                    "a flow iterates one level; a nested loop describes an algorithm, which "
+                            + "belongs in Logic",
+                    line);
+            return Optional.empty();
+        }
+        java.util.regex.Matcher matcher = FOR_EACH.matcher(line.text());
+        if (!matcher.matches()) {
+            error("'for each' must read 'for each <item> in <collection>'", line.where());
+            failed = true;
+            return Optional.empty();
+        }
+        String variable = matcher.group(1);
+        String text = matcher.group(2).strip();
+        if (text.endsWith(" async") || text.equals("async")) {
+            iterationRefused(
+                    "asynchronous iteration is not in this version; the body runs in the order "
+                            + "the collection has",
+                    line);
+            return Optional.empty();
+        }
+        Optional<LogicAst.Expression> collection =
+                LogicLexer.tokenize(text, LineSyntax.at(line.contentWhere(), line.text(),
+                                matcher.start(2)), diagnostics)
+                        .flatMap(tokens -> LogicExpressionParser.parse(tokens, diagnostics));
+        if (collection.isEmpty()) {
+            failed = true;
+            return Optional.empty();
+        }
+        cursor++;
+        loops++;
+        List<FlowStatement> body = block(level + 1, depth + 1);
+        loops--;
+        if (failed) {
+            return Optional.empty();
+        }
+        if (body.isEmpty()) {
+            error("'for each' must be followed by commands indented by four spaces", line.where());
+            failed = true;
+            return Optional.empty();
+        }
+        return Optional.of(new SpecAst.ForEach(
+                variable, text, collection.orElseThrow(), body, line.contentWhere()));
+    }
+
+    private void iterationRefused(String message, IndentedLines.Line line) {
+        diagnostics.error(ErrorCodes.SEMANTIC_ITERATION, message, line.contentWhere());
+        failed = true;
+    }
+
     private Optional<FlowStatement> statement(IndentedLines.Line line, int level, int depth) {
+        if (line.text().startsWith("for each")) {
+            return forEach(line, level, depth);
+        }
+        if (loops > 0 && (line.text().equals("break") || line.text().equals("continue"))) {
+            iterationRefused(
+                    "'" + line.text() + "' is not in this version; a loop body runs for every "
+                            + "item of the collection",
+                    line);
+            return Optional.empty();
+        }
         if (!v1Flow && isCall(line)) {
             diagnostics.error(
                     ErrorCodes.SYNTAX_DECLARATION_TOO_NEW,

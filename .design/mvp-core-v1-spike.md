@@ -26,7 +26,7 @@ nenhum, porque a próxima slice constrói em cima dele.
 | Caso | O que a spec pede | Observado em S0 | Estado hoje | Lacuna | Slice |
 | --- | --- | --- | --- | --- | --- |
 | `input` — input de Command | um campo de input que não existe na entidade (`couponCode`) | `HRP2011` — *input field 'couponCode' must name one non-generated entity field exactly once* | fechado em S1 → aceito | o input passou a ser o contrato próprio da operação: um campo sem coluna atrás é valor do flow. Nomear campo gerado ou repetir um nome continua recusado | S1 (C14) |
-| `member-access` — acesso a campo | ler `order.total` numa expressão de Flow | `HRP2114` — *member access '.total' requires a nominal type; Logic parameters are scalar* | aberto | a expressão tipada só conhece escalares; variável de Flow não tem tipo nominal | S2 (C18) |
+| `member-access` — acesso a campo | ler `order.total` numa expressão de Flow | `HRP2114` — *member access '.total' requires a nominal type; Logic parameters are scalar* | fechado em S2 → aceito | valores do Flow passaram a ter tipo nominal e membros; `HRP2114` continua para alvo escalar, e membro inexistente é `HRP2149` | S2 (C18) |
 | `command-result` — resultado de Command | consumir em `set` o valor devolvido por `call RecordAudit(...)` | `HRP2102` — *unknown value 'audited'; it is not a parameter of Logic 'audited' and was not assigned before this line* | fechado em S1 → `HRP2103` | o nome agora resolve e carrega o tipo da entidade que o Command devolve; pedir um Decimal dele é erro de tipo, e vira acesso a membro quando S2 der membros aos valores | S1 (C7–C10) |
 | `owned` — associação owned | criar o `OrderItem` dentro do Command do `Order` | `HRP2010` — *operation 'CreateOrder' works on more than one entity: [SalesOrder, OrderItem]* | aberto | a operação pertence a uma entidade; escrever o filho owned no mesmo Command é recusado antes da geração | S2 (C16–C22), S3 (C24) |
 
@@ -70,9 +70,12 @@ return order
 201 SalesOrder
 ````
 
-### `member access` — ler um campo de uma variável de Flow
+### `member-access` — ler um campo de uma variável de Flow
 
-````harpia case=member-access expect=HRP2114 state=open
+*Fechado em S2.* A fixture é a mesma e agora compila: `order` está em escopo com o tipo da entidade
+e `order.total` é o Decimal que ela declara.
+
+````harpia case=member-access expect=ok state=closed
 # SalesOrder
 
 ## Data
@@ -238,12 +241,17 @@ reimplemente o que já funciona:
 Executadas no mesmo spike para fixar o ponto de partida. Cada uma é a ausência da construção, não
 um defeito: hoje a linha nem chega ao analisador.
 
-| Construção | Resultado observado | Slice |
-| --- | --- | --- |
-| `for each item in items` | `HRP1007` — *unknown flow command* | S2 |
-| `emit OrderCreated(orderId = order.id)` | `HRP1007` — *unknown flow command* | S5 |
+| Construção | Observado em S0 | Estado hoje | Slice |
+| --- | --- | --- | --- |
+| `for each item in items` | `HRP1007` — *unknown flow command* | fechado em S2 → `HRP2102` | S2 |
+| `emit OrderCreated(orderId = order.id)` | `HRP1007` — *unknown flow command* | aberto | S5 |
 
-````harpia case=for-each expect=HRP1007 state=open
+A fixture de `for each` abaixo é a de S0 e continua sendo recusada, por outro motivo: a construção
+existe desde S2, e o que esta spec mínima nunca declarou é uma coleção chamada `items`. A forma
+aceita, com coleção declarada e corpo tipado, é provada por `FlowIterationTest` e
+`FlowIterationRuntimeTest`, não aqui — este documento guarda o ponto de partida.
+
+````harpia case=for-each expect=HRP2102 state=closed
 # SalesOrder
 
 ## Data

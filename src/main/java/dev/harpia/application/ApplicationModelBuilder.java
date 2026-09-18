@@ -510,6 +510,25 @@ public final class ApplicationModelBuilder {
                     Optional.empty(),
                     value.where());
         }
+        if (source instanceof FlowStep.ForEach value) {
+            return new FlowInstruction(
+                    FlowCommand.FOR_EACH,
+                    Optional.of(value.variable()),
+                    Optional.empty(),
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    false,
+                    Optional.of(new FlowInstruction.TypedValue(
+                            value.variable(), value.text(), value.collection())),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    value.body().stream()
+                            .map(ApplicationModelBuilder::instruction)
+                            .toList(),
+                    java.util.List.of(),
+                    value.where());
+        }
         if (source instanceof FlowStep.Conditional value) {
             return new FlowInstruction(
                     FlowCommand.IF,

@@ -100,6 +100,10 @@ final class BusinessIrRenderer {
             out.append(indent).append("Step ").append(step.getClass().getSimpleName());
             if (step instanceof FlowStep.Conditional conditional) {
                 out.append(' ').append(conditional.text());
+            } else if (step instanceof FlowStep.ForEach loop) {
+                out.append(' ').append(loop.variable()).append(": ")
+                        .append(loop.elementType().display())
+                        .append(" in ").append(loop.text());
             } else if (step instanceof FlowStep.Fail fail) {
                 out.append(' ').append(fail.error()).append(" when ").append(fail.text());
             } else if (step instanceof FlowStep.Require require) {
@@ -141,6 +145,10 @@ final class BusinessIrRenderer {
                 call.resultType().ifPresent(type -> out.append(" -> ").append(type.display()));
             }
             out.append('\n');
+            if (step instanceof FlowStep.ForEach loop) {
+                out.append(indent).append("  Each\n");
+                renderFlow(out, loop.body(), indent + "    ");
+            }
             if (step instanceof FlowStep.Conditional conditional) {
                 out.append(indent).append("  Then\n");
                 renderFlow(out, conditional.whenTrue(), indent + "    ");

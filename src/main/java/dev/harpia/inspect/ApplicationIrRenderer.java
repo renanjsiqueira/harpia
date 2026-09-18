@@ -232,6 +232,7 @@ final class ApplicationIrRenderer {
                                 case REQUIRE ->
                                         " " + typed.text() + " otherwise " + typed.name();
                                 case IF -> " " + typed.text();
+                                case FOR_EACH -> " " + typed.name() + " in " + typed.text();
                                 case ADD_TO -> " " + typed.text() + " to " + typed.name();
                                 case REMOVE_FROM ->
                                         " " + typed.text() + " from " + typed.name();
@@ -239,6 +240,10 @@ final class ApplicationIrRenderer {
                             })
                             .orElse(""))
                     .append('\n');
+            if (instruction.command() == ApplicationOperation.FlowCommand.FOR_EACH) {
+                out.append(indent).append("  Each\n");
+                renderFlow(out, instruction.whenTrue(), indent + "    ");
+            }
             if (instruction.command() == ApplicationOperation.FlowCommand.IF) {
                 out.append(indent).append("  Then\n");
                 renderFlow(out, instruction.whenTrue(), indent + "    ");

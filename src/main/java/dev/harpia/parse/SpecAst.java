@@ -182,9 +182,33 @@ public final class SpecAst {
 
     public sealed interface FlowStatement
             permits ValidateInput, CreateFrom, LoadById, FindBy, UpdateFrom, SetField,
-                    ChangeCollection, Conditional, ListAll, ListBy, Save, Delete, Fail, Require,
-                    Call, Return {
+                    ChangeCollection, Conditional, ForEach, ListAll, ListBy, Save, Delete, Fail,
+                    Require, Call, Return {
         SourceRef where();
+    }
+
+    /**
+     * One pass over a collection, in the order the collection has.
+     *
+     * <p>The item is bound for the body and nowhere else, which is what makes this a block and not
+     * a variable declaration with a loop attached.
+     */
+    public record ForEach(
+            String variable,
+            String text,
+            LogicAst.Expression collection,
+            List<FlowStatement> body,
+            SourceRef where) implements FlowStatement {
+        public ForEach {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(collection, "collection");
+            body = List.copyOf(body);
+            Objects.requireNonNull(where, "where");
+            if (body.isEmpty()) {
+                throw new IllegalArgumentException("a loop body must not be empty");
+            }
+        }
     }
 
     public record ValidateInput(SourceRef where) implements FlowStatement {}

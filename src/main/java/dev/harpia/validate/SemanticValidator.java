@@ -869,6 +869,9 @@ public final class SemanticValidator {
                 all.addAll(flattened(conditional.whenTrue()));
                 all.addAll(flattened(conditional.whenFalse()));
             }
+            if (statement instanceof SpecAst.ForEach loop) {
+                all.addAll(flattened(loop.body()));
+            }
         }
         return all;
     }
@@ -1026,7 +1029,8 @@ public final class SemanticValidator {
             DiagnosticCollector diagnostics) {
         Map<String, SpecAst.FieldDeclaration> fields = target.fields();
         Map<String, ValueType> variables = new LinkedHashMap<>();
-        FlowFacts facts = validateFlowBlock(useCase.flow(), variables, false, diagnostics);
+        FlowFacts facts = validateFlowBlock(
+                useCase.flow(), variables, Block.OPERATION, diagnostics);
 
         if (useCase.flow().isEmpty()
                 || !(useCase.flow().getLast() instanceof SpecAst.Return returned)) {
@@ -1057,11 +1061,22 @@ public final class SemanticValidator {
     }
 
     /** Validates one lexical block while keeping branch-local declarations out of outer scope. */
+    /** Which kind of block is being validated, because each one allows different things. */
+    private enum Block {
+        /** The operation's own flow. */
+        OPERATION,
+        /** A branch of an `if`: both branches must leave the same values behind. */
+        BRANCH,
+        /** A loop body: it may name values of its own, and none of them outlive it. */
+        LOOP
+    }
+
     private static FlowFacts validateFlowBlock(
             java.util.List<SpecAst.FlowStatement> flow,
             Map<String, ValueType> variables,
-            boolean branch,
+            Block block,
             DiagnosticCollector diagnostics) {
+        boolean branch = block == Block.BRANCH;
         boolean createsOrUpdates = false;
         boolean saves = false;
         for (int index = 0; index < flow.size(); index++) {
@@ -1075,10 +1090,11 @@ public final class SemanticValidator {
                         statement.where());
                 continue;
             }
-            if (branch && statement instanceof SpecAst.Return) {
+            if (block != Block.OPERATION && statement instanceof SpecAst.Return) {
                 diagnostics.error(
                         ErrorCodes.SEMANTIC_FLOW_BRANCH_SCOPE,
-                        "flow branch cannot return; the operation has one final top-level return",
+                        "flow " + (branch ? "branch" : "loop")
+                                + " cannot return; the operation has one final top-level return",
                         statement.where());
                 continue;
             }
@@ -1141,11 +1157,20 @@ public final class SemanticValidator {
                 requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
             } else if (statement instanceof SpecAst.Conditional conditional) {
                 FlowFacts whenTrue = validateFlowBlock(
-                        conditional.whenTrue(), new LinkedHashMap<>(variables), true, diagnostics);
+                        conditional.whenTrue(), new LinkedHashMap<>(variables), Block.BRANCH,
+                        diagnostics);
                 FlowFacts whenFalse = validateFlowBlock(
-                        conditional.whenFalse(), new LinkedHashMap<>(variables), true, diagnostics);
+                        conditional.whenFalse(), new LinkedHashMap<>(variables), Block.BRANCH,
+                        diagnostics);
                 createsOrUpdates |= whenTrue.createsOrUpdates() || whenFalse.createsOrUpdates();
                 saves |= whenTrue.saves() || whenFalse.saves();
+            } else if (statement instanceof SpecAst.ForEach loop) {
+                // The body runs inside the operation, so what it writes is what the operation
+                // writes; the item itself lives only in the copy the block gets.
+                FlowFacts body = validateFlowBlock(
+                        loop.body(), new LinkedHashMap<>(variables), Block.LOOP, diagnostics);
+                createsOrUpdates |= body.createsOrUpdates();
+                saves |= body.saves();
             } else if (statement instanceof SpecAst.Return value && value.variable().isPresent()) {
                 requireVariable(
                         variables,

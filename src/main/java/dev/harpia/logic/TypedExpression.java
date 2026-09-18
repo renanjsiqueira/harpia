@@ -29,6 +29,23 @@ public sealed interface TypedExpression {
         }
     }
 
+    /**
+     * One declared member of a value that has members.
+     *
+     * <p>The member is resolved and typed here, not looked up again by a target: what a target
+     * needs to know is that this is the {@code unitPrice} of something, and what type came out.
+     */
+    record MemberAccess(
+            TypedExpression target, String member, LogicType type, SourceRef where)
+            implements TypedExpression {
+        public MemberAccess {
+            Objects.requireNonNull(target, "target");
+            Objects.requireNonNull(member, "member");
+            Objects.requireNonNull(type, "type");
+            Objects.requireNonNull(where, "where");
+        }
+    }
+
     /** A reference to a parameter or to a local variable of the enclosing Logic. */
     record Variable(String name, LogicType type, SourceRef where) implements TypedExpression {
         public Variable {

@@ -13,13 +13,17 @@ Os exemplos válidos deste documento **não compilam na árvore atual**, por con
 compilassem, não haveria contrato novo. Os exemplos recusados nomeiam o código do livro-razão que a
 recusa deve trazer. Cinco códigos são reservados aqui e nenhum código existente muda de significado:
 
-| Código | Constante | Significado |
-| --- | --- | --- |
-| `HRP2145` | `SEMANTIC_TRANSACTION_POLICY` | a política transacional declarada contraria os efeitos da operação |
-| `HRP2146` | `SEMANTIC_ITERATION` | forma de iteração fora do recorte Core |
-| `HRP2147` | `SEMANTIC_EMIT_TARGET` | `emit` nomeia um Event que não existe |
-| `HRP2148` | `SEMANTIC_EMIT_PAYLOAD` | payload de `emit` omite campo obrigatório ou usa tipo incompatível |
-| `HRP2149` | `SEMANTIC_FLOW_MEMBER` | acesso a membro inexistente ou incompatível de um valor tipado do Flow |
+A coluna **Estado** é mantida viva pela prova: um código ainda reservado não pode estar declarado
+em `ErrorCodes`, e um código em uso tem de estar. Reservar um número já tomado redefiniria uma
+recusa publicada, e é isso que a verificação impede.
+
+| Código | Constante | Significado | Estado |
+| --- | --- | --- | --- |
+| `HRP2145` | `SEMANTIC_TRANSACTION_POLICY` | a política transacional declarada contraria os efeitos da operação | reservado |
+| `HRP2146` | `SEMANTIC_ITERATION` | forma de iteração fora do recorte Core | em uso desde S2 |
+| `HRP2147` | `SEMANTIC_EMIT_TARGET` | `emit` nomeia um Event que não existe | reservado |
+| `HRP2148` | `SEMANTIC_EMIT_PAYLOAD` | payload de `emit` omite campo obrigatório ou usa tipo incompatível | reservado |
+| `HRP2149` | `SEMANTIC_FLOW_MEMBER` | acesso a membro inexistente ou incompatível de um valor tipado do Flow | em uso desde S2 |
 
 Reutilizados sem mudança de sentido: `HRP2007` (nome não declarado), `HRP2130` (binding que escapa
 do seu bloco), `HRP2011`/`HRP2012` (input contra a entidade), `HRP2203` (mapping que não corresponde

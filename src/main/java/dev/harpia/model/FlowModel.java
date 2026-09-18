@@ -26,6 +26,9 @@ public record FlowModel(List<FlowStep> steps, Map<String, ValueType> variables) 
                 append(conditional.whenTrue(), target);
                 append(conditional.whenFalse(), target);
             }
+            if (step instanceof FlowStep.ForEach loop) {
+                append(loop.body(), target);
+            }
         }
     }
 

@@ -222,6 +222,13 @@ public final class JavaSpringServiceTransformer {
             Set<String> localValues) {
         String entityName = entity.typeName();
         for (ApplicationOperation.FlowInstruction instruction : flow) {
+            // An instruction that binds a name declares a Java local, and from here on that name
+            // means the local rather than a field of the request.
+            switch (instruction.command()) {
+                case CREATE_FROM, LOAD_BY_ID, FIND_BY, LIST_ALL, LIST_BY ->
+                        instruction.variable().ifPresent(localValues::add);
+                default -> { }
+            }
             switch (instruction.command()) {
                 case IF -> {
                     ApplicationOperation.FlowInstruction.TypedValue condition =
@@ -443,6 +450,31 @@ public final class JavaSpringServiceTransformer {
                     statements.add(listingType(operation, entityName) + " " + variable + " = "
                             + REPOSITORY_FIELD + "." + finderName(instruction) + "("
                             + arguments + ", " + pageable(entity, instruction) + ");");
+                }
+                case FOR_EACH -> {
+                    ApplicationOperation.FlowInstruction.TypedValue iterated =
+                            instruction.value().orElseThrow();
+                    String item = instruction.variable().orElseThrow();
+                    JavaLogicWriter.Result collection = JavaLogicWriter.condition(
+                            iterated.expression(),
+                            operation.methodName(),
+                            field -> javaValue(field, localValues));
+                    explicitImports.addAll(collection.imports());
+                    dev.harpia.logic.LogicType element =
+                            ((dev.harpia.logic.LogicType.Container) iterated.expression().type())
+                                    .element();
+                    JavaTypeRef itemType = dev.harpia.target.javaspring.mapping.JavaTypeMapper
+                            .map(element, names.domainPackage());
+                    explicitImports.add(itemType.canonicalName());
+                    statements.add("for (" + itemType.simpleName() + " " + item + " : "
+                            + collection.body() + ") {");
+                    List<String> body = new ArrayList<>();
+                    Set<String> inside = new LinkedHashSet<>(localValues);
+                    inside.add(item);
+                    emit(names, entity, operation, instruction.whenTrue(), body, explicitImports,
+                            inside);
+                    body.forEach(line -> statements.add("    " + line));
+                    statements.add("}");
                 }
                 case SET_FIELD -> {
                     ApplicationOperation.FlowInstruction.TypedValue assigned =
