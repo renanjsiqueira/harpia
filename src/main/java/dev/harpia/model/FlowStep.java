@@ -13,6 +13,7 @@ public sealed interface FlowStep
                 FlowStep.SetField,
                 FlowStep.ChangeCollection,
                 FlowStep.Conditional,
+                FlowStep.ForEach,
                 FlowStep.ListAll,
                 FlowStep.ListBy,
                 FlowStep.Save,
@@ -163,6 +164,24 @@ public sealed interface FlowStep
     record SortOrder(String field, boolean descending) {
         public SortOrder {
             Objects.requireNonNull(field, "field");
+        }
+    }
+
+    /** One pass over a collection, with the item bound for the body. */
+    record ForEach(
+            String variable,
+            String text,
+            dev.harpia.logic.LogicType elementType,
+            dev.harpia.logic.TypedExpression collection,
+            java.util.List<FlowStep> body,
+            SourceRef where) implements FlowStep {
+        public ForEach {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(text, "text");
+            Objects.requireNonNull(elementType, "elementType");
+            Objects.requireNonNull(collection, "collection");
+            body = java.util.List.copyOf(body);
+            Objects.requireNonNull(where, "where");
         }
     }
 

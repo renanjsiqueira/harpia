@@ -136,6 +136,14 @@ public final class JavaLogicWriter {
         if (expression instanceof TypedExpression.Variable variable) {
             return new Java(names.apply(variable.name()), Precedence.PRIMARY);
         }
+        if (expression instanceof TypedExpression.MemberAccess access) {
+            // Entities and Values are both classes with getters in this target, so one shape
+            // covers both; a target where they differ decides that for itself.
+            return new Java(
+                    raw(access.target()).code() + "." + JavaLayout.accessor("get", access.member())
+                            + "()",
+                    Precedence.PRIMARY);
+        }
         if (expression instanceof TypedExpression.Unary unary) {
             return unary(unary);
         }

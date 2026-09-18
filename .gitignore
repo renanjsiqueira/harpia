@@ -13,6 +13,7 @@
 .project
 
 .DS_Store
+/.linkedin-connection-assistant-state.json
 
 # Harpia output. Owned by the compiler and recreated by `harpia build`.
 examples/*/generated/

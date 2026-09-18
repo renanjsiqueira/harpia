@@ -77,25 +77,85 @@ public final class LogicAnalyzer {
         }
 
         reportCycles(callGraph, symbols, diagnostics);
-        FlowCalls flowCalls = flowCalls(project, symbols, diagnostics);
+        Members members = members(project, symbols);
+        FlowCalls flowCalls = flowCalls(project, symbols, members, diagnostics);
+        // Guards and assignments are typed after the calls, because what a guard may name now
+        // includes what a call produced above it.
         return new Result(
                 List.copyOf(models),
                 ScenarioAnalyzer.analyze(project, symbols, diagnostics),
-                rules(project, symbols, diagnostics),
-                invariants(project, symbols, diagnostics),
-                guards(project, symbols, diagnostics),
-                assignments(project, symbols, diagnostics),
+                rules(project, symbols, members, diagnostics),
+                invariants(project, symbols, members, diagnostics),
+                guards(project, symbols, flowCalls.locals(), members, diagnostics),
+                assignments(project, symbols, flowCalls.locals(), members, diagnostics),
                 flowCalls.logics(),
                 flowCalls.integrations(),
-                flowCalls.operations());
+                flowCalls.operations(),
+                flowCalls.iterations());
+    }
+
+    /**
+     * What a nominal type declares, by name.
+     *
+     * <p>Entities keep their fields in the syntax tree and Values keep theirs in the symbol table,
+     * so a member access would otherwise have to know which kind of thing it is looking at before
+     * it could ask. One function over both means the expression analysis asks the same question of
+     * an order line and of a shipping address.
+     */
+    @FunctionalInterface
+    public interface Members {
+        Optional<LogicType> memberOf(String type, String member);
+    }
+
+    private static Members members(ProjectAst project, SymbolTable symbols) {
+        Map<String, Map<String, String>> declared = new LinkedHashMap<>();
+        for (ModuleAst module : project.modules()) {
+            if (!module.declaresEntity()) {
+                continue;
+            }
+            Map<String, String> fields = new LinkedHashMap<>();
+            module.entity().fields().forEach(field -> fields.putIfAbsent(field.name(), field.type()));
+            declared.putIfAbsent(module.entity().name(), fields);
+        }
+        return (type, member) -> {
+            Map<String, String> fields = declared.get(type);
+            if (fields == null) {
+                fields = symbols.valueType(type)
+                        .map(value -> value.fields().stream().collect(
+                                LinkedHashMap<String, String>::new,
+                                (map, field) -> map.putIfAbsent(field.name(), field.type()),
+                                Map::putAll))
+                        .orElse(null);
+            }
+            if (fields == null) {
+                return Optional.empty();
+            }
+            return Optional.ofNullable(fields.get(member)).flatMap(
+                    syntax -> boundaryType(syntax, symbols));
+        };
+    }
+
+    /** What a loop iterates: the item's name, its type, and the collection expression. */
+    public record IterationModel(
+            String variable, LogicType elementType, TypedExpression collection) {
+        public IterationModel {
+            Objects.requireNonNull(variable, "variable");
+            Objects.requireNonNull(elementType, "elementType");
+            Objects.requireNonNull(collection, "collection");
+        }
     }
 
     /** Resolves Flow calls in source order, extending scope with each typed result. */
     private static FlowCalls flowCalls(
-            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+            ProjectAst project,
+            SymbolTable symbols,
+            Members members,
+            DiagnosticCollector diagnostics) {
         Map<SourceRef, FlowCallModel> resolved = new LinkedHashMap<>();
         Map<SourceRef, IntegrationCallModel> integrations = new LinkedHashMap<>();
         Map<SourceRef, OperationCallModel> operations = new LinkedHashMap<>();
+        Map<SourceRef, List<LogicModel.Parameter>> locals = new LinkedHashMap<>();
+        Map<SourceRef, IterationModel> iterations = new LinkedHashMap<>();
         Map<String, String> customLogics = new LinkedHashMap<>();
         project.modules().stream()
                 .flatMap(module -> module.logics().stream())
@@ -103,49 +163,291 @@ public final class LogicAnalyzer {
                 .forEach(declaration -> customLogics.put(
                         declaration.name(), declaration.custom().orElseThrow().contract()));
         Map<String, OperationSignature> commandSignatures = commandSignatures(project, symbols);
+        Map<String, Set<String>> operationGraph = new LinkedHashMap<>();
+        Map<String, SourceRef> operationWhere = new LinkedHashMap<>();
+        List<QueryCall> queryCalls = new ArrayList<>();
         for (ModuleAst module : project.modules()) {
             for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
+                String name = Naming.useCaseBaseName(useCase.title());
+                operationGraph.putIfAbsent(name, new LinkedHashSet<>());
+                operationWhere.putIfAbsent(name, useCase.where());
                 LinkedHashMap<String, LogicModel.Parameter> scope = new LinkedHashMap<>();
                 scopeOfBoundaryValues(useCase.input(), symbols)
                         .forEach(parameter -> scope.put(parameter.name(), parameter));
                 resolveFlowCalls(
                         useCase.flow(),
-                        Naming.useCaseBaseName(useCase.title()),
+                        name,
+                        useCase.declaredKind() == dev.harpia.parse.DeclarationKind.QUERY,
+                        operationGraph.get(name),
+                        queryCalls,
                         scope,
+                        new LinkedHashMap<>(),
                         symbols,
+                        members,
                         customLogics,
                         commandSignatures,
                         resolved,
                         integrations,
                         operations,
+                        locals,
+                        iterations,
                         diagnostics);
             }
         }
+        reportCommandCycles(operationGraph, operationWhere, diagnostics);
+        reportQueryEffects(operationGraph, queryCalls, diagnostics);
         return new FlowCalls(
-                Map.copyOf(resolved), Map.copyOf(integrations), Map.copyOf(operations));
+                Map.copyOf(locals),
+                Map.copyOf(iterations),
+                Map.copyOf(resolved),
+                Map.copyOf(integrations),
+                Map.copyOf(operations));
     }
 
-    private static void resolveFlowCalls(
-            List<SpecAst.FlowStatement> flow,
+    /**
+     * Walks a flow in source order, resolving each call and recording what is visible where.
+     *
+     * <p>{@code locals} is the second half of the walk and the reason it exists: a value a call
+     * produced is visible to every instruction below it, and a branch keeps its own copy, so the
+     * set of names in scope is a property of a position and not of an operation. Recording it here
+     * means guards and assignments type their expressions against the same scope the call
+     * arguments already used, instead of against a second, smaller idea of what a flow knows.
+     */
+    /**
+     * Types the collection, binds the item, and walks the body with both.
+     *
+     * <p>The item is put into a copy of the scope, so it exists for the body and is gone after the
+     * loop — the same way a branch keeps its own copy. Changing the collection from inside the
+     * body is refused here rather than in the target, because what is being iterated is known at
+     * this point and not later.
+     */
+    private static void resolveIteration(
+            SpecAst.ForEach loop,
             String caller,
+            boolean callerIsQuery,
+            Set<String> callsOfCaller,
+            List<QueryCall> queryCalls,
             LinkedHashMap<String, LogicModel.Parameter> scope,
+            LinkedHashMap<String, LogicModel.Parameter> produced,
             SymbolTable symbols,
+            Members members,
             Map<String, String> customLogics,
             Map<String, OperationSignature> commandSignatures,
             Map<SourceRef, FlowCallModel> resolved,
             Map<SourceRef, IntegrationCallModel> integrations,
             Map<SourceRef, OperationCallModel> operations,
+            Map<SourceRef, List<LogicModel.Parameter>> locals,
+            Map<SourceRef, IterationModel> iterations,
+            DiagnosticCollector diagnostics) {
+        Optional<TypedExpression> collection = inferExpression(
+                "the collection of 'for each " + loop.variable() + "'",
+                List.copyOf(scope.values()),
+                loop.collection(),
+                symbols,
+                members,
+                loop.where(),
+                diagnostics);
+        if (collection.isEmpty()) {
+            return;
+        }
+        LogicType type = collection.orElseThrow().type();
+        if (!(type instanceof LogicType.Container container)) {
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_ITERATION,
+                    "'for each' needs a collection, and '" + loop.text() + "' is "
+                            + type.display(),
+                    loop.where());
+            return;
+        }
+        LogicModel.Parameter item = new LogicModel.Parameter(
+                loop.variable(), container.element(), loop.where());
+        scope.put(item.name(), item);
+        produced.put(item.name(), item);
+        iterations.put(loop.where(), new IterationModel(
+                loop.variable(), container.element(), collection.orElseThrow()));
+        refuseChangesToTheIteratedCollection(loop, diagnostics);
+        resolveFlowCalls(
+                loop.body(), caller, callerIsQuery, callsOfCaller, queryCalls, scope, produced,
+                symbols, members, customLogics, commandSignatures, resolved, integrations,
+                operations, locals, iterations, diagnostics);
+    }
+
+    /**
+     * A body that adds to or removes from the collection it is walking.
+     *
+     * <p>Whether that is an infinite loop, a skipped element or nothing at all depends on the
+     * collection's implementation, which is precisely the kind of answer a specification must not
+     * have.
+     */
+    private static void refuseChangesToTheIteratedCollection(
+            SpecAst.ForEach loop, DiagnosticCollector diagnostics) {
+        for (SpecAst.FlowStatement statement : flattened(loop.body())) {
+            if (!(statement instanceof SpecAst.ChangeCollection change)) {
+                continue;
+            }
+            String target = change.variable() + "." + change.field();
+            if (!target.equals(loop.text())) {
+                continue;
+            }
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_ITERATION,
+                    (change.change() == SpecAst.CollectionChange.ADD ? "adding to" : "removing from")
+                            + " '" + target + "' while iterating it leaves what the loop does to "
+                            + "the collection's implementation",
+                    statement.where());
+        }
+    }
+
+    /**
+     * The value a flow instruction binds to a name, when it binds one.
+     *
+     * <p>An entity a flow created or loaded is a value like any other from the expression's point
+     * of view: it has a type, it has members, and it is visible from the next line on.
+     */
+    private static Optional<LogicModel.Parameter> bind(SpecAst.FlowStatement statement) {
+        if (statement instanceof SpecAst.CreateFrom value) {
+            return Optional.of(entityValue(value.variable(), value.entity(), value.where()));
+        }
+        if (statement instanceof SpecAst.LoadById value) {
+            return Optional.of(entityValue(value.variable(), value.entity(), value.where()));
+        }
+        if (statement instanceof SpecAst.FindBy value) {
+            return Optional.of(entityValue(value.variable(), value.entity(), value.where()));
+        }
+        if (statement instanceof SpecAst.ListAll value) {
+            return Optional.of(entityList(value.variable(), value.entity(), value.where()));
+        }
+        if (statement instanceof SpecAst.ListBy value) {
+            return Optional.of(entityList(value.variable(), value.entity(), value.where()));
+        }
+        return Optional.empty();
+    }
+
+    private static LogicModel.Parameter entityValue(String name, String entity, SourceRef where) {
+        return new LogicModel.Parameter(name, new LogicType.Nominal(entity), where);
+    }
+
+    private static LogicModel.Parameter entityList(String name, String entity, SourceRef where) {
+        return new LogicModel.Parameter(
+                name, new LogicType.Container(new LogicType.Nominal(entity)), where);
+    }
+
+    /** One call an operation makes, kept so a Query can be judged by what it can reach. */
+    private record QueryCall(String query, String target, SourceRef where) {
+    }
+
+    /**
+     * A Command that can reach itself, however many operations it goes through.
+     *
+     * <p>A self-call is already refused where it is written. A cycle of two or more is only
+     * visible from above, and the generated services would call each other until the stack ends —
+     * a failure with nothing in it that names the specification that caused it.
+     */
+    private static void reportCommandCycles(
+            Map<String, Set<String>> graph,
+            Map<String, SourceRef> where,
+            DiagnosticCollector diagnostics) {
+        Set<String> reported = new LinkedHashSet<>();
+        for (String start : graph.keySet()) {
+            List<String> path = new ArrayList<>();
+            if (reachesItself(start, start, graph, path, new LinkedHashSet<>())
+                    && path.size() > 1
+                    && reported.add(start)
+                    && where.containsKey(start)) {
+                diagnostics.error(
+                        ErrorCodes.SEMANTIC_FLOW_CALL_TARGET,
+                        "Command '" + start + "' calls itself through "
+                                + String.join(" -> ", path)
+                                + "; a cycle of Commands has no first write",
+                        where.get(start));
+            }
+        }
+    }
+
+    /**
+     * A Query that reaches a Command, directly or through another operation.
+     *
+     * <p>A Query promises to read. Refusing only the mutating step written inside it would leave
+     * the promise broken by one indirection, which is the easiest kind to write by accident and
+     * the hardest to see in review.
+     */
+    private static void reportQueryEffects(
+            Map<String, Set<String>> graph,
+            List<QueryCall> calls,
+            DiagnosticCollector diagnostics) {
+        for (QueryCall call : calls) {
+            List<String> path = new ArrayList<>();
+            path.add(call.target());
+            reach(call.target(), graph, path, new LinkedHashSet<>());
+            diagnostics.error(
+                    ErrorCodes.SEMANTIC_QUERY_MUTATES,
+                    "Query '" + call.query() + "' reaches Command "
+                            + String.join(" -> ", path)
+                            + "; a Query reads and a Command writes, so this one does both",
+                    call.where());
+        }
+    }
+
+    /** Walks the graph once, keeping the first path it finds, for the message to show. */
+    private static void reach(
+            String from, Map<String, Set<String>> graph, List<String> path, Set<String> seen) {
+        if (!seen.add(from)) {
+            return;
+        }
+        for (String next : graph.getOrDefault(from, Set.of())) {
+            if (path.contains(next)) {
+                return;
+            }
+            path.add(next);
+            reach(next, graph, path, seen);
+            return;
+        }
+    }
+
+    private static void resolveFlowCalls(
+            List<SpecAst.FlowStatement> flow,
+            String caller,
+            boolean callerIsQuery,
+            Set<String> callsOfCaller,
+            List<QueryCall> queryCalls,
+            LinkedHashMap<String, LogicModel.Parameter> scope,
+            LinkedHashMap<String, LogicModel.Parameter> produced,
+            SymbolTable symbols,
+            Members members,
+            Map<String, String> customLogics,
+            Map<String, OperationSignature> commandSignatures,
+            Map<SourceRef, FlowCallModel> resolved,
+            Map<SourceRef, IntegrationCallModel> integrations,
+            Map<SourceRef, OperationCallModel> operations,
+            Map<SourceRef, List<LogicModel.Parameter>> locals,
+            Map<SourceRef, IterationModel> iterations,
             DiagnosticCollector diagnostics) {
         for (SpecAst.FlowStatement statement : flow) {
+            // Before the statement runs, so a value cannot name itself.
+            locals.put(statement.where(), List.copyOf(produced.values()));
             if (statement instanceof SpecAst.Conditional conditional) {
                 resolveFlowCalls(
-                        conditional.whenTrue(), caller, new LinkedHashMap<>(scope), symbols,
-                        customLogics, commandSignatures, resolved, integrations, operations,
-                        diagnostics);
+                        conditional.whenTrue(), caller, callerIsQuery, callsOfCaller, queryCalls,
+                        new LinkedHashMap<>(scope), new LinkedHashMap<>(produced), symbols,
+                        members, customLogics, commandSignatures, resolved, integrations,
+                        operations, locals, iterations, diagnostics);
                 resolveFlowCalls(
-                        conditional.whenFalse(), caller, new LinkedHashMap<>(scope), symbols,
-                        customLogics, commandSignatures, resolved, integrations, operations,
-                        diagnostics);
+                        conditional.whenFalse(), caller, callerIsQuery, callsOfCaller, queryCalls,
+                        new LinkedHashMap<>(scope), new LinkedHashMap<>(produced), symbols,
+                        members, customLogics, commandSignatures, resolved, integrations,
+                        operations, locals, iterations, diagnostics);
+                continue;
+            }
+            bind(statement).ifPresent(value -> {
+                scope.put(value.name(), value);
+                produced.put(value.name(), value);
+            });
+            if (statement instanceof SpecAst.ForEach loop) {
+                resolveIteration(
+                        loop, caller, callerIsQuery, callsOfCaller, queryCalls,
+                        new LinkedHashMap<>(scope), new LinkedHashMap<>(produced), symbols,
+                        members, customLogics, commandSignatures, resolved, integrations,
+                        operations, locals, iterations, diagnostics);
                 continue;
             }
             if (!(statement instanceof SpecAst.Call call)) {
@@ -153,11 +455,15 @@ public final class LogicAnalyzer {
             }
             List<LogicModel.Parameter> visible = List.copyOf(scope.values());
             if (call.operation().isPresent()) {
-                resolveIntegrationCall(call, visible, symbols, diagnostics).ifPresent(model -> {
+                resolveIntegrationCall(call, visible, symbols, members, diagnostics)
+                        .ifPresent(model -> {
                     integrations.put(call.where(), model);
-                    model.variable().ifPresent(variable -> scope.put(variable,
-                            new LogicModel.Parameter(
-                                    variable, model.resultType().orElseThrow(), call.where())));
+                    model.variable().ifPresent(variable -> {
+                        LogicModel.Parameter value = new LogicModel.Parameter(
+                                variable, model.resultType().orElseThrow(), call.where());
+                        scope.put(variable, value);
+                        produced.put(variable, value);
+                    });
                 });
                 continue;
             }
@@ -188,12 +494,15 @@ public final class LogicAnalyzer {
                                 visible,
                                 Optional.ofNullable(customLogics.get(call.target())),
                                 symbols,
+                                members,
                                 diagnostics)
                         .ifPresent(model -> {
                             resolved.put(call.where(), model);
                             String variable = model.variable().orElseThrow();
-                            scope.put(variable, new LogicModel.Parameter(
-                                    variable, model.resultType(), call.where()));
+                            LogicModel.Parameter value = new LogicModel.Parameter(
+                                    variable, model.resultType(), call.where());
+                            scope.put(variable, value);
+                            produced.put(variable, value);
                         });
                 continue;
             }
@@ -215,8 +524,24 @@ public final class LogicAnalyzer {
                         call.where());
                 continue;
             }
-            resolveOperationCall(call, signature, visible, symbols, diagnostics)
-                    .ifPresent(model -> operations.put(call.where(), model));
+            callsOfCaller.add(call.target());
+            if (callerIsQuery) {
+                queryCalls.add(new QueryCall(caller, call.target(), call.where()));
+            }
+            resolveOperationCall(call, signature, visible, symbols, members, diagnostics)
+                    .ifPresent(model -> {
+                        operations.put(call.where(), model);
+                        // The name a Command result is bound to exists from here on. Its type is
+                        // the entity the Command answers with, so asking for a scalar from it is
+                        // a type error and not an unknown name — which is the truthful refusal,
+                        // and the one that turns into a member access once values have members.
+                        model.variable().ifPresent(variable -> produced.put(
+                                variable,
+                                new LogicModel.Parameter(
+                                        variable,
+                                        new LogicType.Nominal(model.entity()),
+                                        call.where())));
+                    });
         }
     }
 
@@ -224,6 +549,7 @@ public final class LogicAnalyzer {
             SpecAst.Call call,
             List<LogicModel.Parameter> scope,
             SymbolTable symbols,
+            Members members,
             DiagnosticCollector diagnostics) {
         Optional<Symbol.Integration> integration = symbols.integration(call.target());
         if (integration.isEmpty()) {
@@ -315,6 +641,7 @@ public final class LogicAnalyzer {
                     parameterType.orElseThrow(),
                     suppliedArgument.value(),
                     symbols,
+                    members,
                     suppliedArgument.where(),
                     diagnostics);
             if (value.isEmpty()) {
@@ -417,6 +744,7 @@ public final class LogicAnalyzer {
             OperationSignature signature,
             List<LogicModel.Parameter> scope,
             SymbolTable symbols,
+            Members members,
             DiagnosticCollector diagnostics) {
         boolean returnsNothing = signature.resultKind() == OutputModel.Kind.NOTHING;
         if (returnsNothing == call.variable().isPresent()) {
@@ -471,6 +799,7 @@ public final class LogicAnalyzer {
                     parameter.type(),
                     suppliedArgument.value(),
                     symbols,
+                    members,
                     suppliedArgument.where(),
                     diagnostics);
             if (value.isEmpty()) {
@@ -519,13 +848,17 @@ public final class LogicAnalyzer {
         if (FieldLineParser.isScalar(syntax)) {
             return Optional.of(LogicType.of(syntax));
         }
-        if (symbols.enumType(syntax).isPresent() || symbols.valueType(syntax).isPresent()) {
+        if (symbols.enumType(syntax).isPresent()
+                || symbols.valueType(syntax).isPresent()
+                || symbols.entity(syntax).isPresent()) {
             return Optional.of(new LogicType.Nominal(syntax));
         }
         return Optional.empty();
     }
 
     private record FlowCalls(
+            Map<SourceRef, List<LogicModel.Parameter>> locals,
+            Map<SourceRef, IterationModel> iterations,
             Map<SourceRef, FlowCallModel> logics,
             Map<SourceRef, IntegrationCallModel> integrations,
             Map<SourceRef, OperationCallModel> operations) {
@@ -553,6 +886,7 @@ public final class LogicAnalyzer {
             List<LogicModel.Parameter> scope,
             Optional<String> customContract,
             SymbolTable symbols,
+            Members members,
             DiagnosticCollector diagnostics) {
         Map<String, LogicAst.NamedArgument> supplied = new LinkedHashMap<>();
         boolean valid = true;
@@ -595,6 +929,7 @@ public final class LogicAnalyzer {
                     parameter.type(),
                     suppliedArgument.value(),
                     symbols,
+                    members,
                     suppliedArgument.where(),
                     diagnostics);
             if (value.isEmpty()) {
@@ -632,7 +967,11 @@ public final class LogicAnalyzer {
      * it against that type is what turns "assign something" into "assign this".
      */
     public static Map<SourceRef, TypedExpression> assignments(
-            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+            ProjectAst project,
+            SymbolTable symbols,
+            Map<SourceRef, List<LogicModel.Parameter>> locals,
+            Members members,
+            DiagnosticCollector diagnostics) {
         Map<String, Map<String, SpecAst.FieldDeclaration>> entities = new LinkedHashMap<>();
         for (ModuleAst module : project.modules()) {
             if (!module.declaresEntity()) {
@@ -663,7 +1002,7 @@ public final class LogicAnalyzer {
                         variables.put(find.variable(), find.entity());
                     }
                 }
-                List<LogicModel.Parameter> scope = scopeOf(useCase.input());
+                List<LogicModel.Parameter> input = scopeOf(useCase.input());
                 for (SpecAst.FlowStatement statement : statements) {
                     String variable;
                     String fieldName;
@@ -702,11 +1041,15 @@ public final class LogicAnalyzer {
                         continue;
                     }
                     analyzeExpression(
-                            "'" + text + "'",
-                            scope,
+                            // The instruction, not the expression: an expression that names one
+                            // value would otherwise be reported as enclosing itself.
+                            (element ? "the element of " : "set ")
+                                    + variable + "." + fieldName,
+                            visibleAt(input, locals, statement.where()),
                             LogicType.of(expected),
                             expression,
                             symbols,
+                            members,
                             statement.where(),
                             diagnostics)
                             .ifPresent(value -> typed.put(statement.where(), value));
@@ -724,6 +1067,9 @@ public final class LogicAnalyzer {
                 result.addAll(flattened(conditional.whenTrue()));
                 result.addAll(flattened(conditional.whenFalse()));
             }
+            if (statement instanceof SpecAst.ForEach loop) {
+                result.addAll(flattened(loop.body()));
+            }
         }
         return List.copyOf(result);
     }
@@ -735,15 +1081,40 @@ public final class LogicAnalyzer {
      * is. Typing it through the same analysis keeps one definition of what an expression means.
      */
     public static Map<SourceRef, TypedExpression> guards(
-            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+            ProjectAst project,
+            SymbolTable symbols,
+            Map<SourceRef, List<LogicModel.Parameter>> locals,
+            Members members,
+            DiagnosticCollector diagnostics) {
         Map<SourceRef, TypedExpression> typed = new LinkedHashMap<>();
         for (ModuleAst module : project.modules()) {
             for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
                 List<LogicModel.Parameter> scope = scopeOf(useCase.input());
-                conditions(useCase.flow(), scope, symbols, typed, diagnostics);
+                conditions(useCase.flow(), scope, locals, symbols, members, typed, diagnostics);
             }
         }
         return Map.copyOf(typed);
+    }
+
+    /**
+     * The names an expression at {@code where} may use: the operation's input, plus whatever the
+     * flow produced above that point.
+     *
+     * <p>A local shadows an input of the same name, because the local is the nearer declaration
+     * and reading the input there would be reading a value the flow already replaced.
+     */
+    private static List<LogicModel.Parameter> visibleAt(
+            List<LogicModel.Parameter> input,
+            Map<SourceRef, List<LogicModel.Parameter>> locals,
+            SourceRef where) {
+        List<LogicModel.Parameter> produced = locals.getOrDefault(where, List.of());
+        if (produced.isEmpty()) {
+            return input;
+        }
+        Map<String, LogicModel.Parameter> visible = new LinkedHashMap<>();
+        input.forEach(parameter -> visible.put(parameter.name(), parameter));
+        produced.forEach(parameter -> visible.put(parameter.name(), parameter));
+        return List.copyOf(visible.values());
     }
 
     /**
@@ -769,11 +1140,14 @@ public final class LogicAnalyzer {
     /** Every boolean condition a flow states, at any nesting depth. */
     private static void conditions(
             List<SpecAst.FlowStatement> flow,
-            List<LogicModel.Parameter> scope,
+            List<LogicModel.Parameter> input,
+            Map<SourceRef, List<LogicModel.Parameter>> locals,
             SymbolTable symbols,
+            Members members,
             Map<SourceRef, TypedExpression> typed,
             DiagnosticCollector diagnostics) {
         for (SpecAst.FlowStatement statement : flow) {
+            List<LogicModel.Parameter> scope = visibleAt(input, locals, statement.where());
             if (statement instanceof SpecAst.Fail fail) {
                 analyzeExpression(
                         "guard '" + fail.text() + "'",
@@ -781,6 +1155,7 @@ public final class LogicAnalyzer {
                         LogicType.BOOLEAN,
                         fail.condition(),
                         symbols,
+                        members,
                         fail.where(),
                         diagnostics)
                         .ifPresent(expression -> typed.put(fail.where(), expression));
@@ -791,6 +1166,7 @@ public final class LogicAnalyzer {
                         LogicType.BOOLEAN,
                         require.condition(),
                         symbols,
+                        members,
                         require.where(),
                         diagnostics)
                         .ifPresent(expression -> typed.put(require.where(), expression));
@@ -801,17 +1177,25 @@ public final class LogicAnalyzer {
                         LogicType.BOOLEAN,
                         conditional.condition(),
                         symbols,
+                        members,
                         conditional.where(),
                         diagnostics)
                         .ifPresent(expression -> typed.put(conditional.where(), expression));
-                conditions(conditional.whenTrue(), scope, symbols, typed, diagnostics);
-                conditions(conditional.whenFalse(), scope, symbols, typed, diagnostics);
+                conditions(conditional.whenTrue(), input, locals, symbols, members, typed,
+                        diagnostics);
+                conditions(conditional.whenFalse(), input, locals, symbols, members, typed,
+                        diagnostics);
+            } else if (statement instanceof SpecAst.ForEach loop) {
+                conditions(loop.body(), input, locals, symbols, members, typed, diagnostics);
             }
         }
     }
 
     private static Map<String, List<RuleModel>> invariants(
-            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+            ProjectAst project,
+            SymbolTable symbols,
+            Members members,
+            DiagnosticCollector diagnostics) {
         Map<String, List<RuleModel>> byEntity = new LinkedHashMap<>();
         for (ModuleAst module : project.modules()) {
             for (SpecAst.InvariantDeclaration declaration : module.invariants()) {
@@ -834,6 +1218,7 @@ public final class LogicAnalyzer {
                             LogicType.BOOLEAN,
                             condition.condition(),
                             symbols,
+                            members,
                             condition.where(),
                             diagnostics)
                             .ifPresent(expression -> typed.add(new RuleModel(
@@ -853,7 +1238,10 @@ public final class LogicAnalyzer {
      * checks keeps one definition of what an expression means in Harpia.
      */
     private static Map<String, List<RuleModel>> rules(
-            ProjectAst project, SymbolTable symbols, DiagnosticCollector diagnostics) {
+            ProjectAst project,
+            SymbolTable symbols,
+            Members members,
+            DiagnosticCollector diagnostics) {
         Map<String, List<RuleModel>> byOperation = new LinkedHashMap<>();
         for (ModuleAst module : project.modules()) {
             for (SpecAst.UseCaseDeclaration useCase : module.useCases()) {
@@ -869,6 +1257,7 @@ public final class LogicAnalyzer {
                             LogicType.BOOLEAN,
                             rule.condition(),
                             symbols,
+                            members,
                             rule.where(),
                             diagnostics)
                             .ifPresent(condition -> typed.add(
@@ -890,8 +1279,10 @@ public final class LogicAnalyzer {
             Map<SourceRef, TypedExpression> assignments,
             Map<SourceRef, FlowCallModel> flowCalls,
             Map<SourceRef, IntegrationCallModel> integrationCalls,
-            Map<SourceRef, OperationCallModel> operationCalls) {
+            Map<SourceRef, OperationCallModel> operationCalls,
+            Map<SourceRef, IterationModel> iterations) {
         public Result {
+            iterations = Map.copyOf(iterations);
             rules = Map.copyOf(rules);
             invariants = Map.copyOf(invariants);
             guards = Map.copyOf(guards);
@@ -915,14 +1306,49 @@ public final class LogicAnalyzer {
      * @param owner what the diagnostics should call the thing being analysed
      * @param scope the values the expression may name, in declaration order
      */
+    /**
+     * Types an expression without an expectation, for the places where the type is the answer.
+     *
+     * <p>A loop has no declared element type to check the collection against: what the collection
+     * is determines what the item is. So the analysis runs the same way and the caller decides
+     * whether what came out can be iterated.
+     */
+    public static Optional<TypedExpression> inferExpression(
+            String owner,
+            List<LogicModel.Parameter> scope,
+            LogicAst.Expression expression,
+            SymbolTable symbols,
+            Members members,
+            SourceRef where,
+            DiagnosticCollector diagnostics) {
+        return typeExpression(
+                owner, scope, Optional.empty(), expression, symbols, members, where, diagnostics);
+    }
+
     public static Optional<TypedExpression> analyzeExpression(
             String owner,
             List<LogicModel.Parameter> scope,
             LogicType expected,
             LogicAst.Expression expression,
             SymbolTable symbols,
+            Members members,
             SourceRef where,
             DiagnosticCollector diagnostics) {
+        return typeExpression(
+                owner, scope, Optional.of(expected), expression, symbols, members, where,
+                diagnostics);
+    }
+
+    private static Optional<TypedExpression> typeExpression(
+            String owner,
+            List<LogicModel.Parameter> scope,
+            Optional<LogicType> expectation,
+            LogicAst.Expression expression,
+            SymbolTable symbols,
+            Members members,
+            SourceRef where,
+            DiagnosticCollector diagnostics) {
+        LogicType expected = expectation.orElse(LogicType.BOOLEAN);
         Objects.requireNonNull(owner, "owner");
         Objects.requireNonNull(scope, "scope");
         Objects.requireNonNull(expected, "expected");
@@ -932,6 +1358,8 @@ public final class LogicAnalyzer {
 
         Body body = new Body(
                 new Symbol.Computation(owner, "", scope, expected, where), symbols, diagnostics);
+        body.subject = "nothing by that name is in scope at " + owner;
+        body.members = members;
         Map<String, Binding> bindings = new LinkedHashMap<>();
         for (LogicModel.Parameter parameter : scope) {
             // Values in scope are given, not introduced here, so an unused one is not a warning.
@@ -942,6 +1370,9 @@ public final class LogicAnalyzer {
         body.scopes.pop();
         if (typed.isEmpty()) {
             return Optional.empty();
+        }
+        if (expectation.isEmpty()) {
+            return typed;
         }
         if (!typed.orElseThrow().type().assignableTo(expected)) {
             diagnostics.error(
@@ -1001,6 +1432,15 @@ public final class LogicAnalyzer {
         private final Deque<Map<String, Binding>> scopes = new ArrayDeque<>();
         private final Set<String> calls = new LinkedHashSet<>();
         private boolean valid = true;
+        /**
+         * How a diagnostic refers to what encloses the expression.
+         *
+         * <p>A Logic body is enclosed by a Logic; an expression written in a Flow is enclosed by
+         * the instruction that wrote it, and telling its author that a name "is not a parameter of
+         * Logic 'discount'" names a Logic nobody wrote.
+         */
+        private String subject;
+        private Members members = (type, member) -> Optional.empty();
 
         private Body(
                 Symbol.Computation signature,
@@ -1009,6 +1449,8 @@ public final class LogicAnalyzer {
             this.signature = signature;
             this.symbols = symbols;
             this.diagnostics = diagnostics;
+            this.subject = "it is not a parameter of Logic " + signature.name()
+                    + " and was not assigned before this line";
         }
 
         private Optional<LogicModel> analyze(LogicAst.Declaration declaration) {
@@ -1189,13 +1631,7 @@ public final class LogicAnalyzer {
                 return builtin(call);
             }
             if (expression instanceof LogicAst.MemberAccess access) {
-                error(
-                        ErrorCodes.SEMANTIC_LOGIC_UNSUPPORTED,
-                        "member access '." + access.member()
-                                + "' requires a nominal type; Logic parameters are scalar in this"
-                                + " version of Harpia Logic",
-                        access.where());
-                return Optional.empty();
+                return memberAccess(access);
             }
             throw new IllegalStateException(
                     "unknown logic expression " + expression.getClass().getName());
@@ -1213,13 +1649,49 @@ public final class LogicAnalyzer {
             return new TypedExpression.Literal(type, literal.source(), literal.where());
         }
 
+        /**
+         * {@code x.member}, typed by what the type of {@code x} declares.
+         *
+         * <p>Two refusals, and they say different things. A scalar has no members at all, which is
+         * the older limit and keeps its code. A nominal type that does not declare this member is
+         * a typo or a field that moved, and that is worth its own code because the fix is
+         * different.
+         */
+        private Optional<TypedExpression> memberAccess(LogicAst.MemberAccess access) {
+            Optional<TypedExpression> target = expression(access.target());
+            if (target.isEmpty()) {
+                return Optional.empty();
+            }
+            LogicType type = target.orElseThrow().type();
+            if (!(type instanceof LogicType.Nominal nominal)) {
+                error(
+                        ErrorCodes.SEMANTIC_LOGIC_UNSUPPORTED,
+                        "member access '." + access.member() + "' requires a nominal type, and "
+                                + type.display() + " has no members",
+                        access.where());
+                return Optional.empty();
+            }
+            Optional<LogicType> member = members.memberOf(nominal.name(), access.member());
+            if (member.isEmpty()) {
+                error(
+                        ErrorCodes.SEMANTIC_FLOW_MEMBER,
+                        nominal.name() + " has no member '" + access.member() + "'",
+                        access.where());
+                return Optional.empty();
+            }
+            return Optional.of(new TypedExpression.MemberAccess(
+                    target.orElseThrow(),
+                    access.member(),
+                    member.orElseThrow(),
+                    access.where()));
+        }
+
         private Optional<TypedExpression> reference(LogicAst.Reference reference) {
             Optional<Binding> binding = find(reference.name());
             if (binding.isEmpty()) {
                 error(
                         ErrorCodes.SEMANTIC_LOGIC_UNKNOWN_NAME,
-                        "unknown value '" + reference.name() + "'; it is not a parameter of Logic "
-                                + signature.name() + " and was not assigned before this line",
+                        "unknown value '" + reference.name() + "'; " + subject,
                         reference.where());
                 return Optional.empty();
             }

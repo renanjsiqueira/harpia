@@ -573,7 +573,11 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
   - Depends on: `EVENT-001`, `FLOW-015`.
 
 - [ ] `EVENT-005` **Local events provider** — `TODO` · `P0` · `L` · Area: `Messaging`
-  - Depends on: `EVENT-001`, `EVENT-004`.
+  - Depends on: `EVENT-001`, `EVENT-003`.
+  - Scope correction (2026-09-17, S0): a dependência de `EVENT-004` foi removida. Entrega local
+    precisa da **emissão**, não do consumidor declarativo; o consumidor da demonstração do Core é
+    Java custom e `EVENT-004` continua no horizonte Next. Registro:
+    [`mvp-core-v1-inventory.md`](.design/mvp-core-v1-inventory.md).
 
 - [x] `EVENT-007` **Contratos de Event gerados** — `DONE`; cada Event declarado vira um record imutável no pacote `event` do projeto gerado, com o payload mapeado pelos mesmos tipos dos DTOs — um `Reference<T>` chega como a identidade, não como a linha. Nada é publicado nem assinado ali: o contrato existe independentemente de algum provider vir a carregá-lo · `P0` · `M` · Area: `Java/Spring Target`
   - Evidence: [`EventContractTest`](src/test/java/dev/harpia/target/javaspring/EventContractTest.java), [`JavaSpringEventTransformer`](src/main/java/dev/harpia/target/javaspring/transformer/JavaSpringEventTransformer.java).
@@ -810,7 +814,11 @@ ownership pós-geração. Os registros canônicos e suas evidências permanecem 
   - Evidence: [`JavaSpringGoldenTest`](src/test/java/dev/harpia/target/javaspring/JavaSpringGoldenTest.java), [`GeneratedMavenProjectTest`](src/test/java/dev/harpia/target/javaspring/GeneratedMavenProjectTest.java).
 
 - [ ] `GREEN-003` **Baseline integration/messaging/security** — `TODO` · `P0` · `XL` · Area: `Java/Spring Target`
-  - Depends on: `INTEG-001`, `MSG-001`, `SEC-007`.
+  - Depends on: `INTEG-001`, `EVENT-005`, `SEC-007`.
+  - Scope correction (2026-09-17, S0): a dependência de `MSG-001` foi removida. A baseline integrada
+    do Core exercita o evento **local**; messaging distribuído não é gate do bootstrap e `MSG-001`
+    continua no horizonte Next. Registro:
+    [`mvp-core-v1-inventory.md`](.design/mvp-core-v1-inventory.md).
 
 - [x] `GREEN-006` **Developer ownership após geração** — `DONE` no modo bootstrap atual · `P0` · `XS` · Area: `Ownership`
   - Evidence: `OWN-001`–`OWN-003`.
@@ -851,6 +859,11 @@ Em ordem de dependência e valor para a Reference Application:
 
 ## Core Technical Debt
 
+- Flow V1 sem gate de versão: sob `languageVersion: 0` o parser ainda aceita `set`, `add`, `remove`
+  e `find`, que não estão entre os oito comandos da V0. `call`, `require`, `fail` e `if` são
+  recusados com `HRP1107`. Fechar a lacuna muda o significado de specs V0 já escritas, então é
+  decisão explícita do usuário e não correção silenciosa — encontrado em S1 de `mvp-core-v1`
+  (2026-09-17) pelo check C15.
 - `JAVA-004` ainda traduz Command/Query apenas pelas formas CRUD conhecidas.
 - `CUSTOM-003` precisa de layout que compile offline sem tornar o código do usuário descartável.
 - O source map está no resultado em memória; o contrato externo depende de `HARNESS-001/002`.

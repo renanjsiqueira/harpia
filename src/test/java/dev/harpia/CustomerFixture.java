@@ -57,6 +57,7 @@ public record CustomerFixture(
                         java.util.Map.of(),
                         java.util.Map.of(),
                         java.util.Map.of(),
+                        java.util.Map.of(),
                         java.util.Map.of()),
                 diagnostics);
     }

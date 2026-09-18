@@ -539,7 +539,7 @@ public final class SemanticValidator {
                     languageVersion, field.type(), field.where(), symbols, diagnostics);
             validateOptionality(field.type(), field.required(), field.where(), diagnostics);
         }
-        validateInput(useCase, target.orElseThrow().fields(), diagnostics);
+        validateInput(languageVersion, useCase, target.orElseThrow().fields(), diagnostics);
         validateRules(useCase, diagnostics);
         validateFailures(useCase, diagnostics);
         validateFinds(useCase, target.orElseThrow(), diagnostics);
@@ -869,6 +869,9 @@ public final class SemanticValidator {
                 all.addAll(flattened(conditional.whenTrue()));
                 all.addAll(flattened(conditional.whenFalse()));
             }
+            if (statement instanceof SpecAst.ForEach loop) {
+                all.addAll(flattened(loop.body()));
+            }
         }
         return all;
     }
@@ -970,11 +973,12 @@ public final class SemanticValidator {
     }
 
     private static void validateInput(
+            LanguageVersion languageVersion,
             SpecAst.UseCaseDeclaration useCase,
             Map<String, SpecAst.FieldDeclaration> fields,
             DiagnosticCollector diagnostics) {
         // `page` and `size` describe the request, not the entity, so they are the one input a
-        // paged listing may name without a field behind it.
+        // paged listing may name without a field behind it in V0.
         Set<String> pagination = useCase.flow().stream().anyMatch(SemanticValidator::paged)
                 ? Set.of("page", "size")
                 : Set.of();
@@ -985,12 +989,28 @@ public final class SemanticValidator {
                 continue;
             }
             SpecAst.FieldDeclaration field = fields.get(input.name());
-            if (field == null || field.generated() || !seen.add(input.name())) {
+            boolean unstored = field == null;
+            // In V1 the input is the operation's own contract: a field with no column behind it is
+            // a value the flow may use, not a mistake. `page` and `size` were the first case of
+            // this, carved out by name; what changes here is that the carve-out stops being a
+            // list. What stays refused is naming a generated field, which the database decides,
+            // and naming the same field twice, which leaves one of the two silently unread.
+            boolean allowed = unstored && languageVersion != LanguageVersion.V0;
+            if (!allowed && (unstored || field.generated() || !seen.add(input.name()))) {
                 diagnostics.error(
                         ErrorCodes.SEMANTIC_INPUT_FIELD_UNKNOWN,
                         "input field '" + input.name()
                                 + "' must name one non-generated entity field exactly once",
                         input.where());
+                continue;
+            }
+            if (unstored) {
+                if (!seen.add(input.name())) {
+                    diagnostics.error(
+                            ErrorCodes.SEMANTIC_INPUT_FIELD_UNKNOWN,
+                            "input field '" + input.name() + "' is declared more than once",
+                            input.where());
+                }
                 continue;
             }
             if (!field.type().equals(input.type())) {
@@ -1009,7 +1029,8 @@ public final class SemanticValidator {
             DiagnosticCollector diagnostics) {
         Map<String, SpecAst.FieldDeclaration> fields = target.fields();
         Map<String, ValueType> variables = new LinkedHashMap<>();
-        FlowFacts facts = validateFlowBlock(useCase.flow(), variables, false, diagnostics);
+        FlowFacts facts = validateFlowBlock(
+                useCase.flow(), variables, Block.OPERATION, diagnostics);
 
         if (useCase.flow().isEmpty()
                 || !(useCase.flow().getLast() instanceof SpecAst.Return returned)) {
@@ -1040,11 +1061,22 @@ public final class SemanticValidator {
     }
 
     /** Validates one lexical block while keeping branch-local declarations out of outer scope. */
+    /** Which kind of block is being validated, because each one allows different things. */
+    private enum Block {
+        /** The operation's own flow. */
+        OPERATION,
+        /** A branch of an `if`: both branches must leave the same values behind. */
+        BRANCH,
+        /** A loop body: it may name values of its own, and none of them outlive it. */
+        LOOP
+    }
+
     private static FlowFacts validateFlowBlock(
             java.util.List<SpecAst.FlowStatement> flow,
             Map<String, ValueType> variables,
-            boolean branch,
+            Block block,
             DiagnosticCollector diagnostics) {
+        boolean branch = block == Block.BRANCH;
         boolean createsOrUpdates = false;
         boolean saves = false;
         for (int index = 0; index < flow.size(); index++) {
@@ -1058,10 +1090,11 @@ public final class SemanticValidator {
                         statement.where());
                 continue;
             }
-            if (branch && statement instanceof SpecAst.Return) {
+            if (block != Block.OPERATION && statement instanceof SpecAst.Return) {
                 diagnostics.error(
                         ErrorCodes.SEMANTIC_FLOW_BRANCH_SCOPE,
-                        "flow branch cannot return; the operation has one final top-level return",
+                        "flow " + (branch ? "branch" : "loop")
+                                + " cannot return; the operation has one final top-level return",
                         statement.where());
                 continue;
             }
@@ -1124,11 +1157,20 @@ public final class SemanticValidator {
                 requireEntityVariable(variables, value.variable(), value.where(), diagnostics);
             } else if (statement instanceof SpecAst.Conditional conditional) {
                 FlowFacts whenTrue = validateFlowBlock(
-                        conditional.whenTrue(), new LinkedHashMap<>(variables), true, diagnostics);
+                        conditional.whenTrue(), new LinkedHashMap<>(variables), Block.BRANCH,
+                        diagnostics);
                 FlowFacts whenFalse = validateFlowBlock(
-                        conditional.whenFalse(), new LinkedHashMap<>(variables), true, diagnostics);
+                        conditional.whenFalse(), new LinkedHashMap<>(variables), Block.BRANCH,
+                        diagnostics);
                 createsOrUpdates |= whenTrue.createsOrUpdates() || whenFalse.createsOrUpdates();
                 saves |= whenTrue.saves() || whenFalse.saves();
+            } else if (statement instanceof SpecAst.ForEach loop) {
+                // The body runs inside the operation, so what it writes is what the operation
+                // writes; the item itself lives only in the copy the block gets.
+                FlowFacts body = validateFlowBlock(
+                        loop.body(), new LinkedHashMap<>(variables), Block.LOOP, diagnostics);
+                createsOrUpdates |= body.createsOrUpdates();
+                saves |= body.saves();
             } else if (statement instanceof SpecAst.Return value && value.variable().isPresent()) {
                 requireVariable(
                         variables,

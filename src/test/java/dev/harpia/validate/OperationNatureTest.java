@@ -119,6 +119,93 @@ class OperationNatureTest {
                         .contains("belongs to a Command"));
     }
 
+    /**
+     * C13 — a Query is refused for the writes it reaches, not only for the ones it writes.
+     *
+     * <p>A Query that deletes is caught by the instruction it wrote. A Query that calls a Command
+     * writes nothing itself and still mutates, and if the Command it calls only forwards to
+     * another one, the write is two hops away from the promise being broken. Both shapes are
+     * asserted here, because a rule that only looked at the first hop would pass the second.
+     *
+     * <p>The {@code emit} half of this check waits for S5: there is no such instruction yet, and
+     * a test that pretended otherwise would be asserting a refusal the compiler cannot make.
+     */
+    @Test
+    void queriesRejectTransitiveCommandEffectsAndEmit() throws IOException {
+        Files.createDirectories(projectRoot.resolve("specs"));
+        project("""
+                ## Query Read Customer
+
+                ### Flow
+
+                ```flow
+                customer = load Customer by id
+                call RecordVisit(name = name)
+                return customer
+                ```
+
+                ### Output
+
+                200 Customer
+                """);
+        Files.writeString(projectRoot.resolve("specs/visit.harpia.md"), """
+                # Visit
+
+                ## Data
+
+                - id: UUID generated
+                - name: String required
+
+                ## Command RecordVisit
+
+                ### Input
+
+                - name: String required
+
+                ### Flow
+
+                ```flow
+                validate input
+                visit = create Visit from input
+                call ArchiveVisit(name = name)
+                save visit
+                return nothing
+                ```
+
+                ### Output
+
+                204 nothing
+
+                ## Command ArchiveVisit
+
+                ### Input
+
+                - name: String required
+
+                ### Flow
+
+                ```flow
+                validate input
+                archived = create Visit from input
+                save archived
+                return nothing
+                ```
+
+                ### Output
+
+                204 nothing
+                """, StandardCharsets.UTF_8);
+
+        assertThat(compile().diagnostics())
+                .filteredOn(diagnostic ->
+                        diagnostic.code().equals(ErrorCodes.SEMANTIC_QUERY_MUTATES))
+                .singleElement()
+                .satisfies(diagnostic -> assertThat(diagnostic.message())
+                        .as("the message walks the path, so the second hop is visible too")
+                        .contains("Query 'ReadCustomer' reaches Command")
+                        .contains("RecordVisit -> ArchiveVisit"));
+    }
+
     @Test
     void anUndeclaredOperationStillHasItsNatureInferred() throws IOException {
         project("""

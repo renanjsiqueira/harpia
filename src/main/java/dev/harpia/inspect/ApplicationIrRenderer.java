@@ -79,8 +79,15 @@ final class ApplicationIrRenderer {
                                             .append('\n'));
                         },
                         () -> out.append("      Binding none\n"));
-                operation.requestTypeName().ifPresent(request ->
-                        out.append("      RequestModel ").append(request).append('\n'));
+                operation.requestTypeName().ifPresent(request -> {
+                    out.append("      RequestModel ").append(request).append('\n');
+                    // The fields too, because the input is the operation's own contract: one of
+                    // them may be a value the entity above never stores, and a name alone would
+                    // not show it crossing.
+                    operation.input().forEach(field -> out.append("        Field ")
+                            .append(field.name()).append(": ").append(field.type().syntax())
+                            .append(field.required() ? " required" : "").append('\n'));
+                });
                 out.append("      Result ").append(operation.result().status())
                         .append(' ').append(operation.result().kind())
                         .append(operation.result().responseTypeName()
@@ -225,6 +232,7 @@ final class ApplicationIrRenderer {
                                 case REQUIRE ->
                                         " " + typed.text() + " otherwise " + typed.name();
                                 case IF -> " " + typed.text();
+                                case FOR_EACH -> " " + typed.name() + " in " + typed.text();
                                 case ADD_TO -> " " + typed.text() + " to " + typed.name();
                                 case REMOVE_FROM ->
                                         " " + typed.text() + " from " + typed.name();
@@ -232,6 +240,10 @@ final class ApplicationIrRenderer {
                             })
                             .orElse(""))
                     .append('\n');
+            if (instruction.command() == ApplicationOperation.FlowCommand.FOR_EACH) {
+                out.append(indent).append("  Each\n");
+                renderFlow(out, instruction.whenTrue(), indent + "    ");
+            }
             if (instruction.command() == ApplicationOperation.FlowCommand.IF) {
                 out.append(indent).append("  Then\n");
                 renderFlow(out, instruction.whenTrue(), indent + "    ");

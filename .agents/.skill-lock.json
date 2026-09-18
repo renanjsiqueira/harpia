@@ -1,0 +1,61 @@
+{
+  "version": 2,
+  "skills": {
+    "tlc-spec-lean": {
+      "name": "tlc-spec-lean",
+      "source": "local",
+      "contentHash": "af264d73172a488bab93cb76366df411cee8631800480fbca4add00dd72bbd8b",
+      "installedAt": "2026-09-18T00:08:44.984Z",
+      "updatedAt": "2026-09-18T00:08:45.015Z",
+      "agents": [
+        "cursor",
+        "claude-code",
+        "windsurf"
+      ],
+      "method": "copy",
+      "global": false
+    },
+    "tlc-spec-driven": {
+      "name": "tlc-spec-driven",
+      "source": "local",
+      "contentHash": "9f4c793556001f3210a2d9fe3b41bf24e82e581c522d8dd50f65addfee169a29",
+      "installedAt": "2026-09-18T00:09:19.131Z",
+      "updatedAt": "2026-09-18T00:09:19.147Z",
+      "agents": [
+        "cursor",
+        "claude-code",
+        "windsurf"
+      ],
+      "method": "copy",
+      "global": false
+    },
+    "tlc-implement": {
+      "name": "tlc-implement",
+      "source": "local",
+      "contentHash": "b3bbd69d067b042072e9538ea5edc90db28b0873fdf4d86157ca4ae5363bfd9e",
+      "installedAt": "2026-09-18T00:09:22.112Z",
+      "updatedAt": "2026-09-18T00:09:22.151Z",
+      "agents": [
+        "cursor",
+        "claude-code",
+        "windsurf"
+      ],
+      "method": "copy",
+      "global": false
+    },
+    "tlc-discover": {
+      "name": "tlc-discover",
+      "source": "local",
+      "contentHash": "a00cd1b2c150cd274f8207ae2fb22af25926ba550ad20d5100131efeaad0bfd8",
+      "installedAt": "2026-09-18T00:09:49.611Z",
+      "updatedAt": "2026-09-18T00:09:49.623Z",
+      "agents": [
+        "cursor",
+        "claude-code",
+        "windsurf"
+      ],
+      "method": "copy",
+      "global": false
+    }
+  }
+}

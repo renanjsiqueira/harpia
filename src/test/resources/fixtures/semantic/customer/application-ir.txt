@@ -12,6 +12,8 @@ Application customer-service
       HttpOperation POST /customers access=PUBLIC
         Request input from body
       RequestModel CreateCustomerRequest
+        Field name: STRING required
+        Field email: EMAIL required
       Result 201 ENTITY CustomerResponse
       Instruction VALIDATE_INPUT
       Instruction CREATE_FROM
@@ -36,6 +38,9 @@ Application customer-service
         Request id from path {id}
         Request input from body
       RequestModel UpdateCustomerRequest
+        Field name: STRING required
+        Field email: EMAIL required
+        Field active: BOOLEAN required
       Result 200 ENTITY CustomerResponse
       Instruction VALIDATE_INPUT
       Instruction LOAD_BY_ID
